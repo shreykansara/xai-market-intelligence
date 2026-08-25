@@ -2,7 +2,13 @@ import json
 
 import numpy as np
 
-from .config import NEWS_EMBEDDINGS_PATH, NEWS_PATH, STARTUP_EMBEDDINGS_PATH, STARTUPS_PATH
+from .config import (
+    INTERACTION_MATRIX_PATH,
+    NEWS_EMBEDDINGS_PATH,
+    NEWS_PATH,
+    STARTUP_EMBEDDINGS_PATH,
+    STARTUPS_PATH,
+)
 
 
 def load_news():
@@ -21,3 +27,7 @@ def load_startups():
 
 def news_by_id(news: list[dict]) -> dict[str, dict]:
     return {article["id"]: article for article in news}
+
+
+def load_interaction_matrix() -> np.ndarray:
+    return np.load(INTERACTION_MATRIX_PATH)

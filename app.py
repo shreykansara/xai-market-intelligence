@@ -6,28 +6,22 @@ import streamlit as st
 
 sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
 
-from marketintel.analysis import (  # noqa: E402
-    blend_pestle,
-    blend_porters,
-    rank_pestle_articles,
-    rank_porters_articles,
-    top_k_similar_startups,
-)
+from marketintel.analysis import score_submission  # noqa: E402
 from marketintel.config import (  # noqa: E402
+    INTERACTION_MATRIX_PATH,
     NEWS_EMBEDDINGS_PATH,
     NEWS_PATH,
     PESTLE_DIMS,
     PESTLE_LABELS,
     PORTERS_DIMS,
     PORTERS_LABELS,
-    STARTUP_EMBEDDINGS_PATH,
-    STARTUPS_PATH,
 )
-from marketintel.data_loader import load_news, load_startups, news_by_id  # noqa: E402
+from marketintel.data_loader import load_interaction_matrix, load_news  # noqa: E402
 from marketintel.embeddings import embed_text  # noqa: E402
 
 POSITIVE_COLOR = "#2ca02c"
 NEGATIVE_COLOR = "#d62728"
+NEUTRAL_COLOR = "#9e9e9e"
 
 st.set_page_config(page_title="Explainable Market Intelligence", layout="centered")
 
@@ -45,12 +39,12 @@ def get_news():
 
 
 @st.cache_data
-def get_startups():
-    return load_startups()
+def get_interaction_matrix():
+    return load_interaction_matrix()
 
 
 def data_ready() -> bool:
-    return NEWS_PATH.exists() and NEWS_EMBEDDINGS_PATH.exists() and STARTUPS_PATH.exists() and STARTUP_EMBEDDINGS_PATH.exists()
+    return NEWS_PATH.exists() and NEWS_EMBEDDINGS_PATH.exists() and INTERACTION_MATRIX_PATH.exists()
 
 
 AXIS_LABEL_OVERRIDES = {
@@ -59,12 +53,18 @@ AXIS_LABEL_OVERRIDES = {
 }
 
 
-def make_radar(dims: list[str], labels: dict, values: dict, title: str) -> go.Figure:
+def make_radar(dims: list[str], labels: dict, values: dict, near_zero: set, title: str) -> go.Figure:
     axis_labels = {d: AXIS_LABEL_OVERRIDES.get(d, labels[d]) for d in dims}
     categories = [axis_labels[d] for d in dims] + [axis_labels[dims[0]]]
     radii = [abs(values[d]) for d in dims] + [abs(values[dims[0]])]
     signed = [values[d] for d in dims] + [values[dims[0]]]
-    colors = [POSITIVE_COLOR if v >= 0 else NEGATIVE_COLOR for v in signed]
+
+    def color_for(d, v):
+        if d in near_zero:
+            return NEUTRAL_COLOR
+        return POSITIVE_COLOR if v >= 0 else NEGATIVE_COLOR
+
+    colors = [color_for(d, v) for d, v in zip(dims + [dims[0]], signed)]
 
     fig = go.Figure()
     fig.add_trace(go.Scatterpolar(
@@ -96,6 +96,7 @@ def legend_note():
     st.markdown(
         f"<span style='color:{POSITIVE_COLOR}'>&#9679;</span> helping&nbsp;&nbsp;&nbsp;"
         f"<span style='color:{NEGATIVE_COLOR}'>&#9679;</span> hurting&nbsp;&nbsp;&nbsp;"
+        f"<span style='color:{NEUTRAL_COLOR}'>&#9679;</span> negligible&nbsp;&nbsp;&nbsp;"
         f"radius = sensitivity magnitude (0-100)",
         unsafe_allow_html=True,
     )
@@ -106,8 +107,10 @@ st.caption("Paste your CVP / business description. Location is fixed to LPU, Pun
 
 if not data_ready():
     st.error(
-        "Fabricated data not found. Generate it first:\n\n"
-        "```\npython scripts/generate_news.py\npython scripts/generate_startups.py\n```"
+        "Fabricated data or trained interaction matrix not found. Generate/train it first:\n\n"
+        "```\npython scripts/generate_news.py\n"
+        "python scripts/generate_startups.py\n"
+        "python scripts/train_interaction_matrix.py\n```"
     )
     st.stop()
 
@@ -129,36 +132,27 @@ if submitted:
     with st.spinner("Embedding and analyzing..."):
         get_model_warm()
         news, news_embeddings = get_news()
-        startups, startup_embeddings = get_startups()
-        lookup = news_by_id(news)
+        W = get_interaction_matrix()
 
         cvp_embedding = embed_text(cvp_text)
-        top_idx, sims = top_k_similar_startups(cvp_embedding, startup_embeddings)
+        result = score_submission(news, news_embeddings, cvp_embedding, W)
 
-        pestle_values, pestle_weights = blend_pestle(startups, top_idx, sims)
-        porters_values, porters_weights = blend_porters(startups, top_idx, sims)
-
-        pestle_articles = rank_pestle_articles(startups, lookup, top_idx, pestle_weights)
-        porters_articles = rank_porters_articles(startups, lookup, top_idx, porters_weights)
-
-    st.subheader("Most similar startups")
-    cols = st.columns(len(top_idx))
-    for col, idx, sim in zip(cols, top_idx, sims):
-        s = startups[idx]
-        with col:
-            st.markdown(f"**{s['name']}**")
-            st.caption(s["domain"])
-            st.progress(min(max(float(sim), 0.0), 1.0), text=f"similarity {sim:.2f}")
-
-    st.divider()
     st.subheader("Sensitivity profile")
 
     chart_cols = st.columns(2)
     with chart_cols[0]:
-        st.plotly_chart(make_radar(PESTLE_DIMS, PESTLE_LABELS, pestle_values, "PESTLE"), use_container_width=True)
+        st.plotly_chart(
+            make_radar(PESTLE_DIMS, PESTLE_LABELS, result["pestle_display"], result["near_zero"], "PESTLE"),
+            use_container_width=True,
+        )
         legend_note()
     with chart_cols[1]:
-        st.plotly_chart(make_radar(PORTERS_DIMS, PORTERS_LABELS, porters_values, "Porter's Five Forces"), use_container_width=True)
+        st.plotly_chart(
+            make_radar(
+                PORTERS_DIMS, PORTERS_LABELS, result["porters_display"], result["near_zero"], "Porter's Five Forces"
+            ),
+            use_container_width=True,
+        )
         legend_note()
 
     st.divider()
@@ -168,23 +162,24 @@ if submitted:
 
     def render_events(ranked, labels):
         if not ranked:
-            st.info("No linked articles found.")
+            st.info("No contributing articles found.")
             return
-        for item in ranked[:10]:
+        for item in ranked:
             article = item["article"]
             dim_label = labels[item["dim"]]
-            polarity_color = POSITIVE_COLOR if article["polarity"] == "positive" else NEGATIVE_COLOR
+            direction_color = POSITIVE_COLOR if item["contribution"] >= 0 else NEGATIVE_COLOR
+            direction_word = "helping" if item["contribution"] >= 0 else "hurting"
             st.markdown(
                 f"**{article['title']}** &nbsp;"
-                f"<span style='color:{polarity_color}; font-size:0.85em'>&#9679; {article['polarity']}</span>",
+                f"<span style='color:{direction_color}; font-size:0.85em'>&#9679; {direction_word}</span>",
                 unsafe_allow_html=True,
             )
             st.caption(
                 f"{article['date']} · {article['scope']} · affects **{dim_label}** · "
-                f"via {item['source_startup']}"
+                f"contribution {item['contribution']:+.2f}"
             )
 
     with tab_pestle:
-        render_events(pestle_articles, PESTLE_LABELS)
+        render_events(result["pestle_articles"], PESTLE_LABELS)
     with tab_porters:
-        render_events(porters_articles, PORTERS_LABELS)
+        render_events(result["porters_articles"], PORTERS_LABELS)
