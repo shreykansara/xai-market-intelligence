@@ -48,6 +48,7 @@ htmlcov/
 
 # Generated / fabricated data (regenerate via scripts/)
 data/*.json
+data/*.jsonl
 data/*.npy
 data/*.parquet
 

@@ -8,10 +8,13 @@ version = "0.1.0"
 requires-python = ">=3.10"
 dependencies = [
     "sentence-transformers",
-    "streamlit",
-    "plotly",
+    "fastapi",
+    "uvicorn",
     "numpy",
     "pandas",
+    "scikit-learn",
+    "feedparser",
+    "transformers",
 ]
 
 [tool.hatch.build.targets.wheel]

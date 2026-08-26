@@ -1,0 +1,423 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Explainable Market Intelligence</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="/static/vendor/plotly.min.js"></script>
+<style>
+  :root {
+    --bg: #0A0C10;
+    --surface: #13161D;
+    --border: #262B36;
+    --text: #E7E9EE;
+    --text-dim: #9099AA;
+    --accent: #534AB7;
+    --accent-hover: #6A5FD1;
+    --positive: #38B871;
+    --negative: #E2534A;
+    --font-body: 'Space Grotesk', 'Segoe UI', Arial, sans-serif;
+    --font-mono: 'IBM Plex Mono', 'Consolas', 'Courier New', monospace;
+  }
+
+  * { box-sizing: border-box; border-radius: 0 !important; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-body);
+  }
+
+  .mono { font-family: var(--font-mono); }
+
+  .hidden { display: none !important; }
+
+  .topbar {
+    padding: 20px 32px;
+    border-bottom: 1px solid var(--border);
+    font-size: 14px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .topbar .reset-link {
+    color: var(--text-dim);
+    cursor: pointer;
+    font-size: 13px;
+  }
+  .topbar .reset-link:hover { color: var(--text); }
+
+  /* ---------- State 1: input ---------- */
+  .state-input {
+    min-height: calc(100vh - 65px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+
+  .input-card {
+    width: 100%;
+    max-width: 640px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    padding: 40px;
+  }
+
+  .input-card label {
+    display: block;
+    font-size: 12px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 12px;
+  }
+
+  #cvp {
+    width: 100%;
+    height: 200px;
+    resize: vertical;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: var(--font-body);
+    font-size: 15px;
+    line-height: 1.5;
+    padding: 16px;
+  }
+  #cvp:focus { outline: 1px solid var(--accent); }
+  #cvp::placeholder { color: var(--text-dim); }
+
+  #run-btn {
+    margin-top: 20px;
+    width: 100%;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    padding: 16px;
+    font-family: var(--font-body);
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    cursor: pointer;
+  }
+  #run-btn:hover:not(:disabled) { background: var(--accent-hover); }
+  #run-btn:disabled { opacity: 0.5; cursor: default; }
+
+  .error {
+    margin-top: 12px;
+    color: var(--negative);
+    font-size: 13px;
+  }
+
+  /* ---------- State 2: results ---------- */
+  .state-results { padding: 32px; max-width: 1100px; margin: 0 auto; }
+
+  .charts-row {
+    display: flex;
+    gap: 24px;
+    margin-bottom: 40px;
+    flex-wrap: wrap;
+  }
+  .chart-wrap {
+    flex: 1 1 460px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+  }
+  .chart-title {
+    padding: 16px 20px 0 20px;
+    font-size: 13px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+  .chart { height: 420px; }
+
+  .group-heading {
+    font-size: 13px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 10px;
+    margin: 40px 0 4px 0;
+  }
+
+  .dim-section { border-bottom: 1px solid var(--border); }
+
+  .dim-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    padding: 16px 4px;
+    cursor: pointer;
+  }
+  .dim-header:hover { background: var(--surface); }
+  .dim-header .dim-name { font-size: 16px; font-weight: 500; }
+  .dim-header .dim-score { font-size: 16px; }
+  .positive { color: var(--positive); }
+  .negative { color: var(--negative); }
+
+  .dim-body { padding: 0 4px 20px 4px; }
+
+  .cluster-block { margin-bottom: 20px; }
+  .cluster-header {
+    display: flex;
+    justify-content: space-between;
+    font-size: 13px;
+    color: var(--text-dim);
+    padding: 6px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .cluster-header .cluster-label { color: var(--text); }
+
+  .article-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 16px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 14px;
+  }
+  .article-row:last-child { border-bottom: none; }
+  .article-title { flex: 1; }
+  .article-meta {
+    color: var(--text-dim);
+    font-size: 12px;
+    white-space: nowrap;
+  }
+  .article-contribution { white-space: nowrap; font-size: 13px; }
+
+  #loading-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(10, 12, 16, 0.85);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    z-index: 10;
+  }
+</style>
+</head>
+<body>
+  <div class="topbar">
+    <span>Explainable Market Intelligence</span>
+    <span id="reset-link" class="reset-link hidden">&#9664; New analysis</span>
+  </div>
+
+  <section id="state-input" class="state-input">
+    <div class="input-card">
+      <label for="cvp">Your CVP</label>
+      <textarea id="cvp" placeholder="e.g. We build a mobile app that gives small farmers in Punjab real-time soil moisture readings and irrigation advice in their own language..."></textarea>
+      <button id="run-btn">Run analysis</button>
+      <p id="input-error" class="error hidden"></p>
+    </div>
+  </section>
+
+  <section id="state-results" class="state-results hidden">
+    <div class="charts-row">
+      <div class="chart-wrap">
+        <div class="chart-title">PESTLE</div>
+        <div id="chart-pestle" class="chart"></div>
+      </div>
+      <div class="chart-wrap">
+        <div class="chart-title">Porter's Five Forces</div>
+        <div id="chart-porters" class="chart"></div>
+      </div>
+    </div>
+
+    <div class="group-heading">PESTLE breakdown</div>
+    <div id="breakdown-pestle"></div>
+
+    <div class="group-heading">Porter's Five Forces breakdown</div>
+    <div id="breakdown-porters"></div>
+  </section>
+
+  <div id="loading-overlay" class="hidden">Analyzing&hellip;</div>
+
+<script>
+const AXIS_LABEL_OVERRIDES = {
+  threat_new_entrants: "New Entrants",
+  threat_substitutes: "Substitutes",
+};
+
+function fmtScore(v) {
+  const sign = v >= 0 ? "+" : "";
+  return sign + v.toFixed(1);
+}
+
+function directionClass(v) {
+  return v >= 0 ? "positive" : "negative";
+}
+
+function makeRadar(elId, dims, labels, values) {
+  const axisLabels = dims.map(d => AXIS_LABEL_OVERRIDES[d] || labels[d]);
+  const categories = axisLabels.concat([axisLabels[0]]);
+  const radii = dims.map(d => Math.abs(values[d])).concat([Math.abs(values[dims[0]])]);
+  const signed = dims.map(d => values[d]).concat([values[dims[0]]]);
+  const colors = signed.map(v => v >= 0 ? "#38B871" : "#E2534A");
+
+  const trace = {
+    type: "scatterpolar",
+    r: radii,
+    theta: categories,
+    fill: "toself",
+    fillcolor: "rgba(83, 74, 183, 0.35)",
+    line: { color: "#534AB7", width: 2 },
+    marker: { size: 10, color: colors, line: { width: 1, color: "#0A0C10" } },
+    customdata: signed,
+    hovertemplate: "%{theta}: %{customdata:+.1f}<extra></extra>",
+  };
+
+  const layout = {
+    paper_bgcolor: "rgba(0,0,0,0)",
+    plot_bgcolor: "rgba(0,0,0,0)",
+    polar: {
+      bgcolor: "rgba(0,0,0,0)",
+      domain: { x: [0.1, 0.9], y: [0.05, 0.92] },
+      radialaxis: {
+        visible: true,
+        range: [0, 100],
+        tickfont: { family: "IBM Plex Mono, monospace", size: 9, color: "#9099AA" },
+        gridcolor: "#262B36",
+        linecolor: "#262B36",
+      },
+      angularaxis: {
+        tickfont: { family: "Space Grotesk, sans-serif", size: 12, color: "#E7E9EE" },
+        gridcolor: "#262B36",
+        linecolor: "#262B36",
+      },
+    },
+    showlegend: false,
+    margin: { t: 20, b: 20, l: 40, r: 40 },
+    font: { family: "Space Grotesk, sans-serif", color: "#E7E9EE" },
+  };
+
+  Plotly.newPlot(elId, [trace], layout, { displayModeBar: false, responsive: true });
+}
+
+function articleRow(item) {
+  const a = item.article;
+  const cls = directionClass(item.contribution);
+  const row = document.createElement("div");
+  row.className = "article-row";
+  row.innerHTML = `
+    <div class="article-title">${a.title}</div>
+    <div class="article-meta mono">${a.date} &middot; ${a.scope}</div>
+    <div class="article-contribution mono ${cls}">${fmtScore(item.contribution)}</div>
+  `;
+  return row;
+}
+
+function clusterBlock(cluster) {
+  const block = document.createElement("div");
+  block.className = "cluster-block";
+  const cls = directionClass(cluster.raw_score);
+  block.innerHTML = `<div class="cluster-header"><span class="cluster-label">${cluster.label}</span><span class="mono ${cls}">${fmtScore(cluster.raw_score)}</span></div>`;
+  cluster.top_articles.forEach(item => block.appendChild(articleRow(item)));
+  return block;
+}
+
+function dimSection(dim) {
+  const section = document.createElement("div");
+  section.className = "dim-section";
+  const cls = directionClass(dim.raw_score);
+
+  const header = document.createElement("div");
+  header.className = "dim-header";
+  header.innerHTML = `<span class="dim-name">${dim.label}</span><span class="dim-score mono ${cls}">${fmtScore(dim.raw_score)}</span>`;
+
+  const body = document.createElement("div");
+  body.className = "dim-body hidden";
+  dim.clusters.forEach(c => body.appendChild(clusterBlock(c)));
+
+  header.addEventListener("click", () => body.classList.toggle("hidden"));
+
+  section.appendChild(header);
+  section.appendChild(body);
+  return section;
+}
+
+function renderBreakdown(containerId, dims) {
+  const container = document.getElementById(containerId);
+  container.innerHTML = "";
+  dims.forEach((dim, i) => {
+    const section = dimSection(dim);
+    if (i === 0) section.querySelector(".dim-body").classList.remove("hidden");
+    container.appendChild(section);
+  });
+}
+
+function showResults(data) {
+  makeRadar("chart-pestle", data.pestle_dims, Object.fromEntries(data.pestle_breakdown.map(d => [d.dim, d.label])), data.pestle_display);
+  makeRadar("chart-porters", data.porters_dims, Object.fromEntries(data.porters_breakdown.map(d => [d.dim, d.label])), data.porters_display);
+  renderBreakdown("breakdown-pestle", data.pestle_breakdown);
+  renderBreakdown("breakdown-porters", data.porters_breakdown);
+
+  document.getElementById("state-input").classList.add("hidden");
+  document.getElementById("state-results").classList.remove("hidden");
+  document.getElementById("reset-link").classList.remove("hidden");
+  window.scrollTo({ top: 0 });
+}
+
+function resetToInput() {
+  document.getElementById("state-results").classList.add("hidden");
+  document.getElementById("state-input").classList.remove("hidden");
+  document.getElementById("reset-link").classList.add("hidden");
+}
+
+document.getElementById("reset-link").addEventListener("click", resetToInput);
+
+document.getElementById("run-btn").addEventListener("click", async () => {
+  const cvp = document.getElementById("cvp").value.trim();
+  const errorEl = document.getElementById("input-error");
+  errorEl.classList.add("hidden");
+
+  if (!cvp) {
+    errorEl.textContent = "Paste a CVP first.";
+    errorEl.classList.remove("hidden");
+    return;
+  }
+
+  const btn = document.getElementById("run-btn");
+  btn.disabled = true;
+  document.getElementById("loading-overlay").classList.remove("hidden");
+
+  try {
+    const res = await fetch("/api/analyze", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cvp }),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.detail || `Request failed (${res.status})`);
+    }
+    const data = await res.json();
+    showResults(data);
+  } catch (err) {
+    errorEl.textContent = err.message || "Something went wrong.";
+    errorEl.classList.remove("hidden");
+  } finally {
+    btn.disabled = false;
+    document.getElementById("loading-overlay").classList.add("hidden");
+  }
+});
+</script>
+</body>
+</html>

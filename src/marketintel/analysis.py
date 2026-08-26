@@ -1,3 +1,5 @@
+from collections import defaultdict
+
 import numpy as np
 
 from .config import NEAR_ZERO_FRACTION, PESTLE_DIMS, PORTERS_DIMS
@@ -12,17 +14,48 @@ def compute_gates(news_embeddings: np.ndarray, cvp_embedding: np.ndarray, W: np.
     return news_embeddings @ (W @ cvp_embedding)
 
 
-def contribution_matrix(news: list[dict], gates: np.ndarray, dims: list[str], score_field: str) -> np.ndarray:
-    """contribution(news, cvp, dim) = relevance(news, dim) * polarity(news) * gate(news, cvp),
-    returned as an (n_articles, n_dims) matrix."""
-    relevance = np.array([[article[score_field][d] for d in dims] for article in news])
-    signs = np.array([polarity_sign(article) for article in news])
-    return relevance * signs[:, None] * gates[:, None]
+def subcluster_breakdown_for_dim(
+    news: list[dict], gates: np.ndarray, dim: str, score_field: str, dim_subclusters: dict, top_n_articles: int = 5
+) -> list[dict]:
+    """contribution(news, cvp, subcluster) = subcluster_relevance(news) * polarity(news) *
+    gate(news, cvp), summed per sub-cluster. Only articles above the clustering relevance
+    threshold have a sub-cluster assignment for this dimension - articles without one don't
+    contribute to it at all (matches how the clusters were discovered). Returns sub-clusters
+    sorted by |raw_score|, each carrying its own top contributing articles for drill-down."""
+    labels = dim_subclusters["labels"]
+    assignments = dim_subclusters["assignments"]
+
+    grouped = defaultdict(list)  # cluster_id -> [(article, contribution), ...]
+    for i, article in enumerate(news):
+        cluster_id = assignments.get(article["id"])
+        if cluster_id is None:
+            continue
+        relevance = article[score_field][dim]
+        contribution = relevance * polarity_sign(article) * gates[i]
+        grouped[str(cluster_id)].append((article, float(contribution)))
+
+    clusters = []
+    for cluster_id, items in grouped.items():
+        raw_score = sum(c for _, c in items)
+        top_articles = sorted(items, key=lambda item: -abs(item[1]))[:top_n_articles]
+        clusters.append({
+            "cluster_id": cluster_id,
+            "label": labels.get(cluster_id, cluster_id),
+            "raw_score": raw_score,
+            "top_articles": [{"article": a, "contribution": c} for a, c in top_articles],
+        })
+
+    clusters.sort(key=lambda c: -abs(c["raw_score"]))
+    return clusters
 
 
-def raw_dimension_scores(contributions: np.ndarray, dims: list[str]) -> dict:
-    totals = contributions.sum(axis=0)
-    return {d: float(v) for d, v in zip(dims, totals)}
+def dimension_breakdowns(news: list[dict], gates: np.ndarray, dims: list[str], score_field: str, subclusters: dict):
+    return {dim: subcluster_breakdown_for_dim(news, gates, dim, score_field, subclusters[dim]) for dim in dims}
+
+
+def raw_dimension_scores(breakdown: dict) -> dict:
+    """Roll sub-cluster scores up (sum) to the parent dimension."""
+    return {dim: sum(c["raw_score"] for c in clusters) for dim, clusters in breakdown.items()}
 
 
 def normalize_for_display(raw_scores: dict) -> dict:
@@ -44,37 +77,24 @@ def near_zero_dims(raw_pestle: dict, raw_porters: dict, fraction: float = NEAR_Z
     return {d for d, v in {**raw_pestle, **raw_porters}.items() if abs(v) < threshold}
 
 
-def rank_articles_by_contribution(news: list[dict], contributions: np.ndarray, dims: list[str], top_n: int = 10):
-    """For each article, attribute it to whichever dimension it contributed most to, then
-    rank articles across the whole PESTLE/Porter's group by |contribution|."""
-    best_dim_idx = np.argmax(np.abs(contributions), axis=1)
-    best_contribution = contributions[np.arange(len(news)), best_dim_idx]
-    order = np.argsort(-np.abs(best_contribution))[:top_n]
-    return [
-        {
-            "article": news[i],
-            "dim": dims[best_dim_idx[i]],
-            "contribution": float(best_contribution[i]),
-        }
-        for i in order
-    ]
-
-
-def score_submission(news: list[dict], news_embeddings: np.ndarray, cvp_embedding: np.ndarray, W: np.ndarray):
-    """Full pipeline for one submitted CVP: gate every article, sum signed contributions
-    per PESTLE/Porter's dimension, and rank the articles behind each chart."""
+def score_submission(
+    news: list[dict], news_embeddings: np.ndarray, cvp_embedding: np.ndarray, W: np.ndarray, subclusters: dict
+):
+    """Full pipeline for one submitted CVP: gate every article, sum signed sub-cluster
+    contributions up to each PESTLE/Porter's dimension, and keep the sub-cluster breakdown
+    (with its own top contributing articles) for the drill-down UI."""
     gates = compute_gates(news_embeddings, cvp_embedding, W)
 
-    pestle_contrib = contribution_matrix(news, gates, PESTLE_DIMS, "pestle_scores")
-    porters_contrib = contribution_matrix(news, gates, PORTERS_DIMS, "porters_scores")
+    pestle_breakdown = dimension_breakdowns(news, gates, PESTLE_DIMS, "pestle_scores", subclusters)
+    porters_breakdown = dimension_breakdowns(news, gates, PORTERS_DIMS, "porters_scores", subclusters)
 
-    raw_pestle = raw_dimension_scores(pestle_contrib, PESTLE_DIMS)
-    raw_porters = raw_dimension_scores(porters_contrib, PORTERS_DIMS)
+    raw_pestle = raw_dimension_scores(pestle_breakdown)
+    raw_porters = raw_dimension_scores(porters_breakdown)
 
     return {
         "pestle_display": normalize_for_display(raw_pestle),
         "porters_display": normalize_for_display(raw_porters),
         "near_zero": near_zero_dims(raw_pestle, raw_porters),
-        "pestle_articles": rank_articles_by_contribution(news, pestle_contrib, PESTLE_DIMS),
-        "porters_articles": rank_articles_by_contribution(news, porters_contrib, PORTERS_DIMS),
+        "pestle_breakdown": pestle_breakdown,
+        "porters_breakdown": porters_breakdown,
     }
