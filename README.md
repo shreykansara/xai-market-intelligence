@@ -99,27 +99,88 @@ each score.
 8. **Real news ingestion** (`scripts/ingest_news.py`, `data/real_news.json` +
    `real_news_embeddings.npy`) — a separate, parallel track from the
    fabricated dataset above, not yet wired into the CVP analysis. Pulls
-   world-level headlines from BBC World and Al Jazeera's own RSS feeds,
-   plus Reuters and AP via Google News' per-site RSS search (both wires
-   retired their direct public RSS years ago; this is the practical way to
-   keep all four without a paid syndication feed). Only title, publish
+   world-level headlines from four free, no-key sources: BBC World and Al
+   Jazeera's own RSS feeds, Google News RSS (queried by topic - `WORLD` -
+   not scoped to any one outlet), and the GDELT DOC 2.0 API via the
+   open-source `gdeltdoc` package (*not* GDELT Cloud, a separate paid
+   product). Reuters isn't used: its public RSS was discontinued in 2020
+   and programmatic access now requires a paid license. Only title, publish
    timestamp, link, and derived tags are stored — never article body text,
-   and no vector database. Each run is incremental per feed (a small
+   and no vector database. Each run is incremental per source (a small
    `data/ingestion_state.json` cursor tracks the last-seen publish time) and
    safe to overlap: every new headline is embedded and compared by cosine
    similarity against the last 48 hours of stored headlines, and anything
    ≥0.92 similar is folded into the existing record (`mention_count`
    incremented) instead of creating a duplicate — verified in practice by
    cross-source stories (the same event covered by two or three wires)
-   landing in one record. Relevance is assigned by nearest sub-cluster
-   centroid from the *existing* fabricated-data clustering (`src/marketintel
-   /relevance.py`, `compute_subcluster_centroids` / `relevance_from_centroids`)
-   rather than a trained classifier; polarity comes from an existing
-   pretrained sentiment model (`distilbert-base-uncased-finetuned-sst-2-english`
-   via `src/marketintel/sentiment.py`), not one trained here. A sample of
-   each run's newly stored headlines (with their derived relevance and
-   polarity) is printed and appended to `data/ingestion_samples.jsonl` for
-   manual spot-checking.
+   landing in one record. GDELT's free endpoint is rate-limited and
+   occasionally times out; a failed source is logged and skipped for that
+   run rather than aborting the others.
+
+   **Labeling is one mechanism for all three fields** (`src/marketintel/
+   seed_inference.py`): relevance, polarity, *and* geographic scope are all
+   inferred by the same similarity-weighted vote among a headline's 10
+   nearest neighbors in the fabricated seed corpus - the only hand-labeled
+   data anywhere in the system. There's no per-source scope tagging and no
+   trained polarity classifier; every field is read off the same
+   nearest-neighbor lookup. A sample of each run's newly stored headlines
+   (with their inferred relevance, polarity, and scope) is printed and
+   appended to `data/ingestion_samples.jsonl` for manual spot-checking.
+
+   **Scope inference was visibly the weak link, and got a two-part fix.**
+   On an early live run, real headlines came back distributed India=47,
+   World=36, Punjab=25, Jalandhar=7, Phagwara=5, Kapurthala=2, LPU=1 -
+   including hyper-local tags landing on headlines like an NFL
+   brain-injury study or a Nigerian kidnapping manhunt, neither of which
+   has anything to do with Punjab or India. **Why it happened:** scope
+   used the same pooled top-k plurality vote as polarity - sum up how
+   much of a headline's k nearest seed neighbors belong to each scope
+   class, take the class with the most weight. The fabricated seed
+   corpus's own scope distribution is skewed toward India/Punjab (see
+   `SCOPE_WEIGHTS`: India=300, Punjab=150, vs. LPU=50), and most
+   real-world wire headlines don't closely resemble *any* of its
+   hyper-local articles - so a weak, ambiguous match just drifted toward
+   whichever class had the most seed articles nearby, regardless of
+   whether any of them were a good match. There was also no reject
+   option: every headline got a scope no matter how irrelevant it was.
+
+   **The fix has two parts** (`src/marketintel/seed_inference.py`):
+   1. *A relevance gate, before scope classification.* An incoming
+      article's max relevance across all 11 dimensions must clear the
+      5th percentile of the fabricated seed corpus's own max-relevance
+      distribution or it's excluded entirely - no scope assigned, not
+      used downstream - and logged to `data/ingestion_excluded.jsonl`
+      (headline, timestamp, max relevance) rather than silently dropped.
+   2. *Per-class-best-match instead of pooled voting*, for articles that
+      pass the gate. For each of the 7 scope classes, find that class's
+      single closest seed article; assign whichever class's best match
+      has the highest similarity overall. A class can no longer win by
+      having many so-so neighbors nearby - only its single strongest
+      example competes, which is what actually removes the
+      population-size bias.
+
+   **Validated against the exact batch that surfaced the bug**
+   (`scripts/validate_scope_fix.py`, re-run on the stored pre-fix
+   embeddings - no re-fetching): the NFL story (max relevance 0.33,
+   below the 0.58 threshold) is now correctly excluded. Re-scoring the
+   63 articles that still pass the gate (down from 123) shows real
+   rebalancing away from the majority classes - Punjab 25→8, Phagwara
+   5→0, Jalandhar 7→4 - while India (47→25) remains the largest single
+   class. That's not a bug in the fix: even a single-best-match rule is
+   not fully population-invariant, since a class with more seed articles
+   has more chances to contain *one* that happens to match well, just a
+   much weaker effect than pooled voting's linear compounding. The
+   Nigerian kidnapping story is a concrete example of the fix's limit,
+   not its failure: its max relevance (0.80, comfortably legal/
+   technological) means it correctly is *not* excluded, but its scope
+   stayed "India" before and after, because the seed corpus doesn't
+   carry a strong enough geography-specific signal for generic
+   crime/legal content to separate it from India-scoped seed articles on
+   that dimension. Relevance and polarity continue to read as
+   qualitatively sound; scope is meaningfully better but still not
+   reliable, and should stay flagged until a real location signal (e.g.
+   NER-based content extraction, explicitly out of scope for this phase
+   per CLAUDE.md) replaces nearest-neighbor lookup entirely.
 
 **Validation test case** (`scripts/validate_umbrella_case.py`) — runs a
 fabricated umbrella-retailer CVP through the full pipeline and checks that,
@@ -148,8 +209,9 @@ src/marketintel/
   embeddings.py                    sentence-transformers wrapper
   data_loader.py                   Loads generated news/startup/subcluster/real-news data + W
   analysis.py                      Gate/sub-cluster contribution scoring + roll-up + drill-down data
-  relevance.py                     Centroid-similarity relevance scoring for real headlines
-  sentiment.py                     Pretrained sentiment classifier wrapper for real headlines
+  seed_inference.py                Relevance/polarity via pooled k-NN vote, a relevance-gate
+                                    threshold, and scope via per-class-best-match - all looked
+                                    up against the fabricated seed corpus, for real headlines
 scripts/
   generate_news.py                 Builds data/news.json + news_embeddings.npy
   generate_startups.py             Builds data/startups.json (identity only) + embeddings
@@ -162,8 +224,10 @@ scripts/
                                     writes it into data/startups.json
   train_interaction_matrix.py      Fits data/interaction_matrix.npy (W) from the derived profiles
   validate_umbrella_case.py        Sanity-checks the sub-cluster pipeline end to end (see below)
-  ingest_news.py                   Scheduled real-world RSS ingestion (see below) - independent
-                                    of the fabricated-data scripts above
+  ingest_news.py                   Scheduled real-world ingestion (see below) - independent of
+                                    the fabricated-data scripts above
+  validate_scope_fix.py            Before/after audit of the scope fix against a stored batch
+                                    (see below) - not part of the regular pipeline
 data/                              Generated datasets + trained W (gitignored, see below)
 ```
 
@@ -218,9 +282,9 @@ same page, no reload.
 ## Real news ingestion
 
 Independent of the fabricated-data pipeline above and not required to run
-the app. Requires `data/news.json`, `news_embeddings.npy`, and
-`subclusters.json` to already exist (it scores relevance against that
-clustering):
+the app. Requires `data/news.json` and `news_embeddings.npy` to already
+exist - that's the seed corpus every inference (relevance, polarity, scope)
+is looked up against:
 
 ```bash
 python scripts/ingest_news.py
@@ -240,8 +304,18 @@ schtasks /create /tn "MarketIntelIngest" /tr "'C:\path\to\project\.venv\Scripts\
 ```
 
 Check `data/ingestion_samples.jsonl` after the first few runs - it's a
-running log of newly stored headlines with their derived relevance and
-polarity, meant for eyeballing before trusting this data downstream.
+running log of newly stored headlines with their inferred relevance,
+polarity, and scope, meant for eyeballing before trusting this data
+downstream. Scope is meaningfully better since the relevance-gate + best-
+match fix, but still worth scrutinizing - see "How it works" above.
+`data/ingestion_excluded.jsonl` logs everything the relevance gate rejected
+(headline, timestamp, max relevance) - review it occasionally to make sure
+the gate isn't excluding things it shouldn't.
+
+To directly compare the old scope mechanism against the new one on a
+concrete batch (rather than just reading the samples), run
+`python scripts/validate_scope_fix.py` while `data/real_news.json` still
+holds records classified under the old logic.
 
 ## Current scope
 
@@ -252,13 +326,16 @@ This phase is intentionally limited to what's described above:
 - The CVP analysis pipeline (`server.py`) still scores against the
   fabricated news dataset only - real ingested headlines
   (`data/real_news.json`) aren't wired into it yet.
-- Real ingestion is world-level only (BBC/Al Jazeera/Reuters/AP, tagged
-  "World" by source). No India/Punjab-specific regional feeds yet, and no
-  content-based location extraction - that comes when regional feeds are
-  added.
-- Real headline relevance/polarity come from the existing fabricated-data
-  clustering and an existing pretrained sentiment model, not a classifier
-  trained for this - see "Real news ingestion" above.
+- Real ingestion is world-level sources only (BBC World, Al Jazeera, Google
+  News, GDELT). No India/Punjab-specific regional feeds yet - that's next,
+  and should also make scope inference (below) meaningfully more accurate
+  by giving real local headlines to match against.
+- Real headline relevance and polarity are inferred by pooled nearest-
+  neighbor lookup against the fabricated seed corpus; scope by a separate
+  per-class-best-match lookup with a relevance gate in front of it - not a
+  trained classifier or content-based location extraction in any case, and
+  scope is meaningfully improved but still not reliable - see "Real news
+  ingestion" above.
 - Geographic scope is stored per article but doesn't yet weight the scoring.
 - `W` is trained once in batch on the fabricated startups, not updated
   online from real observed outcomes — there aren't any yet.

@@ -98,6 +98,7 @@ REAL_NEWS_PATH = DATA_DIR / "real_news.json"
 REAL_NEWS_EMBEDDINGS_PATH = DATA_DIR / "real_news_embeddings.npy"
 INGESTION_STATE_PATH = DATA_DIR / "ingestion_state.json"
 INGESTION_SAMPLE_LOG_PATH = DATA_DIR / "ingestion_samples.jsonl"
+INGESTION_EXCLUDED_LOG_PATH = DATA_DIR / "ingestion_excluded.jsonl"
 
 # Headlines published within this many hours of each other are compared for
 # deduplication; anything above the similarity threshold is treated as the
@@ -106,7 +107,19 @@ INGESTION_SAMPLE_LOG_PATH = DATA_DIR / "ingestion_samples.jsonl"
 DEDUP_WINDOW_HOURS = 48
 DEDUP_SIMILARITY_THRESHOLD = 0.92
 
-# Pretrained (not fine-tuned here) sentiment classifier used for real headline
-# polarity - a real classifier per CLAUDE.md, not the fabricated dataset's
-# template-assigned polarity.
-SENTIMENT_MODEL_NAME = "distilbert-base-uncased-finetuned-sst-2-english"
+# Every new real headline's relevance and polarity are inferred by
+# similarity-weighted vote among its k nearest neighbors in the fabricated
+# seed corpus (the only hand-labeled data in the system) - see
+# src/marketintel/seed_inference.py. Geographic scope uses a different
+# mechanism (see RELEVANCE_GATE_PERCENTILE below) since pooled k-NN voting
+# let majority scope classes (India, Punjab) win purely on population size.
+SEED_NEIGHBOR_K = 10
+
+# Minimum-relevance gate, run before scope classification: an incoming
+# article's max relevance across all 11 dimensions must clear this
+# percentile of the fabricated seed corpus's OWN max-relevance distribution
+# (computed once from the 1000 seed articles' hand-labeled scores) or it's
+# excluded entirely - no scope assigned, not used downstream. An article
+# that isn't meaningfully close to anything this system models has no
+# business being forced into a geographic scope it has no real bearing on.
+RELEVANCE_GATE_PERCENTILE = 5

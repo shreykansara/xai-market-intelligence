@@ -14,7 +14,7 @@ dependencies = [
     "pandas",
     "scikit-learn",
     "feedparser",
-    "transformers",
+    "gdeltdoc",
 ]
 
 [tool.hatch.build.targets.wheel]
