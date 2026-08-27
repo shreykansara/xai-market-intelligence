@@ -25,8 +25,9 @@ from marketintel.config import (  # noqa: E402
     PORTERS_LABELS,
     SUBCLUSTERS_PATH,
 )
-from marketintel.data_loader import load_interaction_matrix, load_news, load_subclusters  # noqa: E402
+from marketintel.data_loader import load_cvp_mean, load_interaction_matrix, load_news, load_subclusters  # noqa: E402
 from marketintel.embeddings import embed_text, get_model  # noqa: E402
+from marketintel.live_facts import build_combined_corpus, compute_subcluster_centroids  # noqa: E402
 
 WEB_DIR = Path(__file__).resolve().parent / "web"
 
@@ -43,10 +44,18 @@ def get_state() -> dict:
     if not _state:
         get_model()  # warm the embedding model once
         news, news_embeddings = load_news()
+        subclusters = load_subclusters()
         _state["news"] = news
         _state["news_embeddings"] = news_embeddings
         _state["W"] = load_interaction_matrix()
-        _state["subclusters"] = load_subclusters()
+        _state["cvp_mean"] = load_cvp_mean()
+        _state["subclusters"] = subclusters
+        # Centroids only depend on the fabricated corpus + its (one-time) discovery
+        # output, so they're stable for the process's lifetime - computed once here
+        # rather than on every request. Real facts themselves are NOT cached: they
+        # keep arriving from ingestion_service.py independently of this process, so
+        # they're loaded fresh per request in analyze() below.
+        _state["centroids"] = compute_subcluster_centroids(news, news_embeddings, subclusters)
     return _state
 
 
@@ -55,7 +64,14 @@ class AnalyzeRequest(BaseModel):
 
 
 def trim_article(article: dict) -> dict:
-    return {k: article[k] for k in ("id", "title", "date", "scope", "polarity")}
+    return {
+        "id": article["id"],
+        "title": article["title"],
+        "date": article["date"],
+        "scope": article["scope"],
+        "polarity": article["polarity"],
+        "is_live": article.get("is_live", False),
+    }
 
 
 def serialize_breakdown(breakdown: dict, labels: dict) -> list[dict]:
@@ -97,7 +113,16 @@ def analyze(req: AnalyzeRequest):
 
     state = get_state()
     cvp_embedding = embed_text(req.cvp)
-    result = score_submission(state["news"], state["news_embeddings"], cvp_embedding, state["W"], state["subclusters"])
+
+    # Real facts are folded in alongside the fabricated seed corpus - see
+    # live_facts.py for how they're assigned a sub-cluster and how they're
+    # weighted (equally) relative to seed articles in the score itself.
+    combined_news, combined_embeddings, combined_subclusters = build_combined_corpus(
+        state["news"], state["news_embeddings"], state["subclusters"], state["centroids"]
+    )
+    result = score_submission(
+        combined_news, combined_embeddings, cvp_embedding, state["W"], combined_subclusters, state["cvp_mean"]
+    )
 
     return {
         "pestle_display": result["pestle_display"],

@@ -6,11 +6,19 @@ PESTLE/Porter's profiles and their linked justifying news articles.
     score(cvp, dim) = sum over relevant news of contribution(news, cvp, dim)
 
 W is a single (384, 384) matrix, fit once in batch via ridge regression. The
-384*384 = 147,456 parameters vastly outnumber the 20 startups * 11 dimensions
-= 220 training examples, so this is solved in the ridge *dual* (220x220,
+384*384 = 147,456 parameters vastly outnumber the 50 startups * 11 dimensions
+= 550 training examples, so this is solved in the ridge *dual* (550x550,
 via the kernel trick) rather than the primal - the two are mathematically
 equivalent for linear ridge regression, but the dual avoids ever forming a
 147k x 147k system.
+
+CVP embeddings are mean-centered before fitting, and that same mean is
+persisted to CVP_MEAN_PATH for inference-time use (see fit_interaction_matrix's
+docstring and the CVP_CENTERING_ENABLED comment in config.py) - fixing a
+diagnosed pathology where W's dominant singular direction was ~88% aligned
+with the shared "generic business pitch text" component present in every CVP,
+regardless of domain, collapsing genuinely different businesses' output
+patterns to 0.75-0.86 cosine similarity.
 
 Must run AFTER generate_news.py and generate_startups.py.
 Run: python scripts/train_interaction_matrix.py
@@ -23,6 +31,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from marketintel.config import (  # noqa: E402
+    CVP_MEAN_PATH,
     INTERACTION_MATRIX_PATH,
     PESTLE_DIMS,
     PORTERS_DIMS,
@@ -68,20 +77,32 @@ def fit_interaction_matrix(combined_vecs: np.ndarray, cvp_vecs: np.ndarray, targ
     """Ridge regression in the dual: score_i = combined_vecs[i] . W . cvp_vecs[i], with
     W = sum_j coef_j * outer(combined_vecs[j], cvp_vecs[j]). The Gram matrix used for the
     dual solve exploits (a1 (x) b1)-(a2 (x) b2) = (a1.a2)(b1.b2), so it never needs the
-    full 147k-dim flattened features."""
+    full 147k-dim flattened features.
+
+    cvp_vecs is mean-centered before fitting (see CVP_CENTERING_ENABLED in config.py):
+    diagnosed directly that all training CVP embeddings share a large "generic business
+    pitch text" component regardless of domain, and in this heavily underdetermined
+    system ridge regression's minimum-norm solution spent a large share of W's capacity
+    modeling that shared, uninformative axis rather than what's distinctive about each
+    business. Centering removes that axis from what W is asked to explain. The SAME mean
+    must be subtracted from every CVP embedding at inference time - it's returned here so
+    the caller can persist it alongside W."""
     n = len(targets)
+    cvp_mean = cvp_vecs.mean(axis=0)
+    cvp_centered = cvp_vecs - cvp_mean
+
     news_gram = combined_vecs @ combined_vecs.T
-    cvp_gram = cvp_vecs @ cvp_vecs.T
+    cvp_gram = cvp_centered @ cvp_centered.T
     K = news_gram * cvp_gram
     dual_coef = np.linalg.solve(K + alpha * np.eye(n), targets)
 
     dim = combined_vecs.shape[1]
     W = np.zeros((dim, dim))
     for j in range(n):
-        W += dual_coef[j] * np.outer(combined_vecs[j], cvp_vecs[j])
+        W += dual_coef[j] * np.outer(combined_vecs[j], cvp_centered[j])
 
     predictions = K @ dual_coef
-    return W, predictions
+    return W, predictions, cvp_mean
 
 
 def main():
@@ -96,7 +117,7 @@ def main():
     )
     print(f"Training on {len(targets)} (startup, dimension) examples...")
 
-    W, predictions = fit_interaction_matrix(combined_vecs, cvp_vecs, targets, RIDGE_ALPHA)
+    W, predictions, cvp_mean = fit_interaction_matrix(combined_vecs, cvp_vecs, targets, RIDGE_ALPHA)
 
     mae = float(np.mean(np.abs(predictions - targets)))
     corr = float(np.corrcoef(predictions, targets)[0, 1])
@@ -104,6 +125,8 @@ def main():
 
     np.save(INTERACTION_MATRIX_PATH, W)
     print(f"Wrote {INTERACTION_MATRIX_PATH} shape={W.shape}")
+    np.save(CVP_MEAN_PATH, cvp_mean)
+    print(f"Wrote {CVP_MEAN_PATH} shape={cvp_mean.shape}")
 
 
 if __name__ == "__main__":

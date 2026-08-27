@@ -47,6 +47,11 @@ NEWS_EMBEDDINGS_PATH = DATA_DIR / "news_embeddings.npy"
 STARTUPS_PATH = DATA_DIR / "startups.json"
 STARTUP_EMBEDDINGS_PATH = DATA_DIR / "startup_embeddings.npy"
 INTERACTION_MATRIX_PATH = DATA_DIR / "interaction_matrix.npy"
+# Mean of the training CVP embeddings, subtracted from every CVP embedding
+# (training-time and inference-time alike) before it ever meets W - see the
+# RIDGE_ALPHA comment below and train_interaction_matrix.py for why this
+# centering step exists.
+CVP_MEAN_PATH = DATA_DIR / "cvp_mean.npy"
 PROFIT_HISTORY_PATH = DATA_DIR / "profit_history.json"
 SUBCLUSTERS_PATH = DATA_DIR / "subclusters.json"
 
@@ -77,37 +82,79 @@ N_NEWS_ARTICLES = 1000
 TOP_K_STARTUPS = 3
 
 # Ridge regularization strength for fitting the shared interaction matrix W.
-# The system is heavily underdetermined (384*384 parameters vs. 20 startups *
-# 11 dimensions = 220 training examples), so regularization is load-bearing,
+# The system is heavily underdetermined (384*384 parameters vs. 50 startups *
+# 11 dimensions = 550 training examples), so regularization is load-bearing,
 # not cosmetic. Chosen via leave-one-startup-out cross-validation (held-out
 # MAE bottoms out near alpha=0.2 and rises on both sides - see
 # scripts/train_interaction_matrix.py), not by in-sample fit, since in-sample
 # error only keeps improving toward zero as alpha -> 0 in an underdetermined
-# system and would otherwise pick an alpha that memorizes the 20 startups.
+# system and would otherwise pick an alpha that memorizes the startups.
 RIDGE_ALPHA = 0.2
+
+# Why CVP embeddings are mean-centered before ever meeting W (see
+# CVP_MEAN_PATH above): diagnosed directly after the 20->50 startup expansion
+# and the hidden-template noise perturbation both failed to fix "different
+# CVPs produce near-identical output." All 50 real business CVP embeddings
+# project onto W's dominant singular direction with the SAME sign and similar
+# magnitude (mean -0.42, std only 0.095) - because that direction is ~88%
+# cosine-aligned with the mean of all training CVP embeddings, i.e. the
+# "generic business pitch text" component every CVP shares regardless of
+# domain. In a system this underdetermined (147,456 parameters, 550 training
+# examples), ridge regression's minimum-norm solution spends a large share of
+# W's capacity (24% of its total energy, pre-fix) modeling that shared
+# component - not because it's informative, but because it's the one
+# direction present, to some degree, in every training example. Subtracting
+# the training CVP mean before fitting (and before every inference-time
+# query) removes that shared axis from what W is asked to explain, forcing
+# it to explain target variance using only each business's distinctive
+# content. Verified empirically: real-CVP-to-real-CVP output cosine
+# similarity on a 5-CVP discrimination test dropped from 0.75-0.86
+# (collapsed, pre-fix) to a properly varied -0.16-0.51 (post-fix), at a
+# training-fit MAE cost of only 27.93 -> 29.14 (target std ~50.7).
+CVP_CENTERING_ENABLED = True
 
 # Fraction of the largest raw |score| among a submission's 11 dimensions
 # below which a dimension is considered negligible ("no effect") and greyed
 # out on the radar chart instead of colored helping/hurting.
 NEAR_ZERO_FRACTION = 0.10
 
-# --- Real news ingestion (scripts/ingest_news.py) ---
-# Kept in separate files from the fabricated dataset so real headlines never
-# leak into the fabricated startups' training data.
-REAL_NEWS_PATH = DATA_DIR / "real_news.json"
-REAL_NEWS_EMBEDDINGS_PATH = DATA_DIR / "real_news_embeddings.npy"
+# --- Real news ingestion (src/marketintel/ingestion.py) ---
+# Kept in separate files from the fabricated dataset so real facts never leak
+# into the fabricated startups' training data. The fact is the primary scored
+# unit (see fact_extraction.py): one fetched article decomposes into one or
+# more atomic facts. Articles are kept only as a provenance container -
+# headline, source, link, and which facts came out of it - not scored
+# themselves and not embedded.
+REAL_ARTICLES_PATH = DATA_DIR / "real_articles.json"
+REAL_FACTS_PATH = DATA_DIR / "real_facts.json"
+REAL_FACT_EMBEDDINGS_PATH = DATA_DIR / "real_fact_embeddings.npy"
 INGESTION_STATE_PATH = DATA_DIR / "ingestion_state.json"
 INGESTION_SAMPLE_LOG_PATH = DATA_DIR / "ingestion_samples.jsonl"
 INGESTION_EXCLUDED_LOG_PATH = DATA_DIR / "ingestion_excluded.jsonl"
 
-# Headlines published within this many hours of each other are compared for
+# Facts published within this many hours of each other are compared for
 # deduplication; anything above the similarity threshold is treated as the
-# same underlying event and folded into the existing record instead of
-# creating a new one.
+# same underlying fact (however many outlets reported it) and folded into the
+# existing record instead of creating a new one.
 DEDUP_WINDOW_HOURS = 48
 DEDUP_SIMILARITY_THRESHOLD = 0.92
 
-# Every new real headline's relevance and polarity are inferred by
+# A free local model via Ollama (https://ollama.com), not a paid API, used to
+# decompose one article into one or more atomic, neutrally-worded facts
+# before anything downstream (embedding, the relevance gate, scope
+# classification) runs - see fact_extraction.py. If Ollama isn't running or
+# this model isn't pulled, extraction falls back to treating the article as a
+# single unmodified fact rather than failing the run.
+OLLAMA_HOST = "http://localhost:11434"
+OLLAMA_MODEL = "llama3.2:3b"
+# On CPU-only hardware (no GPU), even this 3B model can take 60-90s for a single
+# generation - a cold first call was observed taking ~80s (~32s just loading
+# weights) in testing. 30s was too tight and caused spurious single-fact
+# fallbacks on working Ollama installs; 120s gives real inference room to
+# finish while still bounding a genuinely hung/unreachable server.
+OLLAMA_TIMEOUT_SECONDS = 120
+
+# Every new real fact's relevance and polarity are inferred by
 # similarity-weighted vote among its k nearest neighbors in the fabricated
 # seed corpus (the only hand-labeled data in the system) - see
 # src/marketintel/seed_inference.py. Geographic scope uses a different
@@ -116,10 +163,10 @@ DEDUP_SIMILARITY_THRESHOLD = 0.92
 SEED_NEIGHBOR_K = 10
 
 # Minimum-relevance gate, run before scope classification: an incoming
-# article's max relevance across all 11 dimensions must clear this
+# fact's max relevance across all 11 dimensions must clear this
 # percentile of the fabricated seed corpus's OWN max-relevance distribution
 # (computed once from the 1000 seed articles' hand-labeled scores) or it's
-# excluded entirely - no scope assigned, not used downstream. An article
+# excluded entirely - no scope assigned, not used downstream. A fact
 # that isn't meaningfully close to anything this system models has no
 # business being forced into a geographic scope it has no real bearing on.
 RELEVANCE_GATE_PERCENTILE = 5

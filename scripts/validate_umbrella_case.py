@@ -23,7 +23,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from marketintel.analysis import score_submission  # noqa: E402
-from marketintel.data_loader import load_interaction_matrix, load_news, load_subclusters  # noqa: E402
+from marketintel.data_loader import load_cvp_mean, load_interaction_matrix, load_news, load_subclusters  # noqa: E402
 from marketintel.embeddings import embed_text  # noqa: E402
 
 UMBRELLA_CVP = (
@@ -56,10 +56,11 @@ def find_cluster(clusters: list[dict], keywords: list[str]):
 def main():
     news, news_embeddings = load_news()
     W = load_interaction_matrix()
+    cvp_mean = load_cvp_mean()
     subclusters = load_subclusters()
 
     cvp_embedding = embed_text(UMBRELLA_CVP)
-    result = score_submission(news, news_embeddings, cvp_embedding, W, subclusters)
+    result = score_submission(news, news_embeddings, cvp_embedding, W, subclusters, cvp_mean)
 
     env_clusters = result["pestle_breakdown"]["environmental"]
 

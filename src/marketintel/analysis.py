@@ -9,9 +9,18 @@ def polarity_sign(article: dict) -> float:
     return 1.0 if article["polarity"] == "positive" else -1.0
 
 
-def compute_gates(news_embeddings: np.ndarray, cvp_embedding: np.ndarray, W: np.ndarray) -> np.ndarray:
-    """gate(news, cvp) = news_embedding . W . cvp_embedding, for every article at once."""
-    return news_embeddings @ (W @ cvp_embedding)
+def compute_gates(
+    news_embeddings: np.ndarray, cvp_embedding: np.ndarray, W: np.ndarray, cvp_mean: np.ndarray | None = None
+) -> np.ndarray:
+    """gate(news, cvp) = news_embedding . W . (cvp_embedding - cvp_mean), for every article
+    at once. cvp_mean is the training CVP embeddings' mean (see CVP_CENTERING_ENABLED in
+    config.py) - subtracted here to match how W was fit, removing the "generic business
+    pitch text" component every CVP shares so W is only asked to react to what's
+    distinctive about this one. Defaults to no-op (zero vector) for callers that don't pass
+    one, e.g. tests against an older W trained before this fix."""
+    if cvp_mean is None:
+        cvp_mean = np.zeros_like(cvp_embedding)
+    return news_embeddings @ (W @ (cvp_embedding - cvp_mean))
 
 
 def subcluster_breakdown_for_dim(
@@ -78,12 +87,17 @@ def near_zero_dims(raw_pestle: dict, raw_porters: dict, fraction: float = NEAR_Z
 
 
 def score_submission(
-    news: list[dict], news_embeddings: np.ndarray, cvp_embedding: np.ndarray, W: np.ndarray, subclusters: dict
+    news: list[dict],
+    news_embeddings: np.ndarray,
+    cvp_embedding: np.ndarray,
+    W: np.ndarray,
+    subclusters: dict,
+    cvp_mean: np.ndarray | None = None,
 ):
     """Full pipeline for one submitted CVP: gate every article, sum signed sub-cluster
     contributions up to each PESTLE/Porter's dimension, and keep the sub-cluster breakdown
     (with its own top contributing articles) for the drill-down UI."""
-    gates = compute_gates(news_embeddings, cvp_embedding, W)
+    gates = compute_gates(news_embeddings, cvp_embedding, W, cvp_mean)
 
     pestle_breakdown = dimension_breakdowns(news, gates, PESTLE_DIMS, "pestle_scores", subclusters)
     porters_breakdown = dimension_breakdowns(news, gates, PORTERS_DIMS, "porters_scores", subclusters)

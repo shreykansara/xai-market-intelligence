@@ -199,6 +199,19 @@
   }
   .article-contribution { white-space: nowrap; font-size: 13px; }
 
+  .live-badge {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--accent-hover);
+    border: 1px solid var(--accent);
+    padding: 1px 5px;
+    margin-right: 8px;
+    vertical-align: middle;
+  }
+
   #loading-overlay {
     position: fixed;
     inset: 0;
@@ -314,10 +327,11 @@ function makeRadar(elId, dims, labels, values) {
 function articleRow(item) {
   const a = item.article;
   const cls = directionClass(item.contribution);
+  const liveBadge = a.is_live ? '<span class="live-badge">Live</span>' : "";
   const row = document.createElement("div");
   row.className = "article-row";
   row.innerHTML = `
-    <div class="article-title">${a.title}</div>
+    <div class="article-title">${liveBadge}${a.title}</div>
     <div class="article-meta mono">${a.date} &middot; ${a.scope}</div>
     <div class="article-contribution mono ${cls}">${fmtScore(item.contribution)}</div>
   `;
@@ -379,6 +393,15 @@ function resetToInput() {
   document.getElementById("state-results").classList.add("hidden");
   document.getElementById("state-input").classList.remove("hidden");
   document.getElementById("reset-link").classList.add("hidden");
+
+  // "New analysis" means a clean slate, not the previous submission still sitting
+  // there - without this, the old CVP text (and any old error) stuck around, so
+  // going back and pasting a new CVP could look like nothing changed if the old
+  // text wasn't fully replaced.
+  const cvpField = document.getElementById("cvp");
+  cvpField.value = "";
+  document.getElementById("input-error").classList.add("hidden");
+  cvpField.focus();
 }
 
 document.getElementById("reset-link").addEventListener("click", resetToInput);

@@ -21,13 +21,15 @@ each score.
    (an article can score high on more than one at once), plus a polarity
    (positive/negative). Article text is embedded with the local
    `all-MiniLM-L6-v2` sentence-transformer model.
-2. **Fabricated startup dataset** (`data/startups.json`) — 20 LPU-based
-   startups spanning fintech, edtech, agritech, D2C hardware, SaaS, and
-   healthtech. Each has a CVP and 3-5 linked news article IDs. Their
-   PESTLE/Porter's sensitivity profile is *not* hand-authored — it's
-   recovered from a fabricated profit history (below), and that recovered
-   profile is what supervises the interaction matrix. CVPs are embedded
-   with the same model.
+2. **Fabricated startup dataset** (`data/startups.json`) — 50 LPU-based
+   startups (grew from an original 20 — see "Current scope" below) spanning
+   fintech, edtech, agritech, D2C hardware, SaaS, healthtech, cleantech,
+   logistics, proptech, foodtech, EV/mobility, cybersecurity, HRtech,
+   insurtech, B2B marketplaces, and gaming/media. Each has a CVP and 3-5
+   linked news article IDs. Their PESTLE/Porter's sensitivity profile is
+   *not* hand-authored — it's recovered from a fabricated profit history
+   (below), and that recovered profile is what supervises the interaction
+   matrix. CVPs are embedded with the same model.
 3. **Sub-clusters under each dimension** (`data/subclusters.json`) — a second,
    unsupervised hierarchy level under each of the 11 PESTLE/Porter's
    dimensions. `scripts/discover_subclusters.py` takes every article above a
@@ -45,8 +47,15 @@ each score.
    startup also gets a hidden PESTLE/Porter's sensitivity template and a
    hidden shock lag (`scripts/hidden_ground_truth.py`), domain-consistent
    by design (e.g. an import-dependent hardware startup gets high hidden
-   political/economic sensitivity) but **never exposed to the learning
-   pipeline** — only used to fabricate a daily profit/revenue series
+   political/economic sensitivity), plus a fixed-seed independent Gaussian
+   perturbation (std=25/dimension) on top of that domain base representing
+   realistic idiosyncratic per-startup variation (added after diagnosing
+   that hand-authored "domain-consistent" templates alone had an effective
+   rank of only ~4/11 — every startup in a domain got essentially the same
+   archetypal shape, just rescaled, which capped how much any downstream
+   model could ever discriminate between businesses — see "Current scope"
+   below). None of this is **ever exposed to the learning pipeline** —
+   only used to fabricate a daily profit/revenue series
    (`data/profit_history.json`, 180 days: baseline trend + noise + shocks
    injected some days later whenever a relevant, hidden-sensitive news
    article runs). `scripts/derive_sensitivity_profiles.py` then recovers
@@ -62,70 +71,145 @@ each score.
    profile. It then validates the recovery by correlating each derived
    profile against its hidden template — a sanity check on the recovery
    pipeline itself, printed before training ever touches the shared
-   matrix. In practice this recovers the true shock lag for all 20
-   startups and correlates at ~0.90 with the hidden templates even at
+   matrix. In practice this recovers the true shock lag for all 50
+   startups and correlates at ~0.85-0.88 with the hidden templates even at
    sub-cluster granularity.
 5. **Interaction matrix** (`data/interaction_matrix.npy`) — a single shared
    (384x384) matrix `W`, fit once in batch. For a (news, CVP) pair,
-   `gate = news_embedding · W · cvp_embedding` is one scalar capturing how
-   strongly that business reacts to that news in general — direction and
-   magnitude — independent of which dimension is involved. `W` is fit by
-   ridge regression against the 20 startups' *derived* sensitivity vectors
-   (20 startups × 11 dimensions = 220 training examples), solved in the
-   ridge *dual* via the kernel trick, since the 384×384 = ~147k parameters
-   vastly outnumber the 220 examples. The regularization strength was
-   chosen by leave-one-startup-out cross-validation, not by in-sample fit
-   (in-sample error only keeps falling as regularization drops toward zero
-   in a system this underdetermined, which would just pick a `W` that
-   memorizes the 20 startups).
-6. **Analysis** — for a submitted CVP, every one of the 1000 news articles
-   gets a `gate` from `W`. Within each dimension, `gate` combines with an
-   article's own labeled relevance and polarity to give its signed
-   contribution to whichever sub-cluster it belongs to; summing a
-   dimension's sub-cluster totals gives that dimension's raw score. Each
-   chart's 6 or 5 raw scores are then independently rescaled so the
-   largest magnitude hits 100, sign preserved. (`analysis.py` also flags
-   dimensions whose raw magnitude is under 10% of the submission's
-   strongest as negligible; the current frontend's two-color helping/
-   hurting design doesn't surface that flag, but a near-zero dimension
-   still reads as such by its small radius/small score.)
+   `gate = news_embedding · W · (cvp_embedding - cvp_mean)` is one scalar
+   capturing how strongly that business reacts to that news in general —
+   direction and magnitude — independent of which dimension is involved.
+   `cvp_mean` (`data/cvp_mean.npy`) is the mean of all training CVP
+   embeddings, subtracted before every fit and every inference-time query —
+   see "Current scope" below for why this centering step exists; it's load-
+   bearing, not cosmetic. `W` is fit by ridge regression against the 50
+   startups' *derived* sensitivity vectors (50 startups × 11 dimensions =
+   550 training examples), solved in the ridge *dual* via the kernel trick,
+   since the 384×384 = ~147k parameters vastly outnumber the 550 examples.
+   The regularization strength was chosen by leave-one-startup-out
+   cross-validation, not by in-sample fit (in-sample error only keeps
+   falling as regularization drops toward zero in a system this
+   underdetermined, which would just pick a `W` that memorizes the
+   startups).
+6. **Analysis** — for a submitted CVP, every fabricated seed article *and*
+   every currently-stored real fact gets a `gate` from `W` (`src/marketintel
+   /live_facts.py` folds the two corpora together before scoring - see
+   below). Within each dimension, `gate` combines with an item's own
+   relevance and polarity to give its signed contribution to whichever
+   sub-cluster it belongs to; summing a dimension's sub-cluster totals gives
+   that dimension's raw score. Each chart's 6 or 5 raw scores are then
+   independently rescaled so the largest magnitude hits 100, sign preserved.
+   (`analysis.py` also flags dimensions whose raw magnitude is under 10% of
+   the submission's strongest as negligible; the current frontend's
+   two-color helping/hurting design doesn't surface that flag, but a
+   near-zero dimension still reads as such by its small radius/small score.)
 7. **Output** — two Plotly radar charts (indigo fill, green/red vertices for
    direction) side by side, with the news breakdown underneath: one section
    per dimension (ranked by |score|, click to expand), sub-grouped by
-   sub-cluster, down to the specific bordered article rows driving each
-   score - so every number stays traceable back to a real, inspectable
-   fabricated article, at both the dimension and the sub-topic level.
+   sub-cluster, down to the specific bordered rows driving each score -
+   real ingested facts marked with a small "LIVE" badge, distinct from
+   fabricated seed articles - so every number stays traceable back to a
+   real, inspectable article, at both the dimension and the sub-topic
+   level.
 
-8. **Real news ingestion** (`scripts/ingest_news.py`, `data/real_news.json` +
-   `real_news_embeddings.npy`) — a separate, parallel track from the
-   fabricated dataset above, not yet wired into the CVP analysis. Pulls
-   world-level headlines from four free, no-key sources: BBC World and Al
-   Jazeera's own RSS feeds, Google News RSS (queried by topic - `WORLD` -
-   not scoped to any one outlet), and the GDELT DOC 2.0 API via the
-   open-source `gdeltdoc` package (*not* GDELT Cloud, a separate paid
-   product). Reuters isn't used: its public RSS was discontinued in 2020
-   and programmatic access now requires a paid license. Only title, publish
-   timestamp, link, and derived tags are stored — never article body text,
-   and no vector database. Each run is incremental per source (a small
-   `data/ingestion_state.json` cursor tracks the last-seen publish time) and
-   safe to overlap: every new headline is embedded and compared by cosine
-   similarity against the last 48 hours of stored headlines, and anything
-   ≥0.92 similar is folded into the existing record (`mention_count`
-   incremented) instead of creating a duplicate — verified in practice by
-   cross-source stories (the same event covered by two or three wires)
-   landing in one record. GDELT's free endpoint is rate-limited and
-   occasionally times out; a failed source is logged and skipped for that
-   run rather than aborting the others.
+8. **Merging real facts into the live score** (`src/marketintel/
+   live_facts.py`) — real facts were never part of the original sub-cluster
+   discovery (that ran once, offline, against the fabricated corpus only;
+   facts arrive continuously afterward), so each is assigned to its nearest
+   EXISTING sub-cluster by cosine similarity to that sub-cluster's centroid
+   (computed once from the fabricated corpus + its discovery output, cached
+   for the process's lifetime) - not by re-running discovery. Real facts are
+   then folded into the same `news` list and embedding matrix the fabricated
+   corpus uses, so `analysis.py`'s gate/contribution math needs zero
+   changes: real facts already have the same `pestle_scores`/
+   `porters_scores`/`polarity`/`scope` shape as fabricated articles. **They
+   count EQUALLY** to fabricated seed articles in the score - not down-
+   weighted, not recency-weighted. Reasoning: `W` was trained purely on the
+   fabricated corpus, so a real fact's gate score is already only as
+   trustworthy as the seed corpus's ability to generalize to it; down-
+   weighting on top of that would be an extra, unjustified parameter with
+   no evidence behind it (recency-weighting was considered too, and
+   rejected for the same reason - there's no observed real outcome yet to
+   calibrate a decay constant against). Revisit once real fact volume is
+   large enough to check empirically whether down-weighting is actually
+   warranted. Real facts are re-loaded fresh on every `/api/analyze`
+   request (not cached), since `ingestion_service.py` keeps appending to
+   them independently of the analysis server's process. At current volume
+   (tens to low hundreds of real facts vs. 1000 fabricated), a real fact's
+   contribution is correctly computed and ranked within its cluster, but
+   usually doesn't crack the UI's top-5-per-cluster display cutoff -
+   confirmed by inspecting full, untruncated cluster rankings directly
+   (real facts landing at position ~45 of ~47 by contribution magnitude,
+   exactly where their weaker - not absent - signal should place them) -
+   not a display bug, just how little real data exists relative to the
+   fabricated corpus so far.
+
+9. **Real news ingestion** (`src/marketintel/ingestion.py`, run by either
+   `ingestion_service.py` or `scripts/ingest_news.py` - see "Real news
+   ingestion" below) — a separate, parallel dataset from the fabricated one
+   above, now merged into scoring per item 8. Pulls world-level headlines
+   from four free, no-key sources: BBC World and Al Jazeera's own
+   RSS feeds, Google News RSS (queried by topic - `WORLD` - not scoped to
+   any one outlet), and the GDELT DOC 2.0 API via the open-source
+   `gdeltdoc` package (*not* GDELT Cloud, a separate paid product). Reuters
+   isn't used: its public RSS was discontinued in 2020 and programmatic
+   access now requires a paid license. GDELT's free endpoint is
+   rate-limited and occasionally times out; a failed source is logged and
+   skipped for that run rather than aborting the others.
+
+   **The unit of analysis is the fact, not the article.** Each fetched
+   article is decomposed into one or more atomic, independently-scorable
+   facts (`src/marketintel/fact_extraction.py`) using a free local model via
+   Ollama, not a paid API - a tax-policy piece with a bracket increase and a
+   separate bracket decrease becomes two fact records with their own
+   (likely opposing) polarity, not one blended one. Extraction also
+   neutralizes each claim's wording (numbers, thresholds, and named parties
+   preserved; loaded framing stripped). Dedup, embedding, the relevance
+   gate, and scope classification all now run on facts - the mechanisms
+   are unchanged, only the unit they're applied to moved from article to
+   fact. The article itself becomes a provenance container only
+   (`data/real_articles.json`: headline, source, link, which fact ids came
+   out of it) - not scored or embedded itself. If Ollama isn't running or
+   the configured model isn't pulled, extraction falls back to treating the
+   whole article as a single unmodified fact rather than failing the run -
+   see "Real news ingestion" below for how to spin Ollama up. Facts and
+   their embeddings live in `data/real_facts.json` /
+   `real_fact_embeddings.npy`; only title, publish timestamp, link, and the
+   extracted/inferred tags are ever stored - no raw article body text, and
+   no vector database.
+
+   **Confirmed working live, and confirmed capable of hallucinating.**
+   With Ollama + `llama3.2:3b` actually running, a real headline - "Two
+   dead and 10 hurt after car rams into crowd in northern France" -
+   correctly split into three separate facts ("Two people died", "10
+   people were hurt", "A car rammed into a crowd"), each independently
+   scorable, which is exactly the capability this step was built for. But
+   a spot-check of the same live run also caught a genuine hallucination:
+   given only the headline "Putin Moves to Escalate War in Ukraine as
+   Talks at Dead End", extraction produced a fact reading "Ukraine's
+   president Volodymyr Zelenskyy has stated that the situation in the
+   country is at a stalemate" - a specific named attribution the headline
+   never made. This is a real risk with a small model working from a bare
+   headline (no article body, so no surrounding context to ground it) and
+   is exactly why CLAUDE.md calls for spot-checking extracted facts against
+   their source before trusting this at scale
+   (`scripts/validate_fact_decomposition.py` prints the most recent
+   real facts next to their source headline for this) - it's not
+   hypothetical, it already happened on the very first live run.
 
    **Labeling is one mechanism for all three fields** (`src/marketintel/
    seed_inference.py`): relevance, polarity, *and* geographic scope are all
-   inferred by the same similarity-weighted vote among a headline's 10
-   nearest neighbors in the fabricated seed corpus - the only hand-labeled
-   data anywhere in the system. There's no per-source scope tagging and no
+   inferred by the same similarity-weighted vote among a fact's 10 nearest
+   neighbors in the fabricated seed corpus - the only hand-labeled data
+   anywhere in the system. There's no per-source scope tagging and no
    trained polarity classifier; every field is read off the same
-   nearest-neighbor lookup. A sample of each run's newly stored headlines
-   (with their inferred relevance, polarity, and scope) is printed and
-   appended to `data/ingestion_samples.jsonl` for manual spot-checking.
+   nearest-neighbor lookup. Dedup (cosine similarity ≥0.92 against the last
+   48 hours of stored facts) runs at this same fact granularity: the same
+   fact reported by multiple outlets collapses into one record with a
+   shared `mention_count`, verified in practice by cross-source stories
+   landing in one record. A sample of each run's newly stored facts (with
+   their source headline alongside, for spot-checking) is printed and
+   appended to `data/ingestion_samples.jsonl`.
 
    **Scope inference was visibly the weak link, and got a two-part fix.**
    On an early live run, real headlines came back distributed India=47,
@@ -197,8 +281,14 @@ they are and why cluster-count selection isn't a plain argmax.
 ## Project structure
 
 ```
-server.py                          FastAPI backend - adapts the existing analysis pipeline to
-                                    HTTP/JSON (POST /api/analyze) and serves web/
+server.py                          FastAPI backend for the analysis app - adapts the existing
+                                    analysis pipeline to HTTP/JSON (POST /api/analyze) and serves
+                                    web/. Runs on its own port (8000), independent of the
+                                    ingestion microservice below.
+ingestion_service.py               Standalone ingestion microservice - self-schedules the shared
+                                    ingestion pipeline (runs on startup, then every 30 min) and
+                                    exposes GET /health. Its own port (8502); no ingestion logic
+                                    lives here, only scheduling + status (see below).
 web/
   index.html                       The whole frontend: two-state page (input / results), inline
                                     CSS + JS, Plotly.js-driven radar charts
@@ -207,11 +297,21 @@ web/
 src/marketintel/
   config.py                        Dimension names, scopes, file paths, constants
   embeddings.py                    sentence-transformers wrapper
-  data_loader.py                   Loads generated news/startup/subcluster/real-news data + W
+  data_loader.py                   Loads generated news/startup/subcluster/real-fact data + W
   analysis.py                      Gate/sub-cluster contribution scoring + roll-up + drill-down data
   seed_inference.py                Relevance/polarity via pooled k-NN vote, a relevance-gate
                                     threshold, and scope via per-class-best-match - all looked
-                                    up against the fabricated seed corpus, for real headlines
+                                    up against the fabricated seed corpus, for real facts
+  fact_extraction.py               Decomposes one article into one or more neutral, atomic facts
+                                    via a local Ollama model, with a single-fact fallback if
+                                    Ollama isn't reachable
+  ingestion.py                     The real ingestion pipeline itself (fetch, decompose into
+                                    facts, dedup, embed, gate, scope) - the ONE implementation,
+                                    imported by both scripts/ingest_news.py and ingestion_service.py
+  atomic_io.py                     Temp-file-then-rename writers for real_articles.json /
+                                    real_facts.json / real_fact_embeddings.npy /
+                                    ingestion_state.json, so a concurrent reader never sees a
+                                    half-written file
 scripts/
   generate_news.py                 Builds data/news.json + news_embeddings.npy
   generate_startups.py             Builds data/startups.json (identity only) + embeddings
@@ -222,12 +322,16 @@ scripts/
   derive_sensitivity_profiles.py   Recovers each startup's real profile via sub-cluster lag
                                     regression, validates it against the hidden templates,
                                     writes it into data/startups.json
-  train_interaction_matrix.py      Fits data/interaction_matrix.npy (W) from the derived profiles
+  train_interaction_matrix.py      Fits data/interaction_matrix.npy (W) and data/cvp_mean.npy
+                                    from the derived profiles
   validate_umbrella_case.py        Sanity-checks the sub-cluster pipeline end to end (see below)
-  ingest_news.py                   Scheduled real-world ingestion (see below) - independent of
-                                    the fabricated-data scripts above
+  ingest_news.py                   Thin CLI wrapper around marketintel.ingestion.run_ingestion_once()
+                                    for a one-shot run or an external cron/Task Scheduler entry
   validate_scope_fix.py            Before/after audit of the scope fix against a stored batch
                                     (see below) - not part of the regular pipeline
+  validate_fact_decomposition.py   Runs a constructed tax-policy article through fact
+                                    extraction and checks it splits into facts with opposing
+                                    polarity, not one blended record (see below)
 data/                              Generated datasets + trained W (gitignored, see below)
 ```
 
@@ -284,14 +388,59 @@ same page, no reload.
 Independent of the fabricated-data pipeline above and not required to run
 the app. Requires `data/news.json` and `news_embeddings.npy` to already
 exist - that's the seed corpus every inference (relevance, polarity, scope)
-is looked up against:
+is looked up against. The pipeline itself (`src/marketintel/ingestion.py`)
+is the same code either way - pick whichever of the two ways to run it fits:
+
+**Fact extraction needs Ollama running locally** (optional, but recommended -
+without it, every article decomposes into exactly one unmodified fact):
+
+```bash
+# one-time setup
+ollama pull llama3.2:3b   # or whatever OLLAMA_MODEL is set to in config.py
+ollama serve              # leave running; defaults to http://localhost:11434
+```
+
+(On Windows, the installer registers Ollama as a background service that
+starts automatically - `ollama serve` will then just report the port's
+already in use, which means it's already running; no need to start it
+again.)
+
+If Ollama isn't reachable when `ingest_news.py` or `ingestion_service.py`
+runs, `fact_extraction.py` logs a warning and falls back to a single fact per
+article rather than failing the run - decomposition quality degrades to a
+no-op, ingestion doesn't stop.
+
+**On CPU-only hardware, give it real time.** `OLLAMA_TIMEOUT_SECONDS`
+defaults to 120, not something smaller - a cold first call was observed
+taking ~80s on CPU-only hardware (~32s just loading the model's weights
+into memory) with no GPU acceleration. A tighter timeout doesn't fail
+cleanly here, it silently degrades every extraction to the single-fact
+fallback even with Ollama installed and working - which looks identical to
+"Ollama isn't running" in the logs unless you're checking for it. If
+extraction is still timing out after the model's warmed up (i.e. after the
+first call), that's a real problem worth investigating, not something to
+paper over with a bigger number.
+
+**Option A - `ingestion_service.py`, a standalone microservice.** Runs one
+ingestion pass immediately on startup, then every 30 minutes for as long as
+the process stays up (a plain `asyncio` loop, no external scheduler), on its
+own port so it never conflicts with `server.py`:
+
+```bash
+uvicorn ingestion_service:app --port 8502
+```
+
+`GET http://localhost:8502/health` reports the last run's start/finish
+timestamps, articles fetched, facts extracted/excluded/added, and whether it
+succeeded or errored - the only HTTP surface this service exposes; there's
+no way to trigger a run or change anything from outside it.
+
+**Option B - `scripts/ingest_news.py`, a one-shot CLI**, for a manual run or
+an external cron/Task Scheduler entry instead of a long-running process:
 
 ```bash
 python scripts/ingest_news.py
 ```
-
-Re-run it every 1-4 hours to keep up with the wires - it's incremental and
-safe to overlap. Pick whatever scheduler is available:
 
 ```bash
 # cron (Linux/Mac), every 2 hours
@@ -303,19 +452,34 @@ safe to overlap. Pick whatever scheduler is available:
 schtasks /create /tn "MarketIntelIngest" /tr "'C:\path\to\project\.venv\Scripts\python.exe' 'C:\path\to\project\scripts\ingest_news.py'" /sc hourly /mo 2
 ```
 
-Check `data/ingestion_samples.jsonl` after the first few runs - it's a
-running log of newly stored headlines with their inferred relevance,
-polarity, and scope, meant for eyeballing before trusting this data
-downstream. Scope is meaningfully better since the relevance-gate + best-
-match fix, but still worth scrutinizing - see "How it works" above.
-`data/ingestion_excluded.jsonl` logs everything the relevance gate rejected
-(headline, timestamp, max relevance) - review it occasionally to make sure
-the gate isn't excluding things it shouldn't.
+Either way, every write to `data/real_articles.json`, `data/real_facts.json`,
+`real_fact_embeddings.npy`, and `data/ingestion_state.json` goes through
+`atomic_io.py` (write to a temp file, then rename over the original) - so a
+concurrent reader of those files never observes a partially-written one,
+whether that reader is another process or a future version of `server.py`
+that consumes real facts.
 
-To directly compare the old scope mechanism against the new one on a
-concrete batch (rather than just reading the samples), run
-`python scripts/validate_scope_fix.py` while `data/real_news.json` still
-holds records classified under the old logic.
+Check `data/ingestion_samples.jsonl` after the first few runs - it's a
+running log of newly stored facts (with their source headline alongside) and
+their inferred relevance, polarity, and scope, meant for eyeballing before
+trusting this data downstream - the fact-extraction step in particular
+should be spot-checked against its source for hallucinated or dropped
+details (`scripts/validate_fact_decomposition.py` does this for a
+constructed test case, and against a sample of whatever's currently stored).
+Scope is meaningfully better since the relevance-gate + best-match fix, but
+still worth scrutinizing - see "How it works" above.
+`data/ingestion_excluded.jsonl` logs everything the relevance gate rejected
+(fact text, source headline, timestamp, max relevance) - review it
+occasionally to make sure the gate isn't excluding things it shouldn't.
+
+`python scripts/validate_scope_fix.py` re-scores scope for whatever's
+currently in `data/real_facts.json` and reports any drift against what's on
+record - a general audit, not tied to one specific historical batch anymore.
+`python scripts/validate_fact_decomposition.py` runs a constructed
+two-claim tax-policy article through extraction and checks it actually
+splits into two facts with opposing polarity (requires Ollama to be running
+for a meaningful result - otherwise it reports itself as inconclusive rather
+than a false pass).
 
 ## Current scope
 
@@ -323,9 +487,14 @@ This phase is intentionally limited to what's described above:
 
 - No CSV/XLSX upload — next phase.
 - No stakeholder/supplier/competitor confirmation screen.
-- The CVP analysis pipeline (`server.py`) still scores against the
-  fabricated news dataset only - real ingested headlines
-  (`data/real_news.json`) aren't wired into it yet.
+- The CVP analysis pipeline (`server.py`) now scores against the fabricated
+  seed corpus AND real ingested facts together (see item 8 above). What's
+  still fabricated-only: sub-cluster discovery, the per-startup regression,
+  and training the shared matrix `W` itself - decomposing 1000 already-
+  atomic, template-generated fabricated articles into "facts" wouldn't be
+  meaningful, and retraining that whole foundation is out of scope
+  regardless. Real facts only ever get assigned into sub-clusters that
+  already exist from that one-time fabricated-only discovery run.
 - Real ingestion is world-level sources only (BBC World, Al Jazeera, Google
   News, GDELT). No India/Punjab-specific regional feeds yet - that's next,
   and should also make scope inference (below) meaningfully more accurate
@@ -343,7 +512,58 @@ This phase is intentionally limited to what's described above:
   A third level (e.g. rainfall → increased/decreased) needs meaningfully
   more articles and startups behind it than this fabricated scale supports -
   revisit once real data volume justifies it.
+- `ingestion_service.py` has no authentication and no way to trigger a run
+  or change its schedule from outside the process - by design, for now. It's
+  meant to run standalone on a trusted local machine, not be exposed.
+- Fact extraction mostly has only a headline to work with (the sources
+  above are RSS/API feeds, not full article scrapes - fetching and parsing
+  arbitrary article pages is a meaningfully bigger scope not attempted
+  here). In practice, live testing with Ollama + `llama3.2:3b` actually
+  running still produced real multi-fact splits from headlines alone (a
+  casualty headline splitting into separate death/injury/event facts), so
+  this happens more than "rarely" - but it also produced a confirmed
+  hallucination (a specific named attribution invented from a headline
+  that never made it) on the very first live run, precisely because a bare
+  headline gives the model so little to ground itself in. Both outcomes
+  are documented in "How it works" above with the exact examples. Spot-
+  check before trusting this at scale, per CLAUDE.md - the mechanism is
+  real, not a rubber stamp.
+- Storyline/event-chain linking across facts over time isn't built yet -
+  it's the reason articles keep a `fact_ids` list rather than being
+  discarded once decomposed, but nothing consumes that linkage yet.
 - Real news storage is flat JSON + `.npy` (matching the fabricated dataset's
   structure) - no vector database yet.
+- GDELT DOC 2.0's free endpoint is genuinely intermittent - confirmed
+  working (fetched real articles) in multiple runs this session, and
+  connection-timed-out in others, on the same network. Already handled
+  (logged and skipped for that run, doesn't abort the other three
+  sources); not something to "fix" so much as a real characteristic of a
+  free, unauthenticated, rate-limited public API.
+- The 50 fabricated startups' CVP text carries explicit LPU framing
+  throughout, and `W`/`cvp_mean.npy` have since been retrained against it
+  (see below) - no longer a stale-artifact concern.
+- **Different CVPs producing near-identical output was diagnosed and
+  fixed** across several rounds: `W`'s effective rank was originally only
+  ~5/384; growing 20→50 startups barely helped (~6); the deeper cause was
+  the hidden ground-truth *target* profiles themselves having effective
+  rank only ~3.4-4.3/11 (fixed by adding fixed-seed per-dimension Gaussian
+  noise, std=25, to each hidden template - see "How it works" above); and
+  the actual remaining cause was `W`'s dominant singular direction being
+  ~88% aligned with the mean of all training CVP embeddings - i.e. the
+  "generic business pitch text" component every CVP shares, which ridge
+  regression spent a large share of `W`'s capacity modeling in this
+  heavily underdetermined system. Fixed by mean-centering CVP embeddings
+  before every fit and every inference call. Verified on a 5-CVP
+  discrimination test: real-business-to-real-business output cosine
+  similarity dropped from a collapsed 0.90-0.99 to a properly varied
+  -0.31 to 0.68, at a training-fit MAE cost of only 27.9 → 29.1.
+- **New regression surfaced by that work**: `scripts/validate_umbrella_case.py`'s
+  deforestation-near-zero check now fails narrowly (score ~50% over its
+  threshold). Confirmed this is NOT caused by the CVP-centering fix or the
+  hidden-template noise perturbation - it reproduces identically with both
+  disabled, so it predates this round of changes (most likely introduced
+  by the earlier 20→50 startup expansion). The rain-positive and
+  drought-negative checks in the same test still pass. Not yet
+  root-caused or fixed.
 
 See `CLAUDE.md` for the full project context and longer-term roadmap.

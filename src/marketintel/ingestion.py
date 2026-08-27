@@ -1,0 +1,386 @@
+"""Real-world news ingestion pipeline: fetches world-level headlines from a small
+set of free, no-key sources, decomposes each fetched article into one or more
+atomic facts (a local Ollama model, see fact_extraction.py), deduplicates
+near-identical FACTS via embedding similarity, and infers PESTLE/Porter's
+relevance, polarity, and (for facts that clear a relevance gate) geographic
+scope - all by looking up the fabricated seed corpus, see seed_inference.py.
+No per-source scope tagging, no trained classifier.
+
+The unit of analysis is the fact, not the article: a tax policy piece with a
+bracket increase and a separate bracket decrease becomes two fact records with
+their own (likely opposing) polarity, not one blended one. The relevance gate,
+scope classification, and dedup all now run on facts. The original article is
+kept only as a provenance container - headline, source, link, and which facts
+came out of it (data/real_articles.json) - not scored or embedded itself.
+
+Two safeguards on the nearest-neighbor labeling, added after a live run came
+back scope-distributed India=47/World=36/Punjab=25 - including tagging an NFL
+brain-injury study and a Nigerian kidnapping story as "India":
+  1. A relevance gate runs before scope classification. A fact whose max
+     relevance across all 11 dimensions falls below the 5th percentile of the
+     fabricated seed corpus's own max-relevance distribution isn't
+     meaningfully close to anything this system models - it's excluded
+     entirely (no scope, not stored, not used downstream) and logged to
+     data/ingestion_excluded.jsonl instead of silently dropped.
+  2. Facts that pass the gate get scope from a per-class-best-match rule, not
+     pooled top-k plurality voting: for each of the 7 scope classes, only
+     that class's single closest seed article competes. This is what
+     actually fixes the bias - pooled voting let India/Punjab win purely by
+     having more seed articles nearby, regardless of how well any one of
+     them matched.
+
+Sources (all free, no API key, no paid tier):
+  - BBC World RSS and Al Jazeera RSS - standard publisher feeds.
+  - Google News RSS, queried by topic (WORLD), not scoped to any one outlet.
+  - GDELT DOC 2.0 API via the open-source `gdeltdoc` package - NOT "GDELT
+    Cloud" (gdeltcloud.com), which is a separate paid product requiring a key.
+Reuters is not used: its public RSS was discontinued in 2020 and programmatic
+access now requires a paid license.
+
+Only title, publish timestamp, link, and the extracted/inferred tags are
+stored - no raw article body text, and no vector database. This appends to
+the same flat JSON + .npy embedding structure the fabricated dataset already
+uses, kept in separate files (data/real_articles.json, data/real_facts.json,
+real_fact_embeddings.npy) so real data never mixes into the fabricated
+startups' training data. Writes go through atomic_io so a concurrent reader
+never sees a half-written file.
+
+This is the ONE implementation of the pipeline: scripts/ingest_news.py (a
+thin manual/cron-friendly CLI) and ingestion_service.py (a standalone,
+self-scheduling microservice) both call run_ingestion_once() from here rather
+than duplicating any of this logic.
+"""
+import calendar
+import json
+from datetime import datetime, timedelta, timezone
+
+import feedparser
+import numpy as np
+
+from .atomic_io import atomic_write_json, atomic_write_npy
+from .config import (
+    DATA_DIR,
+    DEDUP_SIMILARITY_THRESHOLD,
+    DEDUP_WINDOW_HOURS,
+    INGESTION_EXCLUDED_LOG_PATH,
+    INGESTION_SAMPLE_LOG_PATH,
+    INGESTION_STATE_PATH,
+    PESTLE_DIMS,
+    PORTERS_DIMS,
+    REAL_ARTICLES_PATH,
+    REAL_FACT_EMBEDDINGS_PATH,
+    REAL_FACTS_PATH,
+)
+from .data_loader import load_news
+from .embeddings import embed_text
+from .fact_extraction import extract_facts
+from .seed_inference import (
+    calibrate_relevance_threshold,
+    group_indices_by_scope,
+    infer_categorical,
+    infer_relevance,
+    infer_scope_best_match,
+    nearest_neighbors,
+)
+
+USER_AGENT = "Mozilla/5.0 (compatible; MarketIntelBot/0.1)"
+SAMPLE_LOG_SIZE = 8
+GDELT_LOOKBACK_HOURS = 6  # first-run-only fallback window; later runs use the state cursor
+GDELT_KEYWORD = "world"
+
+RSS_FEEDS = {
+    "bbc_world": "http://feeds.bbci.co.uk/news/world/rss.xml",
+    "aljazeera": "https://www.aljazeera.com/xml/rss/all.xml",
+    "google_news_world": "https://news.google.com/rss/headlines/section/topic/WORLD?hl=en-US&gl=US&ceid=US:en",
+}
+
+
+def load_state() -> dict:
+    if INGESTION_STATE_PATH.exists():
+        with open(INGESTION_STATE_PATH, encoding="utf-8") as f:
+            return json.load(f)
+    return {}
+
+
+def save_state(state: dict) -> None:
+    atomic_write_json(INGESTION_STATE_PATH, state)
+
+
+def load_existing():
+    """Returns (articles, facts, fact_embeddings)."""
+    articles = []
+    if REAL_ARTICLES_PATH.exists():
+        with open(REAL_ARTICLES_PATH, encoding="utf-8") as f:
+            articles = json.load(f)
+
+    if REAL_FACTS_PATH.exists() and REAL_FACT_EMBEDDINGS_PATH.exists():
+        with open(REAL_FACTS_PATH, encoding="utf-8") as f:
+            facts = json.load(f)
+        fact_embeddings = list(np.load(REAL_FACT_EMBEDDINGS_PATH))
+    else:
+        facts, fact_embeddings = [], []
+
+    return articles, facts, fact_embeddings
+
+
+def save_existing(articles: list[dict], facts: list[dict], fact_embeddings: list[np.ndarray]) -> None:
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    atomic_write_json(REAL_ARTICLES_PATH, articles)
+    atomic_write_json(REAL_FACTS_PATH, facts)
+    atomic_write_npy(REAL_FACT_EMBEDDINGS_PATH, np.array(fact_embeddings))
+
+
+def parse_published(entry) -> datetime:
+    if entry.get("published_parsed"):
+        return datetime.fromtimestamp(calendar.timegm(entry.published_parsed), tz=timezone.utc)
+    return datetime.now(timezone.utc)
+
+
+def fetch_rss(url: str, since: datetime | None) -> list[dict]:
+    import urllib.request
+
+    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+    raw = urllib.request.urlopen(req, timeout=20).read()
+    parsed = feedparser.parse(raw)
+
+    items = []
+    for entry in parsed.entries:
+        published = parse_published(entry)
+        if since is not None and published <= since:
+            continue
+        title = entry.get("title", "").strip()
+        if not title:
+            continue
+        items.append({"title": title, "link": entry.get("link", ""), "published": published})
+    return items
+
+
+def parse_gdelt_date(value: str) -> datetime:
+    try:
+        return datetime.strptime(value, "%Y%m%dT%H%M%SZ").replace(tzinfo=timezone.utc)
+    except (TypeError, ValueError):
+        return datetime.now(timezone.utc)
+
+
+def fetch_gdelt(since: datetime | None) -> list[dict]:
+    """GDELT DOC 2.0 API (free, no key) via the open-source `gdeltdoc` package -
+    not GDELT Cloud, which is a separate paid product."""
+    from gdeltdoc import Filters, GdeltDoc
+
+    now = datetime.now(timezone.utc)
+    start = since or (now - timedelta(hours=GDELT_LOOKBACK_HOURS))
+    filters = Filters(
+        keyword=GDELT_KEYWORD,
+        start_date=start.replace(tzinfo=None),
+        end_date=now.replace(tzinfo=None),
+        num_records=250,
+    )
+    df = GdeltDoc().article_search(filters)
+
+    items = []
+    for _, row in df.iterrows():
+        title = str(row.get("title") or "").strip()
+        if not title:
+            continue
+        published = parse_gdelt_date(row.get("seendate"))
+        if since is not None and published <= since:
+            continue
+        items.append({"title": title, "link": str(row.get("url") or ""), "published": published})
+    return items
+
+
+def make_rss_fetcher(url: str):
+    return lambda since: fetch_rss(url, since)
+
+
+SOURCES = {
+    "bbc_world": make_rss_fetcher(RSS_FEEDS["bbc_world"]),
+    "aljazeera": make_rss_fetcher(RSS_FEEDS["aljazeera"]),
+    "google_news_world": make_rss_fetcher(RSS_FEEDS["google_news_world"]),
+    "gdelt_world": fetch_gdelt,
+}
+
+
+def find_duplicate_fact(new_embedding: np.ndarray, facts: list[dict], fact_embeddings: list[np.ndarray], now: datetime):
+    """Cosine similarity against every fact published within the dedup window
+    (embeddings are already L2-normalized, so dot product = cosine similarity).
+    The same fact reported by multiple outlets collapses into one record here,
+    at fact granularity rather than article granularity."""
+    cutoff = now - timedelta(hours=DEDUP_WINDOW_HOURS)
+    candidate_idx = [i for i, f in enumerate(facts) if datetime.fromisoformat(f["published"]) >= cutoff]
+    if not candidate_idx:
+        return None, 0.0
+
+    candidate_matrix = np.array([fact_embeddings[i] for i in candidate_idx])
+    sims = candidate_matrix @ new_embedding
+    best_local = int(np.argmax(sims))
+    best_sim = float(sims[best_local])
+    if best_sim >= DEDUP_SIMILARITY_THRESHOLD:
+        return candidate_idx[best_local], best_sim
+    return None, best_sim
+
+
+def run_ingestion_once(verbose: bool = True) -> dict:
+    """Runs one full ingestion pass across all sources - fetch, decompose into
+    facts, dedup, embed, relevance gate, scope classification, atomic save - and
+    returns a summary dict. The single entry point both scripts/ingest_news.py
+    and ingestion_service.py call; nothing about the pipeline itself should live
+    anywhere else."""
+
+    def log(msg: str) -> None:
+        if verbose:
+            print(msg)
+
+    seed_news, seed_embeddings = load_news()
+    relevance_threshold = calibrate_relevance_threshold(seed_news)
+    scope_indices = group_indices_by_scope(seed_news)
+    log(f"Relevance gate threshold (5th percentile of seed corpus): {relevance_threshold:.4f}\n")
+
+    state = load_state()
+    articles, facts, fact_embeddings = load_existing()
+    next_article_id = len(articles) + 1
+    next_fact_id = len(facts) + 1
+    now = datetime.now(timezone.utc)
+
+    articles_fetched = 0
+    facts_extracted = 0
+    new_count, dup_count, excluded_count = 0, 0, 0
+    sample_log = []
+    excluded_log = []
+
+    for source_id, fetch in SOURCES.items():
+        since_str = state.get(source_id, {}).get("last_published")
+        since = datetime.fromisoformat(since_str) if since_str else None
+
+        try:
+            items = fetch(since)
+        except Exception as exc:
+            log(f"[{source_id}] fetch failed: {exc}")
+            continue
+
+        articles_fetched += len(items)
+        latest_published = since
+        for item in items:
+            fact_texts = extract_facts(item["title"])
+            facts_extracted += len(fact_texts)
+            article_fact_ids: list[str] = []
+
+            for fact_text in fact_texts:
+                embedding = embed_text(fact_text)
+                dup_idx, sim = find_duplicate_fact(embedding, facts, fact_embeddings, now)
+
+                if dup_idx is not None:
+                    facts[dup_idx]["mention_count"] += 1
+                    facts[dup_idx]["last_seen"] = now.isoformat()
+                    article_fact_ids.append(facts[dup_idx]["id"])
+                    dup_count += 1
+                    continue
+
+                top_idx, weights = nearest_neighbors(embedding, seed_embeddings)
+                relevance = infer_relevance(seed_news, top_idx, weights)
+                max_relevance = max(relevance.values())
+
+                if max_relevance < relevance_threshold:
+                    excluded_count += 1
+                    excluded_log.append({
+                        "fact_text": fact_text,
+                        "source_title": item["title"],
+                        "published": item["published"].isoformat(),
+                        "max_relevance": max_relevance,
+                    })
+                    continue
+
+                polarity = infer_categorical(seed_news, top_idx, weights, "polarity")
+                scope, _ = infer_scope_best_match(embedding, seed_embeddings, scope_indices)
+                pestle_scores = {d: relevance[d] for d in PESTLE_DIMS}
+                porters_scores = {d: relevance[d] for d in PORTERS_DIMS}
+
+                fact_id = f"fact_{next_fact_id:05d}"
+                facts.append({
+                    "id": fact_id,
+                    "parent_article_id": None,  # filled in once the article id is known, below
+                    "fact_text": fact_text,
+                    "published": item["published"].isoformat(),
+                    "scope": scope,
+                    "pestle_scores": pestle_scores,
+                    "porters_scores": porters_scores,
+                    "polarity": polarity,
+                    "mention_count": 1,
+                    "first_seen": now.isoformat(),
+                    "last_seen": now.isoformat(),
+                })
+                fact_embeddings.append(embedding)
+                next_fact_id += 1
+                new_count += 1
+                article_fact_ids.append(fact_id)
+
+                if len(sample_log) < SAMPLE_LOG_SIZE:
+                    sample_log.append({
+                        "fact_text": fact_text,
+                        "source_title": item["title"],
+                        "relevance": relevance,
+                        "polarity": polarity,
+                        "scope": scope,
+                    })
+
+            if article_fact_ids:
+                article_id = f"article_{next_article_id:05d}"
+                for fid in article_fact_ids:
+                    fact = next(f for f in facts if f["id"] == fid)
+                    if fact["parent_article_id"] is None:
+                        fact["parent_article_id"] = article_id
+                articles.append({
+                    "id": article_id,
+                    "title": item["title"],
+                    "link": item["link"],
+                    "published": item["published"].isoformat(),
+                    "source": source_id,
+                    "fact_ids": article_fact_ids,
+                    "first_seen": now.isoformat(),
+                })
+                next_article_id += 1
+
+            if latest_published is None or item["published"] > latest_published:
+                latest_published = item["published"]
+
+        state[source_id] = {
+            "last_published": (latest_published or now).isoformat(),
+            "last_run": now.isoformat(),
+        }
+        log(f"[{source_id}] fetched {len(items)} article(s) newer than {since}")
+
+    save_existing(articles, facts, fact_embeddings)
+    save_state(state)
+
+    log(
+        f"\n{articles_fetched} article(s) fetched -> {facts_extracted} fact(s) extracted: "
+        f"{new_count} new, {dup_count} deduplicated, {excluded_count} excluded by the relevance gate."
+    )
+    log(f"Total real_facts records: {len(facts)} (from {len(articles)} provenance article records)\n")
+
+    if excluded_log:
+        with open(INGESTION_EXCLUDED_LOG_PATH, "a", encoding="utf-8") as log_file:
+            for entry in excluded_log:
+                log_file.write(json.dumps({"logged_at": now.isoformat(), **entry}) + "\n")
+        log(f"({len(excluded_log)} excluded fact(s) appended to {INGESTION_EXCLUDED_LOG_PATH})\n")
+
+    if sample_log:
+        log("Sample for spot-checking (compare fact_text against source_title for hallucinated/dropped details):")
+        with open(INGESTION_SAMPLE_LOG_PATH, "a", encoding="utf-8") as log_file:
+            for entry in sample_log:
+                top_dims = sorted(entry["relevance"].items(), key=lambda kv: -kv[1])[:2]
+                top_str = ", ".join(f"{d}={v:.2f}" for d, v in top_dims)
+                log(f"  [{entry['polarity']:>8} | {entry['scope']:>11}] {entry['fact_text']}")
+                log(f"             from: {entry['source_title']}")
+                log(f"             top relevance: {top_str}")
+                log_file.write(json.dumps({"logged_at": now.isoformat(), **entry}) + "\n")
+        log(f"\n(appended to {INGESTION_SAMPLE_LOG_PATH} for later review)")
+
+    return {
+        "articles_fetched": articles_fetched,
+        "facts_extracted": facts_extracted,
+        "facts_added": new_count,
+        "facts_deduped": dup_count,
+        "facts_excluded": excluded_count,
+        "total_fact_records": len(facts),
+    }
