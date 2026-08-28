@@ -88,6 +88,46 @@ generation itself.
 - **Dedup** — cosine similarity >= 0.92 within a 48h window collapses
   re-reported stories into one record with an incremented mention_count.
 
+### 3. Historical GDELT bulk backfill (`gdelt_bulk.py`, `gdelt_backfill.py`)
+A separate, one-off/batch collection process from `ingestion_service.py`
+above, which keeps running independently on its own 30-minute schedule for
+ongoing Punjab/LPU-area coverage. Writes to its own files
+(`data/backfill_articles.json` / `backfill_facts.json` /
+`backfill_fact_embeddings.npy`) so the two processes never contend over the
+same files. Not yet merged into `server.py`'s live scoring path (tracked
+separately) — see "Known gaps" below for status, the timing investigation
+that shaped its scope, and the quality findings from its pilot run.
+- **Source**: GDELT 2.0 bulk export files (`data.gdeltproject.org`), not the
+  DOC 2.0 API (~3 months lookback only) or RSS (no history at all) — the only
+  free, no-key source with multi-year depth. Of the three bulk file types
+  (Events, Mentions, GKG), only GKG is used: Events/Mentions are pure
+  structured/coded data (CAMEO codes, actor codes) with no article text
+  anywhere. GKG's `Extras` column carries a real, crawler-extracted
+  `<PAGE_TITLE>` tag — confirmed present in 99.9% of records across three
+  sample dates (today, 2024, 2022) by direct inspection — with a URL-slug
+  fallback for the rare record missing it.
+- **Reordered pipeline, distinct from the live per-item order**: fetch (GDELT
+  bulk, tier-filtered) -> embed -> relevance gate -> only then fact
+  decomposition (Ollama) on survivors -> dedup -> seed inference
+  (relevance/polarity/scope) -> comparative-fact matching -> atomic write.
+  The gate runs BEFORE decomposition here specifically to bound the dominant
+  Ollama cost to only the records that clear it, unlike the live pipeline.
+- **Comparative-fact matching** (`comparative_matching.py`) — for a bare
+  state-value fact with no directional language of its own (e.g. "GST on
+  mobile phones is 18%"), finds the nearest STRICTLY-EARLIER fact about the
+  same specific subject and computes a direction (increase/decrease), rather
+  than leaving polarity ambiguous. A fact that already states its own
+  direction ("raised from 12% to 18%") skips the lookup entirely — this is
+  why `fact_extraction.py`'s prompt was changed to preserve directional
+  language as factual content rather than neutralizing it away. A candidate
+  match must clear both a similarity threshold (0.85) and an entity-overlap
+  check — see "Known gaps" below for a real bug this caught before it ever
+  touched backfill data.
+- **Checkpointed and resumable** at the granularity of one 15-minute GKG file
+  (`data/backfill_state.json`), since even the scoped-down India-tier run is
+  measured in months, not hours — an interruption loses at most the window
+  since the last checkpoint, never the whole run.
+
 ## UI
 Two-state single page (`web/index.html`), sharp corners throughout (0px
 radius, no exceptions), near-black graphite background, deep indigo-
@@ -195,6 +235,53 @@ longer exists in the repo.
 - No paid API keys or paid dependencies anywhere in the stack (checked;
   every dependency in `pyproject.toml` is free/open-source, and every
   "API" reference in the code is to Ollama, GDELT's free tier, or RSS).
+- **GDELT bulk backfill: timing estimate forced a scope-down, and a pilot is
+  in progress.** A real timing pilot (8 GKG files sampled across one day,
+  measured end-to-end through embed -> gate -> Ollama decomposition, then
+  extrapolated) found the full 2-year World(broad, unfiltered)+India backfill
+  would take **~4.7 years** of continuous unattended processing — dominated
+  almost entirely by Ollama fact decomposition (mean 3.35s/call measured
+  directly, ~50% of records clearing the relevance gate, ~86.7M raw records
+  over 2 years at World-broad scale). This was reported explicitly rather
+  than started blindly, per instructions. Decided (user's choice, among
+  India-only/no-Ollama/narrower-window options presented): **India-tier
+  only, keep Ollama decomposition** — estimated ~4.2 months, still long but
+  plausible with the checkpointing above. World-broad and Punjab-level
+  extension remain future work, not started.
+- **A real bug in comparative-fact matching's entity check was caught by its
+  own validation script before touching any real data**: the first
+  implementation accepted any non-empty entity-set intersection as a match,
+  which let two facts about genuinely different subjects (mobile-phone GST
+  vs. textile GST) cross-match anyway, purely because both happened to also
+  mention "India" — confirmed failing even at similarity=1.0 in a synthetic
+  worst-case test. Fixed by requiring Jaccard similarity >= 0.5 across entity
+  sets rather than any overlap; re-validated at 4/4 (3 real rate/tax changes
+  correctly matched with the right direction, plus the cross-match rejection,
+  including the synthetic worst case).
+- **Fact-decomposition schema compliance degraded when the prompt grew a
+  nested JSON schema** (facts now carry entities, for comparative matching) —
+  measured directly at ~7% malformed-JSON calls in a real GDELT backfill
+  smoke test (llama3.2:3b returning a bare string where an object was
+  expected, or an object missing "text"). Fixed by lowering Ollama's request
+  temperature to 0.2 (re-tested at 6/6 well-formed responses on a fresh
+  sample). This fixes STRUCTURAL compliance only — a side-by-side test at the
+  lower temperature found the model hallucinate MORE confidently on a
+  genuinely content-free title (fabricating a tournament venue and edition
+  number from a title that was just "Preview, Prop Picks, Best Bets"), where
+  at default temperature it had correctly returned an empty array for the
+  same title. Low temperature buys schema compliance, not truthfulness.
+- **Two new, real fact-decomposition quality issues surfaced during pilot
+  spot-checking**, beyond the hallucination already documented above:
+  (1) a worse hallucination than previously recorded — the headline
+  "COMMUNITY CALENDAR" (a section label, not news) produced a fully
+  fabricated claim: "The Punjab government has slashed the GST on mobile
+  phones from 18% to 8%," with nothing in the source justifying it;
+  (2) an over-splitting error — "KOZYNAP Accelerates Retail Expansion with
+  Fully Customized Sleep Solutions" (one coherent claim) was split into two
+  facts, the second an incoherent fragment ("with Fully Customized Sleep
+  Solutions"). Neither is fixed; both are flagged here rather than glossed
+  over, consistent with how this project has always surfaced decomposition
+  quality issues.
 
 ## Explored but not yet built
 - **Hypothetical-category impact scoring** — construct a representative
@@ -232,3 +319,15 @@ longer exists in the repo.
   gaps" above) is unresolved — needs its own investigation into the
   sub-cluster/regression pipeline, separate from the CVP-discrimination
   work above.
+- GDELT bulk backfill scale: World-broad coverage and the Punjab-level
+  extension (via GDELT's sub-national geo-tagging) are both deferred until
+  after the India-tier pilot week is spot-checked and, separately, the
+  India-tier full 2-year run (~4.2 months estimated) is actually kicked off
+  — neither started yet. Revisit whether World-broad is worth pursuing at
+  all (even without Ollama decomposition, ~27 days estimated) once India-tier
+  results are in hand.
+- Whether the fact-decomposition over-splitting and sparse-title
+  hallucination issues (see "Known gaps" above) need a mitigation before the
+  full-scale backfill runs (e.g. filtering out low-content titles before
+  decomposition, or a post-hoc plausibility check) is undecided — flagged
+  from the pilot, not yet acted on.

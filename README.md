@@ -178,6 +178,16 @@ each score.
    extracted/inferred tags are ever stored - no raw article body text, and
    no vector database.
 
+10. **Historical GDELT bulk backfill** (`src/marketintel/gdelt_bulk.py` +
+    `gdelt_backfill.py`, run via `scripts/run_gdelt_backfill.py`) - a
+    separate, one-off/batch collection process from `ingestion_service.py`
+    above, which keeps running independently on its own schedule. Writes to
+    its own files (`data/backfill_articles.json` / `backfill_facts.json` /
+    `backfill_fact_embeddings.npy`) so the two never contend over the same
+    files, and isn't yet merged into the live scoring path (tracked
+    separately). See "Historical GDELT backfill" below for the full runbook,
+    the timing investigation that shaped its scope, and pilot findings.
+
    **Confirmed working live, and confirmed capable of hallucinating.**
    With Ollama + `llama3.2:3b` actually running, a real headline - "Two
    dead and 10 hurt after car rams into crowd in northern France" -
@@ -312,6 +322,14 @@ src/marketintel/
                                     real_facts.json / real_fact_embeddings.npy /
                                     ingestion_state.json, so a concurrent reader never sees a
                                     half-written file
+  gdelt_bulk.py                    GDELT 2.0 bulk export file access (GKG only) - lists/downloads
+                                    15-min files, extracts page title + country tags, tier filter
+  gdelt_backfill.py                The historical backfill pipeline itself (reordered vs. the
+                                    live path) - checkpointed/resumable, separate data files
+                                    from ingestion.py's
+  comparative_matching.py          Finds the nearest earlier fact about the same subject to
+                                    compute a direction for a bare state-value fact, used only
+                                    by the backfill above
 scripts/
   generate_news.py                 Builds data/news.json + news_embeddings.npy
   generate_startups.py             Builds data/startups.json (identity only) + embeddings
@@ -332,6 +350,11 @@ scripts/
   validate_fact_decomposition.py   Runs a constructed tax-policy article through fact
                                     extraction and checks it splits into facts with opposing
                                     polarity, not one blended record (see below)
+  run_gdelt_backfill.py            CLI entry point for the historical GDELT bulk backfill
+                                    (see "Historical GDELT backfill" below)
+  validate_comparative_matching.py Validates comparative_matching.py against real rate/tax
+                                    changes and a similar-but-different pair, before it ever
+                                    touches real backfill data (see below)
 data/                              Generated datasets + trained W (gitignored, see below)
 ```
 
@@ -481,6 +504,83 @@ splits into two facts with opposing polarity (requires Ollama to be running
 for a meaningful result - otherwise it reports itself as inconclusive rather
 than a false pass).
 
+## Historical GDELT backfill
+
+A separate, one-off/batch collection process from `ingestion_service.py`
+above - that keeps running independently on its own 30-minute schedule for
+ongoing Punjab/LPU-area coverage. This backfill pulls **historical** World/
+India data from GDELT 2.0's bulk export files (`data.gdeltproject.org`), not
+the DOC 2.0 API (~3 months lookback only) or RSS (no history at all).
+
+**Timing first, before running anything at real scale.** A real pilot (8 GKG
+files sampled across one day, measured end-to-end, then extrapolated) found
+the full 2-year World(broad)+India backfill would take **~4.7 years**
+unattended - dominated almost entirely by Ollama fact decomposition (mean
+3.35s/call). Scoped down to **India-tier only** (country-tag filtered before
+embedding, not after) - estimated **~4.2 months**. World-broad coverage and
+the Punjab-level extension are both deferred; see `CLAUDE.md`'s "Known gaps"
+for the full numbers and the options considered.
+
+**Reordered pipeline, distinct from the live per-item order above**: fetch
+(GDELT bulk, tier-filtered) -> embed -> relevance gate -> only then fact
+decomposition (Ollama) on survivors -> dedup -> seed inference
+(relevance/polarity/scope) -> comparative-fact matching -> atomic write. The
+gate runs BEFORE decomposition here specifically to avoid spending Ollama
+calls on records that were never going to pass it anyway.
+
+**Comparative-fact matching** (`src/marketintel/comparative_matching.py`) -
+for a bare state-value fact with no directional language of its own (e.g.
+"GST on mobile phones is 18%"), finds the nearest strictly-earlier fact about
+the same specific subject and computes a direction, rather than leaving
+polarity ambiguous. A fact that already states its own direction ("raised
+from 12% to 18%") skips the lookup entirely. Validate this BEFORE it ever
+touches real data:
+
+```bash
+python scripts/validate_comparative_matching.py
+```
+
+Checks 3 real, independently verifiable rate/tax changes (India GST on
+mobile phones, RBI repo rate, UK VAT) retrieve the correct prior value and
+direction, and that a deliberately similar-but-different pair (mobile-phone
+GST vs. textile GST) does NOT cross-match - including a synthetic worst-case
+test that forces embedding similarity to 1.0, proving the entity-overlap
+check is genuinely load-bearing rather than redundant with the similarity
+gate. All 4 checks currently pass.
+
+**Running it**, checkpointed and resumable at the granularity of one
+15-minute GKG file (safe to interrupt and re-run with the same arguments):
+
+```bash
+# One week pilot, India tier (required before scaling up further):
+python scripts/run_gdelt_backfill.py --tier india --start 2026-08-13 --end 2026-08-20
+
+# Full backfill (run this unattended - see the timing estimate above):
+python scripts/run_gdelt_backfill.py --tier india --start 2024-08-28 --end 2026-08-28
+```
+
+Writes/reads `data/backfill_articles.json`, `data/backfill_facts.json`,
+`data/backfill_fact_embeddings.npy`, and `data/backfill_state.json` (progress
+checkpoint) - entirely separate from `ingestion_service.py`'s
+`real_*` files. `data/backfill_excluded.jsonl` logs everything the relevance
+gate rejected; `data/backfill_unmatched_directional.jsonl` logs every bare
+state-value fact that found no qualifying prior match for comparative
+matching (expected to be common early in a run, before much history has
+accumulated to match against).
+
+**Pilot spot-check findings so far** (from a smoke test before the full pilot
+week): fact decomposition surfaced two real quality issues worth
+scrutinizing before trusting this at scale - a worse hallucination than
+previously documented (a "COMMUNITY CALENDAR" section-label headline
+produced a fully fabricated GST policy claim) and an over-splitting error
+(one coherent claim split into a fact plus an incoherent fragment). Neither
+is fixed yet. Separately, the extraction prompt's JSON schema compliance
+degraded (~7% malformed responses) once facts started carrying entities for
+comparative matching - fixed by lowering Ollama's request temperature to
+0.2, which restored structural compliance but does NOT fix (and in one
+side-by-side test, worsened) hallucination on sparse/low-content titles. See
+`CLAUDE.md`'s "Known gaps" for full detail.
+
 ## Current scope
 
 This phase is intentionally limited to what's described above:
@@ -495,10 +595,18 @@ This phase is intentionally limited to what's described above:
   meaningful, and retraining that whole foundation is out of scope
   regardless. Real facts only ever get assigned into sub-clusters that
   already exist from that one-time fabricated-only discovery run.
-- Real ingestion is world-level sources only (BBC World, Al Jazeera, Google
-  News, GDELT). No India/Punjab-specific regional feeds yet - that's next,
-  and should also make scope inference (below) meaningfully more accurate
-  by giving real local headlines to match against.
+- Live ingestion (`ingestion_service.py`) is world-level sources only (BBC
+  World, Al Jazeera, Google News, GDELT DOC API). The historical GDELT bulk
+  backfill (see above) adds India-tier depth going backward in time, but is
+  a separate store, not yet merged into live scoring.
+- The GDELT bulk backfill explicitly does NOT cover Jalandhar, Kapurthala, or
+  Phagwara - GDELT almost certainly doesn't tag these at usable granularity,
+  and scraping local newspaper archives to fill that gap is out of scope.
+  Those three scopes continue to be covered only by the live
+  `ingestion_service.py` going forward. LPU/university-level data is sourced
+  separately, not part of this pipeline. Merging the backfill's historical
+  data into `server.py`'s live scoring path is also out of scope for now -
+  tracked as a separate integration gap.
 - Real headline relevance and polarity are inferred by pooled nearest-
   neighbor lookup against the fabricated seed corpus; scope by a separate
   per-class-best-match lookup with a relevance gate in front of it - not a

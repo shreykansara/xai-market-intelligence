@@ -170,3 +170,27 @@ SEED_NEIGHBOR_K = 10
 # that isn't meaningfully close to anything this system models has no
 # business being forced into a geographic scope it has no real bearing on.
 RELEVANCE_GATE_PERCENTILE = 5
+
+# --- GDELT bulk backfill (src/marketintel/gdelt_bulk.py, comparative_matching.py) ---
+# A separate, one-off/batch collection process from the live ingestion_service.py
+# (which keeps running on its own 30-minute schedule for ongoing Punjab/LPU-area
+# coverage). Sourced from GDELT 2.0's bulk export files (data.gdeltproject.org),
+# not the DOC 2.0 API (limited to ~3 months of lookback) and not RSS (no history
+# at all) - the only free, no-key source with multi-year depth.
+GDELT_BULK_BASE_URL = "http://data.gdeltproject.org/gdeltv2"
+BACKFILL_ARTICLES_PATH = DATA_DIR / "backfill_articles.json"
+BACKFILL_FACTS_PATH = DATA_DIR / "backfill_facts.json"
+BACKFILL_FACT_EMBEDDINGS_PATH = DATA_DIR / "backfill_fact_embeddings.npy"
+BACKFILL_STATE_PATH = DATA_DIR / "backfill_state.json"
+BACKFILL_EXCLUDED_LOG_PATH = DATA_DIR / "backfill_excluded.jsonl"
+BACKFILL_UNMATCHED_LOG_PATH = DATA_DIR / "backfill_unmatched_directional.jsonl"
+
+# Comparative-fact matching (src/marketintel/comparative_matching.py): a bare
+# state-value fact ("GST on mobile phones is 18%") only gets compared against a
+# candidate PRIOR fact if their similarity clears this threshold - deliberately
+# stricter than RELEVANCE_GATE_PERCENTILE's cutoff (~0.58 on the same cosine
+# scale), since a wrong comparative match silently fabricates a direction/
+# polarity rather than just mis-scoring relevance. Starting point per CLAUDE.md
+# instructions; tune from validation results (scripts/validate_comparative_matching.py)
+# before this ever touches real backfill data.
+COMPARATIVE_MATCH_SIMILARITY_THRESHOLD = 0.85
