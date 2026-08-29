@@ -56,6 +56,13 @@ generation itself.
   it, computes gates against news via W, combines with each article's
   relevance/polarity, rolls sub-cluster scores up to the two radar
   charts (PESTLE hexagon, Porter's pentagon), serves `web/index.html`.
+  Runs standalone: if `real_facts.json`/`real_fact_embeddings.npy` are
+  missing, empty, corrupted, or mutually inconsistent (a stale embeddings
+  file), analysis silently falls back to the fabricated seed corpus alone
+  rather than raising — see "Known gaps" below for the exact bug this
+  fixed and how it's proven independent of `ingestion_service.py`. The
+  response carries `live_facts_count` / `seed_only` so a seed-only result
+  is visible to the caller, not indistinguishable from a normal one.
 - **`ingestion_service.py`** — standalone FastAPI microservice, own port
   (8502), runs the real-news pipeline on startup and every 30 minutes:
   fetch -> fact decomposition -> dedup -> seed transfer (relevance,
@@ -72,8 +79,9 @@ generation itself.
   (`llama3.2:3b`) splits articles into distinct, independently-scorable,
   neutrally-reworded atomic facts (e.g. a tax bill's bracket increase and
   bracket decrease become two facts with opposing polarity, not one
-  blended record). Falls back to treating the whole text as one fact if
-  Ollama is unavailable.
+  blended record), also returning each fact's named entities. Falls back
+  to treating the whole text as one fact (no entities) if Ollama is
+  unavailable.
 - **No manual labeling of real data, anywhere** (`seed_inference.py`) —
   relevance and polarity inferred via similarity-weighted k-NN (k=10)
   against the seed corpus; geographic scope inferred via per-class-
@@ -87,6 +95,17 @@ generation itself.
   crime stories) that has no PESTLE/Porter's relevance at all.
 - **Dedup** — cosine similarity >= 0.92 within a 48h window collapses
   re-reported stories into one record with an incremented mention_count.
+- **Grounding safeguards and comparative-fact matching, shared with the
+  GDELT bulk backfill** (`grounding.py`, `comparative_matching.py`) —
+  ported into this live path too (see "Known gaps" below for why and how):
+  a non-content pre-filter before any Ollama call, a post-decomposition
+  grounding check rejecting fabricated numbers, HTML-unescaping of
+  fetched titles, and comparative-fact matching for bare state-value
+  facts. The live pipeline's own step ORDER is unchanged (fetch -> decompose
+  -> dedup -> seed transfer -> gate -> write) — only the new checks are
+  inserted at the appropriate points within it; the reordering used by the
+  bulk backfill (gate before decomposition, to bound Ollama cost at high
+  volume) doesn't apply here since live per-item volume is small.
 
 ### 3. Historical GDELT bulk backfill (`gdelt_bulk.py`, `gdelt_backfill.py`)
 A separate, one-off/batch collection process from `ingestion_service.py`
@@ -163,6 +182,59 @@ longer exists in the repo.
   THEN gated on. The pipeline description above used to list these in
   the reverse order — that was a doc bug, now fixed; the code was never
   wrong.
+- **Fixed a real, reproduced 500 in `server.py`: an empty or corrupted
+  `real_facts.json`/`real_fact_embeddings.npy` crashed `/api/analyze` with
+  an unhandled `JSONDecodeError`.** Diagnosed by direct reproduction rather
+  than guessing: `data_loader.load_real_facts()`'s existence check
+  (`.exists()`) passed on a 0-byte file, then `json.load()` on it raised
+  uncaught, propagating through `live_facts.build_combined_corpus()` into
+  `server.py`'s `analyze()` with no handler in between - FastAPI's default
+  500. A SEPARATE, non-crashing but real correctness bug was found the same
+  way: a stale/truncated `real_fact_embeddings.npy` (fewer rows than facts)
+  didn't crash, but WOULD silently drop the excess facts from scoring in
+  general (only avoided crashing in the specific truncation pattern tested
+  because of how sub-cluster assignment happens to skip un-embedded facts
+  before ever indexing into the gates array - not a guarantee for other
+  kinds of corruption). Fixed by making `load_real_facts()` treat missing,
+  empty, corrupted (`JSONDecodeError`/`ValueError`/`OSError`/`EOFError`),
+  and length-mismatched files identically - all degrade to "no real facts
+  available," matching the already-correct missing-file behavior. Verified
+  by reproducing and re-testing all three (missing/empty/stale) scenarios
+  directly against a live server, not just at the unit level. `/api/analyze`
+  now also returns `live_facts_count` and `seed_only` so a seed-only result
+  is visible to the caller rather than looking identical to a normal one.
+- **Consolidated ingestion onto one set of safety guarantees rather than
+  letting the live and batch pipelines diverge.** `ingestion.py` (the live
+  RSS/GDELT-DOC-API path behind `ingestion_service.py`) now calls the SAME
+  `grounding.py` (non-content pre-filter + post-decomposition grounding
+  check) and `comparative_matching.py` (bare state-value fact resolution)
+  modules the GDELT bulk backfill uses, plus HTML-unescapes fetched titles
+  at fetch time for the same reason `gdelt_bulk.py` does. Explicitly NOT
+  retiring either pipeline's orchestration in favor of the other - the two
+  ORCHESTRATORS (`ingestion.py` vs. `gdelt_backfill.py`) stay separate on
+  purpose (different sources, and the batch pipeline's gate-before-
+  decomposition reordering exists specifically for bulk-volume Ollama cost
+  control, which doesn't apply to live per-item polling) - what's shared is
+  the underlying SAFEGUARD logic itself, which already lived in standalone,
+  source-agnostic modules rather than being embedded in either orchestrator.
+  This resolves the duplication the safeguards would otherwise have created
+  (grounding/comparative-matching only existing on the batch side) without
+  merging two pipelines that have good, already-documented reasons to differ
+  in ordering. `ingestion_service.py`'s `/health` now also reports the new
+  counts (non-content rejections, ungrounded rejections, comparative match/
+  unmatched counts) alongside its existing fields.
+- **`ingestion_service.py` re-confirmed to already be its own standalone,
+  continuous, periodic microservice** (own process, own port 8502, fires an
+  ingestion pass on startup then every 30 minutes via a plain `asyncio`
+  loop, `GET /health`, atomic writes throughout) - this was already true
+  before this round of changes; verified rather than assumed. Its
+  independence from `server.py` was proven empirically, not just asserted:
+  (a) ingestion running, `server.py` stopped and restarted - works cleanly;
+  (b) `server.py` running, ingestion stopped - keeps serving (seed-only or
+  with whatever real facts already exist on disk) without error; (c) both
+  started independently, in either order - no crash, no dependency on
+  startup sequence. All three run against real, separately-launched uvicorn
+  processes on distinct ports, not simulated.
 - Scope-fix validation (`scripts/validate_scope_fix.py`) now hard-
   asserts against the exact two original failure headlines (constructed
   inline, not searched for in whatever's currently stored). The NFL
@@ -344,6 +416,47 @@ longer exists in the repo.
   coincidental matches (every one traced to a genuinely same-context,
   same-subject number in its source) - though this is a sample, not proof
   none remain elsewhere in the corpus.
+- **Two real false-rejection bugs in the grounding check, found by porting it
+  to the live ingestion path and spot-checking its output there.** (1) The
+  number regex treated a sentence-ending period as part of a decimal number
+  ("...at the age of 34." extracted as "34.", not "34"), so a fact correctly
+  quoting a headline's own figure could fail to match a source with no
+  trailing punctuation at that position. (2) `is_grounded` compared the
+  fact's comma-stripped number against the RAW, unnormalized source text, so
+  a source formatted with a thousands-separator ("5,000 migrants") could
+  never match the fact's normalized "5000" as a substring. Both fixed: the
+  number regex only consumes a decimal point when followed by a digit, and
+  the source is now compared via its OWN extracted-and-normalized numbers
+  rather than a raw substring search. Re-validated: `validate_grounding.py`
+  still 3/3; re-checking all 47 facts rejected in one live ingestion run
+  found 4 were false rejections now correctly accepted (recovered into
+  `real_facts.json`, flagged with a `recovery_note` field since their
+  entities weren't preserved in the older ungrounded-log format); re-running
+  the retroactive audit against the full backfill corpus dropped the
+  rejection rate from 173/960 (18.0%) to 140/960 (14.6%) - the corrected,
+  more accurate figure, not a sign the underlying hallucination problem was
+  smaller than reported. The ungrounded-rejection log (both pipelines) now
+  also records each rejected fact's entities, so a future correction like
+  this can recover facts without re-running extraction.
+- **Remediated the ~39 facts collected before the HTML-entity fix landed** -
+  checked directly whether their embeddings/relevance/scope were computed on
+  corrupted or clean title text, rather than assuming the grounding fix
+  alone made them trustworthy. Found the corruption's impact was narrower
+  than title text alone: fact-level relevance/polarity/scope come from each
+  FACT's own embedding (fact_text), not the article title, so only articles
+  whose title corruption changed the ARTICLE-level relevance-gate or
+  non-content-pre-filter OUTCOME were actually compromised. Re-checking all
+  39 against their clean, decoded titles found 5 articles (9 resulting
+  facts, 3 of them the "Public Funds — India Together" masthead's fabricated
+  PMGSY/GST/RBI-CRR claims) that would NOT have passed today's pipeline -
+  removed via `scripts/remediate_html_entity_corruption.py`, logged to
+  `backfill_excluded.jsonl`/`backfill_noncontent.jsonl` like any normal
+  exclusion, not silently dropped. The other 33 affected articles legitimately
+  belong in the store (their clean-title relevance still clears the gate);
+  only their stored title field was corrected for hygiene - no fact-level
+  re-embedding was needed since none of their fact_text carried the
+  corruption through. Store now: 695 articles (was 700), 960 facts (was
+  969).
 - **The over-splitting fragment does NOT reliably fail the relevance gate -
   in one measured case, the opposite happened.** For "KOZYNAP Accelerates
   Retail Expansion with Fully Customized Sleep Solutions" split into two

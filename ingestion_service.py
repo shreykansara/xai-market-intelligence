@@ -6,10 +6,16 @@ never conflict and either can be restarted without touching the other.
 No ingestion logic lives here - this is a scheduler loop plus a status
 endpoint wrapped around marketintel.ingestion.run_ingestion_once(), the exact
 same function scripts/ingest_news.py calls for one-shot/cron use. Nothing
-about sources, fact decomposition, dedup, the relevance gate, or scope
-classification is duplicated or reimplemented here. /health reports counts
-at both granularities: articles fetched (raw source items) and facts
-extracted/excluded/added (the unit everything downstream actually scores).
+about sources, fact decomposition, dedup, the relevance gate, scope
+classification, grounding, or comparative-fact matching is duplicated or
+reimplemented here - all of it lives in marketintel.ingestion (which itself
+shares its grounding/comparative-matching modules with the GDELT bulk
+backfill - see ingestion.py's docstring). /health reports counts at both
+granularities: articles fetched (raw source items, and how many were
+rejected as non-content before ever reaching Ollama) and facts (extracted,
+rejected as ungrounded, excluded by the relevance gate, added, and how many
+comparative-fact matches were found vs. left unmatched) - the unit
+everything downstream actually scores.
 
 On startup, fires one ingestion pass immediately, then repeats every 30
 minutes for as long as the process runs - a plain asyncio loop, no external
@@ -43,9 +49,13 @@ status = {
     "last_run_ok": None,
     "last_error": None,
     "articles_fetched": None,
+    "articles_rejected_noncontent": None,
     "facts_extracted": None,
     "facts_excluded": None,
+    "facts_rejected_ungrounded": None,
     "facts_added": None,
+    "comparative_matches_found": None,
+    "comparative_matches_unmatched": None,
 }
 
 
@@ -59,9 +69,13 @@ async def _run_and_record() -> None:
         status["last_run_ok"] = True
         status["last_error"] = None
         status["articles_fetched"] = result["articles_fetched"]
+        status["articles_rejected_noncontent"] = result["articles_rejected_noncontent"]
         status["facts_extracted"] = result["facts_extracted"]
         status["facts_excluded"] = result["facts_excluded"]
+        status["facts_rejected_ungrounded"] = result["facts_rejected_ungrounded"]
         status["facts_added"] = result["facts_added"]
+        status["comparative_matches_found"] = result["comparative_matches_found"]
+        status["comparative_matches_unmatched"] = result["comparative_matches_unmatched"]
     except Exception as exc:
         status["last_run_ok"] = False
         status["last_error"] = str(exc)

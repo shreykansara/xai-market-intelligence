@@ -109,14 +109,18 @@ def normalize_fact_as_article(fact: dict) -> dict:
 def build_combined_corpus(seed_news: list[dict], seed_embeddings: np.ndarray, subclusters: dict, centroids: dict):
     """Loads whatever real facts are currently stored (fresh on every call, since
     ingestion_service.py keeps appending to them independently of this process)
-    and returns (combined_news, combined_embeddings, combined_subclusters) ready
-    to pass straight into analysis.score_submission - unchanged from how it's
-    called with the fabricated corpus alone."""
+    and returns (combined_news, combined_embeddings, combined_subclusters,
+    live_facts_count) ready to pass straight into analysis.score_submission -
+    unchanged from how it's called with the fabricated corpus alone. live_facts_count
+    is 0 whenever load_real_facts() couldn't find usable real data for any reason
+    (never ingested, or the files are missing/empty/corrupted/stale - see its own
+    docstring) - server.py surfaces this so a seed-only analysis is visible to the
+    caller rather than looking identical to one that included real data."""
     real_facts, real_fact_embeddings = load_real_facts()
 
     if len(real_facts) == 0:
         combined_news = [{**a, "is_live": False} for a in seed_news]
-        return combined_news, seed_embeddings, subclusters
+        return combined_news, seed_embeddings, subclusters, 0
 
     real_assignments = assign_fact_subclusters(real_facts, real_fact_embeddings, centroids)
     combined_subclusters = merge_subclusters(subclusters, real_assignments)
@@ -124,4 +128,4 @@ def build_combined_corpus(seed_news: list[dict], seed_embeddings: np.ndarray, su
     combined_news = [{**a, "is_live": False} for a in seed_news] + [normalize_fact_as_article(f) for f in real_facts]
     combined_embeddings = np.vstack([seed_embeddings, real_fact_embeddings])
 
-    return combined_news, combined_embeddings, combined_subclusters
+    return combined_news, combined_embeddings, combined_subclusters, len(real_facts)

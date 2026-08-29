@@ -413,6 +413,19 @@ This serves the app at `http://localhost:8000`. Paste a CVP into the text
 area and click **Run analysis** - the results view replaces the input on the
 same page, no reload.
 
+**Runs standalone, with or without ingestion.** `server.py` only requires the
+fabricated data pipeline above - it does NOT require `ingestion_service.py`
+(or any real data) to be running. If `data/real_facts.json` /
+`real_fact_embeddings.npy` are missing, empty, corrupted, or mutually
+inconsistent (a stale embeddings file with a different row count than the
+facts list), `/api/analyze` degrades to seed-only analysis rather than
+raising - every response carries `"live_facts_count"` and `"seed_only"` so
+this is visible to the caller, not silently indistinguishable from a normal
+result. This was a real, previously-unhandled bug (an empty `real_facts.json`
+crashed with an unhandled `JSONDecodeError` -> 500) - see `CLAUDE.md`'s
+"Known gaps" for the fix and the three scenarios proving the two processes
+are genuinely independent.
+
 ## Real news ingestion
 
 Independent of the fabricated-data pipeline above and not required to run
@@ -420,6 +433,20 @@ the app. Requires `data/news.json` and `news_embeddings.npy` to already
 exist - that's the seed corpus every inference (relevance, polarity, scope)
 is looked up against. The pipeline itself (`src/marketintel/ingestion.py`)
 is the same code either way - pick whichever of the two ways to run it fits:
+
+**Shares its grounding safeguards and comparative-fact matching with the
+GDELT bulk backfill** (`src/marketintel/grounding.py` /
+`comparative_matching.py`) - both ingestion codepaths call the same
+underlying safety logic (a non-content pre-filter before any Ollama call, a
+post-decomposition check rejecting facts with fabricated numbers,
+HTML-unescaping of fetched titles, and comparative-fact matching for bare
+state-value facts) rather than diverging. The live pipeline's own step order
+is unchanged - fetch -> decompose -> dedup -> seed transfer -> relevance
+gate -> write - only the new checks are inserted at the right points within
+it. Rejections are logged separately: `data/ingestion_noncontent.jsonl` (pre-
+filter), `data/ingestion_ungrounded.jsonl` (grounding check),
+`data/ingestion_unmatched_directional.jsonl` (comparative matches that
+found no qualifying prior value).
 
 **Fact extraction needs Ollama running locally** (optional, but recommended -
 without it, every article decomposes into exactly one unmodified fact):

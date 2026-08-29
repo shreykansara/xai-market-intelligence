@@ -279,7 +279,7 @@ def run_backfill(
                         totals["facts_rejected_ungrounded"] += 1
                         with open(BACKFILL_UNGROUNDED_LOG_PATH, "a", encoding="utf-8") as f:
                             f.write(json.dumps({
-                                "fact_text": fact_text, "source_title": record["title"],
+                                "fact_text": fact_text, "entities": entities, "source_title": record["title"],
                                 "ungrounded_numbers": ungrounded_numbers,
                                 "published": record["published"].isoformat(),
                             }) + "\n")

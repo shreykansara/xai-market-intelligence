@@ -58,12 +58,32 @@ def load_real_facts():
     """Real ingested facts (src/marketintel/ingestion.py) - the primary scored unit
     for real ingestion, separate from the fabricated news dataset so they never leak
     into the fabricated startups' training data. Returns ([], empty array) if
-    ingestion hasn't been run yet."""
+    ingestion hasn't been run yet, OR if the files exist but are empty, corrupted,
+    or mutually inconsistent (a stale embeddings file from an older/different batch
+    of facts) - server.py must be able to run standalone using the fabricated seed
+    corpus alone regardless of what state ingestion_service.py's output happens to
+    be in, so every failure mode here degrades to "no real facts available" rather
+    than raising. Every fallback is printed so it's visible rather than a silent
+    behavior change - matching how fact_extraction.py already treats an
+    Ollama-unreachable fallback."""
     if not (REAL_FACTS_PATH.exists() and REAL_FACT_EMBEDDINGS_PATH.exists()):
         return [], np.empty((0, 0))
-    with open(REAL_FACTS_PATH, encoding="utf-8") as f:
-        facts = json.load(f)
-    embeddings = np.load(REAL_FACT_EMBEDDINGS_PATH)
+
+    try:
+        with open(REAL_FACTS_PATH, encoding="utf-8") as f:
+            facts = json.load(f)
+        embeddings = np.load(REAL_FACT_EMBEDDINGS_PATH)
+    except (json.JSONDecodeError, ValueError, OSError, EOFError) as exc:
+        print(f"[data_loader] {REAL_FACTS_PATH} / {REAL_FACT_EMBEDDINGS_PATH} unreadable ({exc}) "
+              f"- treating as no real facts available.")
+        return [], np.empty((0, 0))
+
+    if not isinstance(facts, list) or len(facts) != len(embeddings):
+        print(f"[data_loader] {REAL_FACTS_PATH} has {len(facts) if isinstance(facts, list) else 'invalid'} "
+              f"record(s) but {REAL_FACT_EMBEDDINGS_PATH} has {len(embeddings)} row(s) - stale/inconsistent "
+              f"ingestion output, treating as no real facts available.")
+        return [], np.empty((0, 0))
+
     return facts, embeddings
 
 

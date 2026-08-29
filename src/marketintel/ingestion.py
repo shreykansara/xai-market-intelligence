@@ -6,6 +6,19 @@ relevance, polarity, and (for facts that clear a relevance gate) geographic
 scope - all by looking up the fabricated seed corpus, see seed_inference.py.
 No per-source scope tagging, no trained classifier.
 
+Shares its grounding safeguards (grounding.py) and comparative-fact matching
+(comparative_matching.py) with the GDELT bulk backfill (gdelt_backfill.py) -
+these are standalone, source-agnostic modules, not tied to either pipeline,
+so both codepaths call the SAME underlying safety logic rather than each
+maintaining their own. The two ORCHESTRATION pipelines remain intentionally
+separate (different sources, different step ordering - see gdelt_backfill.py's
+docstring for why bulk volume needs the relevance gate before decomposition,
+which this live per-item path does not), but neither has weaker safety
+guarantees than the other. Titles are HTML-unescaped at fetch time for the
+same reason gdelt_bulk.py now does it: an entity like "&#x2013;" left
+undecoded contains a spurious digit run that can corrupt the grounding
+check's number matching.
+
 The unit of analysis is the fact, not the article: a tax policy piece with a
 bracket increase and a separate bracket decrease becomes two fact records with
 their own (likely opposing) polarity, not one blended one. The relevance gate,
@@ -51,6 +64,7 @@ self-scheduling microservice) both call run_ingestion_once() from here rather
 than duplicating any of this logic.
 """
 import calendar
+import html
 import json
 from datetime import datetime, timedelta, timezone
 
@@ -58,13 +72,17 @@ import feedparser
 import numpy as np
 
 from .atomic_io import atomic_write_json, atomic_write_npy
+from .comparative_matching import resolve_comparative_fact
 from .config import (
     DATA_DIR,
     DEDUP_SIMILARITY_THRESHOLD,
     DEDUP_WINDOW_HOURS,
     INGESTION_EXCLUDED_LOG_PATH,
+    INGESTION_NONCONTENT_LOG_PATH,
     INGESTION_SAMPLE_LOG_PATH,
     INGESTION_STATE_PATH,
+    INGESTION_UNGROUNDED_LOG_PATH,
+    INGESTION_UNMATCHED_LOG_PATH,
     PESTLE_DIMS,
     PORTERS_DIMS,
     REAL_ARTICLES_PATH,
@@ -73,7 +91,8 @@ from .config import (
 )
 from .data_loader import load_news
 from .embeddings import embed_text
-from .fact_extraction import extract_facts
+from .fact_extraction import extract_facts_detailed
+from .grounding import is_grounded, is_likely_non_content
 from .seed_inference import (
     calibrate_relevance_threshold,
     group_indices_by_scope,
@@ -148,7 +167,7 @@ def fetch_rss(url: str, since: datetime | None) -> list[dict]:
         published = parse_published(entry)
         if since is not None and published <= since:
             continue
-        title = entry.get("title", "").strip()
+        title = html.unescape(entry.get("title", "").strip())
         if not title:
             continue
         items.append({"title": title, "link": entry.get("link", ""), "published": published})
@@ -179,7 +198,7 @@ def fetch_gdelt(since: datetime | None) -> list[dict]:
 
     items = []
     for _, row in df.iterrows():
-        title = str(row.get("title") or "").strip()
+        title = html.unescape(str(row.get("title") or "").strip())
         if not title:
             continue
         published = parse_gdelt_date(row.get("seendate"))
@@ -245,6 +264,8 @@ def run_ingestion_once(verbose: bool = True) -> dict:
     articles_fetched = 0
     facts_extracted = 0
     new_count, dup_count, excluded_count = 0, 0, 0
+    noncontent_count, ungrounded_count = 0, 0
+    comparative_matched_count, comparative_unmatched_count = 0, 0
     sample_log = []
     excluded_log = []
 
@@ -261,11 +282,35 @@ def run_ingestion_once(verbose: bool = True) -> dict:
         articles_fetched += len(items)
         latest_published = since
         for item in items:
-            fact_texts = extract_facts(item["title"])
-            facts_extracted += len(fact_texts)
             article_fact_ids: list[str] = []
 
-            for fact_text in fact_texts:
+            is_junk, junk_reason = is_likely_non_content(item["title"])
+            if is_junk:
+                noncontent_count += 1
+                with open(INGESTION_NONCONTENT_LOG_PATH, "a", encoding="utf-8") as f:
+                    f.write(json.dumps({
+                        "title": item["title"], "published": item["published"].isoformat(),
+                        "reason": junk_reason, "logged_at": now.isoformat(),
+                    }) + "\n")
+                fact_records = []
+            else:
+                fact_records = extract_facts_detailed(item["title"])
+                facts_extracted += len(fact_records)
+
+            for fact_record in fact_records:
+                fact_text, entities = fact_record["text"], fact_record["entities"]
+
+                grounded, ungrounded_numbers = is_grounded(fact_text, item["title"])
+                if not grounded:
+                    ungrounded_count += 1
+                    with open(INGESTION_UNGROUNDED_LOG_PATH, "a", encoding="utf-8") as f:
+                        f.write(json.dumps({
+                            "fact_text": fact_text, "entities": entities, "source_title": item["title"],
+                            "ungrounded_numbers": ungrounded_numbers,
+                            "published": item["published"].isoformat(), "logged_at": now.isoformat(),
+                        }) + "\n")
+                    continue
+
                 embedding = embed_text(fact_text)
                 dup_idx, sim = find_duplicate_fact(embedding, facts, fact_embeddings, now)
 
@@ -295,16 +340,39 @@ def run_ingestion_once(verbose: bool = True) -> dict:
                 pestle_scores = {d: relevance[d] for d in PESTLE_DIMS}
                 porters_scores = {d: relevance[d] for d in PORTERS_DIMS}
 
+                # Comparative-fact matching (see comparative_matching.py) - shared with the
+                # GDELT bulk backfill. `facts` here is the SAME growing in-memory list this
+                # loop appends to below, so a bare state-value fact can match against
+                # anything already ingested earlier in THIS run or a prior one.
+                comparative = resolve_comparative_fact(
+                    fact_text, entities, embedding, item["published"], facts, fact_embeddings
+                )
+                if comparative["has_own_direction"]:
+                    pass  # self-contained, nothing to log
+                elif comparative["matched_prior_fact_id"] is not None:
+                    comparative_matched_count += 1
+                else:
+                    comparative_unmatched_count += 1
+                    with open(INGESTION_UNMATCHED_LOG_PATH, "a", encoding="utf-8") as f:
+                        f.write(json.dumps({
+                            "fact_text": fact_text, "entities": entities,
+                            "published": item["published"].isoformat(),
+                            "best_similarity_seen": comparative["match_similarity"],
+                            "logged_at": now.isoformat(),
+                        }) + "\n")
+
                 fact_id = f"fact_{next_fact_id:05d}"
                 facts.append({
                     "id": fact_id,
                     "parent_article_id": None,  # filled in once the article id is known, below
                     "fact_text": fact_text,
+                    "entities": entities,
                     "published": item["published"].isoformat(),
                     "scope": scope,
                     "pestle_scores": pestle_scores,
                     "porters_scores": porters_scores,
                     "polarity": polarity,
+                    "comparative": comparative,
                     "mention_count": 1,
                     "first_seen": now.isoformat(),
                     "last_seen": now.isoformat(),
@@ -353,8 +421,13 @@ def run_ingestion_once(verbose: bool = True) -> dict:
     save_state(state)
 
     log(
-        f"\n{articles_fetched} article(s) fetched -> {facts_extracted} fact(s) extracted: "
+        f"\n{articles_fetched} article(s) fetched, {noncontent_count} rejected as non-content before "
+        f"decomposition -> {facts_extracted} fact(s) extracted, {ungrounded_count} rejected as ungrounded: "
         f"{new_count} new, {dup_count} deduplicated, {excluded_count} excluded by the relevance gate."
+    )
+    log(
+        f"Comparative-fact matching: {comparative_matched_count} matched a prior value, "
+        f"{comparative_unmatched_count} left unmatched (see {INGESTION_UNMATCHED_LOG_PATH})."
     )
     log(f"Total real_facts records: {len(facts)} (from {len(articles)} provenance article records)\n")
 
@@ -378,9 +451,13 @@ def run_ingestion_once(verbose: bool = True) -> dict:
 
     return {
         "articles_fetched": articles_fetched,
+        "articles_rejected_noncontent": noncontent_count,
         "facts_extracted": facts_extracted,
         "facts_added": new_count,
         "facts_deduped": dup_count,
         "facts_excluded": excluded_count,
+        "facts_rejected_ungrounded": ungrounded_count,
+        "comparative_matches_found": comparative_matched_count,
+        "comparative_matches_unmatched": comparative_unmatched_count,
         "total_fact_records": len(facts),
     }

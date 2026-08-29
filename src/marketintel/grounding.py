@@ -46,7 +46,14 @@ regardless of whether the caller already decoded its input.
 import html
 import re
 
-NUMBER_PATTERN = re.compile(r"\d[\d,]*\.?\d*%?")
+# A decimal point is only consumed as part of the number if at least one digit
+# follows it (\.\d+, not \.?\d*) - otherwise a sentence-ending period after a
+# bare integer (e.g. "...at the age of 34.") gets swallowed into the "number"
+# as "34.", which then fails to match a source that correctly has no trailing
+# period (e.g. a headline reading "...dies aged 34"). Confirmed as a real
+# false-rejection bug during live ingestion spot-checking, not just a
+# theoretical risk - a genuinely well-grounded fact was rejected over this.
+NUMBER_PATTERN = re.compile(r"\d[\d,]*(?:\.\d+)?%?")
 
 # Case-insensitive substring match against the raw title - deliberately small
 # and specific rather than an exhaustive taxonomy; broadened as real
@@ -150,11 +157,18 @@ def is_grounded(fact_text: str, source_text: str) -> tuple[bool, list[str]]:
     if not fact_numbers:
         return True, []
 
-    unescaped_source = html.unescape(source_text)
+    # Compare against the source's OWN extracted-and-normalized numbers, not a raw
+    # substring search against the unnormalized source text - a raw substring check
+    # was confirmed (during live ingestion spot-checking) to falsely reject facts
+    # whenever the source formatted its number with a thousands-separator comma
+    # ("5,000 migrants") that the fact's normalized "5000" could never match as a
+    # substring. Extracting from both sides the same way makes the comparison
+    # consistent regardless of either side's comma/decimal formatting.
+    source_numbers = set(extract_numbers(source_text))
     ungrounded = []
     for num in fact_numbers:
         bare = num.rstrip("%")
-        if num in unescaped_source or bare in unescaped_source:
+        if num in source_numbers or bare in source_numbers:
             continue
         ungrounded.append(num)
     return (len(ungrounded) == 0), ungrounded

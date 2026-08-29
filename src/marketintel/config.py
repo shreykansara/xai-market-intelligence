@@ -131,6 +131,15 @@ REAL_FACT_EMBEDDINGS_PATH = DATA_DIR / "real_fact_embeddings.npy"
 INGESTION_STATE_PATH = DATA_DIR / "ingestion_state.json"
 INGESTION_SAMPLE_LOG_PATH = DATA_DIR / "ingestion_samples.jsonl"
 INGESTION_EXCLUDED_LOG_PATH = DATA_DIR / "ingestion_excluded.jsonl"
+# Grounding safeguards (src/marketintel/grounding.py), ported into the live
+# path from the GDELT bulk backfill so both ingestion codepaths share the
+# same safety guarantees rather than diverging - see ingestion.py. A
+# different kind of filter from INGESTION_EXCLUDED_LOG_PATH above (relevance-
+# gate exclusions), logged separately for the same reason BACKFILL_*
+# equivalents are.
+INGESTION_NONCONTENT_LOG_PATH = DATA_DIR / "ingestion_noncontent.jsonl"
+INGESTION_UNGROUNDED_LOG_PATH = DATA_DIR / "ingestion_ungrounded.jsonl"
+INGESTION_UNMATCHED_LOG_PATH = DATA_DIR / "ingestion_unmatched_directional.jsonl"
 
 # Facts published within this many hours of each other are compared for
 # deduplication; anything above the similarity threshold is treated as the

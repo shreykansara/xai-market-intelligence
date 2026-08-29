@@ -117,7 +117,12 @@ def analyze(req: AnalyzeRequest):
     # Real facts are folded in alongside the fabricated seed corpus - see
     # live_facts.py for how they're assigned a sub-cluster and how they're
     # weighted (equally) relative to seed articles in the score itself.
-    combined_news, combined_embeddings, combined_subclusters = build_combined_corpus(
+    # live_facts_count is 0 whenever ingestion hasn't run yet or its output is
+    # missing/empty/corrupted/stale (see load_real_facts()'s docstring) - this
+    # is never an error case for server.py, which must run standalone on the
+    # fabricated seed corpus alone; it's surfaced below so a seed-only result
+    # is visible to the caller instead of looking identical to a normal one.
+    combined_news, combined_embeddings, combined_subclusters, live_facts_count = build_combined_corpus(
         state["news"], state["news_embeddings"], state["subclusters"], state["centroids"]
     )
     result = score_submission(
@@ -131,6 +136,8 @@ def analyze(req: AnalyzeRequest):
         "porters_dims": PORTERS_DIMS,
         "pestle_breakdown": serialize_breakdown(result["pestle_breakdown"], PESTLE_LABELS),
         "porters_breakdown": serialize_breakdown(result["porters_breakdown"], PORTERS_LABELS),
+        "live_facts_count": live_facts_count,
+        "seed_only": live_facts_count == 0,
     }
 
 
