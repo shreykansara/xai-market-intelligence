@@ -184,6 +184,15 @@ BACKFILL_FACT_EMBEDDINGS_PATH = DATA_DIR / "backfill_fact_embeddings.npy"
 BACKFILL_STATE_PATH = DATA_DIR / "backfill_state.json"
 BACKFILL_EXCLUDED_LOG_PATH = DATA_DIR / "backfill_excluded.jsonl"
 BACKFILL_UNMATCHED_LOG_PATH = DATA_DIR / "backfill_unmatched_directional.jsonl"
+# Grounding safeguards (src/marketintel/grounding.py) - a DIFFERENT kind of
+# filter from BACKFILL_EXCLUDED_LOG_PATH above (which logs relevance-gate
+# exclusions). BACKFILL_NONCONTENT_LOG_PATH logs titles the pre-filter
+# rejected before any Ollama call (section labels, digests, etc.);
+# BACKFILL_UNGROUNDED_LOG_PATH logs facts rejected AFTER decomposition
+# because they stated a number not traceable to the source title - the
+# direct response to a real observed hallucination (see CLAUDE.md).
+BACKFILL_NONCONTENT_LOG_PATH = DATA_DIR / "backfill_noncontent.jsonl"
+BACKFILL_UNGROUNDED_LOG_PATH = DATA_DIR / "backfill_ungrounded.jsonl"
 
 # Comparative-fact matching (src/marketintel/comparative_matching.py): a bare
 # state-value fact ("GST on mobile phones is 18%") only gets compared against a

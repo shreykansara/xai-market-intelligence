@@ -279,9 +279,83 @@ longer exists in the repo.
   (2) an over-splitting error — "KOZYNAP Accelerates Retail Expansion with
   Fully Customized Sleep Solutions" (one coherent claim) was split into two
   facts, the second an incoherent fragment ("with Fully Customized Sleep
-  Solutions"). Neither is fixed; both are flagged here rather than glossed
-  over, consistent with how this project has always surfaced decomposition
-  quality issues.
+  Solutions"). Fact-decomposition over-splitting is NOT fixed (see the
+  fragment-relevance finding below); the hallucination has since had a
+  safeguard built and validated (below) - it's the reason the pilot's
+  spot-check gate isn't being called satisfied yet.
+- **Grounding safeguards built against fact hallucination, validated against
+  both known real failure cases, and a MUCH larger problem found in the
+  process.** Two layers (`src/marketintel/grounding.py`), used only by the
+  GDELT backfill: (1) a pre-filter before any Ollama call, rejecting obvious
+  non-content titles (section labels, digests, horoscopes, etc.) via a
+  small keyword list plus a "very short / all-caps / no verb / no numbers"
+  heuristic; (2) a post-decomposition grounding check, rejecting any fact
+  that states a number (percentage, currency amount, date) not traceable
+  verbatim-or-near-verbatim to the source title - independent of Ollama's
+  temperature, since temperature was already shown not to fix truthfulness.
+  Validated (`scripts/validate_grounding.py`, 3/3 pass) against both known
+  hallucinations (COMMUNITY CALENDAR's fake GST claim; the BMW-preview
+  title's fabricated tournament edition number) - each caught by at least
+  one layer - and confirmed NOT to false-positive on a genuine, correctly-
+  grounded real fact from the pilot.
+  **Retroactively auditing the pilot's already-collected data (interim -
+  day 1 of 7 processed so far, 969 facts) found this is a much bigger
+  problem than the isolated cases suggested: ~17.9% of ALL currently-stored
+  facts (173/969) contain at least one fabricated number.** The failure
+  pattern is more concerning than random noise: titles with real, legitimate
+  content but nothing to do with economic policy - a movie review
+  ("'Eagles of the Republic' review..."), an obituary, a rhetorical opinion
+  piece ("Who Speaks For The River?") - produced SPECIFIC, plausible-
+  sounding claims (an RBI repo rate cut to 6.25%, a GST change from 18% to
+  12%, a named date) that read like genuine real-world facts because they
+  likely ARE facts the model memorized during training - just not ones
+  stated anywhere in that source. This is closer to unprompted parametric-
+  knowledge injection than nonsense generation, which is exactly why
+  lowering temperature didn't help and why the grounding check (verifying
+  against the source, not trusting the model to behave) is the right
+  mitigation. Per instructions, the pilot's original run was left to finish
+  undisturbed (not restarted) and this audit is retroactive
+  (`scripts/audit_grounding_retroactive.py`); the safeguards above are
+  wired into `gdelt_backfill.py` for the full-scale run once the pilot
+  clears its gate. The pilot's spot-check gate is NOT yet being called
+  satisfied - the full week needs to finish and this audit needs to be
+  re-run against the complete corpus first.
+- **The grounding check's own known limitation (a substring match doesn't
+  verify a number's context/unit/subject matches the source) produced ONE
+  confirmed false accept, found by sampling ACCEPTED facts specifically for
+  this pattern, and it was a real, fixable bug, not just a theoretical
+  risk.** A fact claiming "the Punjab government has increased the water
+  supply to farmers by 20%" was accepted as "grounded" against a source
+  title that was just a generic magazine masthead ("The Week Magazine —
+  Latest News, Politics, Business & Opinion Updates") — completely
+  unrelated. Root cause: GDELT's crawler stores titles with HTML entities
+  UNDECODED (e.g. "&#x2013;" for the em-dash literally present as that
+  6-character string, not a real dash), and that entity code's digits
+  ("2013") coincidentally contain "20" as a substring, which the
+  (then-unescaped) grounding check accepted as a match for the fact's "20%".
+  Confirmed this affects 39/700 (5.6%) of titles collected so far - not a
+  one-off. **Fixed at the source**: `gdelt_bulk.py`'s title extraction now
+  HTML-unescapes before returning (fixes this and any future entity-corrupted
+  title for every downstream consumer, not just grounding), and
+  `grounding.py` also unescapes defensively (so it gives correct answers on
+  already-collected data that still has raw entities). Re-validated: the
+  specific case now correctly rejects; `scripts/validate_grounding.py` still
+  3/3; re-sampling 20 fresh accepted facts post-fix found zero additional
+  coincidental matches (every one traced to a genuinely same-context,
+  same-subject number in its source) - though this is a sample, not proof
+  none remain elsewhere in the corpus.
+- **The over-splitting fragment does NOT reliably fail the relevance gate -
+  in one measured case, the opposite happened.** For "KOZYNAP Accelerates
+  Retail Expansion with Fully Customized Sleep Solutions" split into two
+  facts, the meaningless fragment ("with Fully Customized Sleep Solutions")
+  scored max_relevance=0.60 (would PASS the 0.585 gate) while the coherent,
+  legitimate half ("KOZYNAP Accelerates Retail Expansion") scored only 0.48
+  (would FAIL it). This is also moot for the current architecture regardless
+  of relevance score: the batch backfill pipeline's relevance gate runs once
+  per TITLE, before decomposition, with no second gate after it - so every
+  fact from a title that clears the gate gets stored regardless of that
+  individual fact's own relevance. Flagged per instructions rather than
+  dismissed; not yet acted on.
 
 ## Explored but not yet built
 - **Hypothetical-category impact scoring** — construct a representative
@@ -326,8 +400,18 @@ longer exists in the repo.
   — neither started yet. Revisit whether World-broad is worth pursuing at
   all (even without Ollama decomposition, ~27 days estimated) once India-tier
   results are in hand.
-- Whether the fact-decomposition over-splitting and sparse-title
-  hallucination issues (see "Known gaps" above) need a mitigation before the
-  full-scale backfill runs (e.g. filtering out low-content titles before
-  decomposition, or a post-hoc plausibility check) is undecided — flagged
-  from the pilot, not yet acted on.
+- Whether the fact-decomposition over-splitting issue (see "Known gaps"
+  above) needs its own mitigation is undecided — the hallucination half of
+  this concern now has a validated safeguard (grounding.py), but
+  over-splitting a coherent claim into a fragment is a separate problem the
+  grounding check doesn't address.
+- **Pilot week's spot-check gate is NOT yet satisfied.** Blocking on: the
+  full 7-day India-tier pilot run finishing (in progress, checkpointed/
+  resumable, day 1 of 7 done as of the interim audits above), then
+  re-running `scripts/audit_grounding_retroactive.py` against the complete
+  resulting corpus — spot-checking both a sample of what it rejects
+  (confirming genuinely bad, not false positives) AND a sample of what it
+  accepts (confirming no coincidental bare-number matches slipped through -
+  already done once on interim data, finding and fixing one real bug; needs
+  redoing against the complete week). Do not start the full India-tier
+  backfill (~4.2 months) until this is done and reported.

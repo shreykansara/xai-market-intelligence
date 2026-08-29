@@ -330,6 +330,9 @@ src/marketintel/
   comparative_matching.py          Finds the nearest earlier fact about the same subject to
                                     compute a direction for a bare state-value fact, used only
                                     by the backfill above
+  grounding.py                     Pre-filter (non-content titles) + post-decomposition
+                                    grounding check (rejects facts with fabricated numbers) -
+                                    used only by the backfill above
 scripts/
   generate_news.py                 Builds data/news.json + news_embeddings.npy
   generate_startups.py             Builds data/startups.json (identity only) + embeddings
@@ -355,6 +358,10 @@ scripts/
   validate_comparative_matching.py Validates comparative_matching.py against real rate/tax
                                     changes and a similar-but-different pair, before it ever
                                     touches real backfill data (see below)
+  validate_grounding.py            Validates grounding.py against the two known real
+                                    hallucination cases, plus a false-positive check (see below)
+  audit_grounding_retroactive.py   Read-only audit: re-checks already-collected backfill facts
+                                    against grounding.py, reports the rejection rate + samples
 data/                              Generated datasets + trained W (gitignored, see below)
 ```
 
@@ -568,18 +575,54 @@ state-value fact that found no qualifying prior match for comparative
 matching (expected to be common early in a run, before much history has
 accumulated to match against).
 
-**Pilot spot-check findings so far** (from a smoke test before the full pilot
-week): fact decomposition surfaced two real quality issues worth
-scrutinizing before trusting this at scale - a worse hallucination than
-previously documented (a "COMMUNITY CALENDAR" section-label headline
-produced a fully fabricated GST policy claim) and an over-splitting error
-(one coherent claim split into a fact plus an incoherent fragment). Neither
-is fixed yet. Separately, the extraction prompt's JSON schema compliance
-degraded (~7% malformed responses) once facts started carrying entities for
-comparative matching - fixed by lowering Ollama's request temperature to
-0.2, which restored structural compliance but does NOT fix (and in one
-side-by-side test, worsened) hallucination on sparse/low-content titles. See
-`CLAUDE.md`'s "Known gaps" for full detail.
+**Grounding safeguards against hallucination** (`src/marketintel/grounding.py`)
+- a pilot smoke test found fact decomposition fabricating specific,
+plausible-sounding claims from content-free titles (a "COMMUNITY CALENDAR"
+section label produced a fake GST policy change). Two independent layers,
+wired into `gdelt_backfill.py`: (1) a pre-filter before any Ollama call,
+rejecting obvious non-content titles (section labels, digests, horoscopes,
+etc.); (2) a post-decomposition grounding check, rejecting any fact whose
+stated numbers (percentages, currency, dates) don't trace back to the source
+title - independent of Ollama's temperature setting, since lowering
+temperature fixed JSON schema compliance but demonstrably not truthfulness.
+Validate this BEFORE trusting pilot output:
+
+```bash
+python scripts/validate_grounding.py                  # against the known real failure cases
+python scripts/audit_grounding_retroactive.py          # retroactive audit of already-collected facts
+```
+
+**A retroactive audit against the pilot's partial output found this is a
+much bigger problem than the isolated cases suggested: ~17.9% of all facts
+collected so far state at least one fabricated number**, and the pattern
+looks like the model injecting real-world facts it memorized during training
+(an actual RBI rate history, an actual GST change) into completely unrelated
+articles - a movie review, an obituary - rather than random nonsense. The
+pilot's original run is being left to finish undisturbed rather than
+restarted (a retroactive audit, not a live fix); the safeguards above are
+active in the pipeline code for the eventual full-scale run.
+
+The audit also specifically samples ACCEPTED facts to check for a known
+limitation of a substring-based grounding check - a number matching the
+source by coincidence, not because it's really the same claim - and this
+caught a real, fixable bug: GDELT stores titles with HTML entities
+undecoded (e.g. literally "&#x2013;" instead of an em-dash), and one such
+entity's embedded digits coincidentally "grounded" a fabricated Punjab
+policy claim against an unrelated magazine masthead title. Fixed by
+HTML-unescaping titles at the source (`gdelt_bulk.py`) and defensively in
+`grounding.py` itself; re-sampling 20 fresh accepted facts afterward found
+no further instances of this pattern.
+
+**The pilot's spot-check gate is not yet satisfied** - see `CLAUDE.md`'s
+"Known gaps" and "Open technical decisions" for exactly what's still
+pending before the full India-tier backfill can start.
+
+Separately (lower priority, not blocking): the fact-decomposition
+over-splitting error above does NOT reliably fail the relevance gate - in
+one measured case, the meaningless fragment scored HIGHER relevance (0.60)
+than the coherent half of the same split (0.48), and the batch pipeline's
+gate runs once per title before decomposition anyway, with no second gate
+after it.
 
 ## Current scope
 

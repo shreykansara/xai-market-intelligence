@@ -31,6 +31,22 @@ checkpoints loses at most that window's progress, never anything already
 flushed, and a restart resumes from the last flushed timestamp rather than
 re-processing from the beginning.
 
+Two grounding safeguards (src/marketintel/grounding.py) run against
+hallucination in the Ollama fact-decomposition step, added after a real
+GDELT backfill smoke test caught the model fabricating a specific, plausible
+-sounding but entirely invented policy claim from a content-free section-
+label title ("COMMUNITY CALENDAR" -> a fake GST rate change): (1) a
+pre-filter runs BEFORE any Ollama call and skips titles that look like
+obvious non-content (section labels, digests, etc.) - cheap, but only
+catches clear cases; (2) a post-decomposition grounding check runs on every
+extracted fact and rejects it if it states a number (percentage, currency
+amount, date) that doesn't trace back to the original source title - this
+is the real safeguard, independent of Ollama's temperature setting (see
+fact_extraction.py's own comment on why lower temperature fixes JSON schema
+compliance but not truthfulness). Both log their rejections separately from
+BACKFILL_EXCLUDED_LOG_PATH (relevance-gate exclusions) since they're a
+different kind of filter.
+
 Comparative-fact matching's per-fact prior-match search (comparative_matching.py)
 is backed by an in-memory entity -> fact-index inverted index here (see
 _EntityIndex below) rather than scanning every stored fact for entity overlap on
@@ -52,7 +68,9 @@ from .config import (
     BACKFILL_EXCLUDED_LOG_PATH,
     BACKFILL_FACT_EMBEDDINGS_PATH,
     BACKFILL_FACTS_PATH,
+    BACKFILL_NONCONTENT_LOG_PATH,
     BACKFILL_STATE_PATH,
+    BACKFILL_UNGROUNDED_LOG_PATH,
     BACKFILL_UNMATCHED_LOG_PATH,
     DATA_DIR,
     DEDUP_SIMILARITY_THRESHOLD,
@@ -64,6 +82,7 @@ from .data_loader import load_news
 from .embeddings import embed_text, embed_texts
 from .fact_extraction import extract_facts_detailed
 from .gdelt_bulk import gkg_timestamps, fetch_and_filter
+from .grounding import is_grounded, is_likely_non_content
 from .seed_inference import (
     calibrate_relevance_threshold,
     group_indices_by_scope,
@@ -209,8 +228,8 @@ def run_backfill(
 
     totals = {
         "files_attempted": 0, "files_failed": 0,
-        "articles_seen": 0, "articles_gated_out": 0,
-        "facts_extracted": 0, "facts_added": 0, "facts_deduped": 0,
+        "articles_seen": 0, "articles_gated_out": 0, "articles_rejected_noncontent": 0,
+        "facts_extracted": 0, "facts_added": 0, "facts_deduped": 0, "facts_rejected_ungrounded": 0,
         "comparative_matches_found": 0, "comparative_matches_unmatched": 0,
     }
     files_since_checkpoint = 0
@@ -238,12 +257,34 @@ def run_backfill(
                         }) + "\n")
                     continue
 
+                is_junk, junk_reason = is_likely_non_content(record["title"])
+                if is_junk:
+                    totals["articles_rejected_noncontent"] += 1
+                    with open(BACKFILL_NONCONTENT_LOG_PATH, "a", encoding="utf-8") as f:
+                        f.write(json.dumps({
+                            "title": record["title"], "published": record["published"].isoformat(),
+                            "reason": junk_reason,
+                        }) + "\n")
+                    continue
+
                 fact_records = extract_facts_detailed(record["title"])
                 totals["facts_extracted"] += len(fact_records)
                 article_fact_ids = []
 
                 for fact_record in fact_records:
                     fact_text, entities = fact_record["text"], fact_record["entities"]
+
+                    grounded, ungrounded_numbers = is_grounded(fact_text, record["title"])
+                    if not grounded:
+                        totals["facts_rejected_ungrounded"] += 1
+                        with open(BACKFILL_UNGROUNDED_LOG_PATH, "a", encoding="utf-8") as f:
+                            f.write(json.dumps({
+                                "fact_text": fact_text, "source_title": record["title"],
+                                "ungrounded_numbers": ungrounded_numbers,
+                                "published": record["published"].isoformat(),
+                            }) + "\n")
+                        continue
+
                     fact_embedding = embed_text(fact_text)
 
                     dup_idx, _ = find_duplicate_fact(fact_embedding, record["published"], facts, fact_embeddings)

@@ -29,6 +29,7 @@ GKG column indices (V2.1 format, no header row - positional):
   18 SharingImage   19-21 media embeds   22 Quotations   23 AllNames
   24 Amounts   25 TranslationInfo   26 Extras (contains <PAGE_TITLE>)
 """
+import html
 import re
 import zipfile
 from datetime import datetime, timedelta, timezone
@@ -81,18 +82,26 @@ def _extract_title(fields: list[str]) -> tuple[str | None, str]:
     """Real page title from the Extras field's <PAGE_TITLE> tag, falling back to
     a de-slugified URL path segment for the rare record missing it. Returns
     (title, source) where source is "page_title" or "slug"; title is None if
-    neither yields usable text."""
+    neither yields usable text.
+
+    HTML-unescaped before returning - GDELT's crawler stores the raw HTML
+    entity-encoded title verbatim (e.g. "&#x2013;" for an em-dash, "&#x20B9;"
+    for the rupee sign), and a retroactive audit of real pilot data found this
+    corrupts numeric grounding checks downstream: an entity like "&#x2013;"
+    contains the literal digit run "2013", which can coincidentally satisfy a
+    fabricated fact's number check even though no real number was ever stated.
+    Decoding at the source fixes it for every consumer, not just grounding.py."""
     extras = fields[COL_EXTRAS] if len(fields) > COL_EXTRAS else ""
     match = PAGE_TITLE_PATTERN.search(extras)
     if match and match.group(1).strip():
-        return match.group(1).strip(), "page_title"
+        return html.unescape(match.group(1).strip()), "page_title"
 
     url = fields[COL_URL] if len(fields) > COL_URL else ""
     path = url.rstrip("/").rsplit("/", 1)[-1]
     path = re.sub(r"\.\w{2,5}$", "", path)  # strip a trailing file extension
     slug_text = re.sub(r"[-_]+", " ", path).strip()
     if slug_text and not slug_text.isdigit():
-        return slug_text, "slug"
+        return html.unescape(slug_text), "slug"
     return None, "none"
 
 
