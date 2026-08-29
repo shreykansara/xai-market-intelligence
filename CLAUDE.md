@@ -83,11 +83,15 @@ generation itself.
   to treating the whole text as one fact (no entities) if Ollama is
   unavailable.
 - **No manual labeling of real data, anywhere** (`seed_inference.py`) —
-  relevance and polarity inferred via similarity-weighted k-NN (k=10)
-  against the seed corpus; geographic scope inferred via per-class-
-  best-match (each of the 7 scope classes' single closest seed match
-  wins) specifically to prevent majority classes (India, Punjab) from
-  winning on population size alone.
+  relevance and polarity inferred via similarity-weighted k-NN (k=10);
+  geographic scope inferred via per-class-best-match (each of the 7 scope
+  classes' single closest match wins) specifically to prevent majority
+  classes (India, Punjab) from winning on population size alone. The
+  reference pool itself is now the accumulated REAL corpus, per dimension
+  and per scope class, not the fabricated seed corpus — see
+  `real_data_inference.py` and "Known gaps" below for the coverage-gated
+  migration (some dimensions still fall back to fabricated data; the GDELT
+  bulk backfill is untouched and still uses fabricated data throughout).
 - **Relevance gate** — real facts scoring below the 5th percentile of
   the seed corpus's own max-relevance distribution (~0.58) are excluded
   before scope classification, logged to `ingestion_excluded.jsonl`, not
@@ -235,6 +239,72 @@ longer exists in the repo.
   started independently, in either order - no crash, no dependency on
   startup sequence. All three run against real, separately-launched uvicorn
   processes on distinct ports, not simulated.
+- **Migrated seed-based inference off fabricated data onto the accumulated
+  real-fact corpus, per dimension - audited and coverage-checked first,
+  not switched wholesale.** Audit found `seed_inference.py`'s functions
+  already take their reference pool as an explicit parameter (no internal
+  hardcoded fabricated-data dependency) - so the migration only needed to
+  change WHAT `ingestion.py` passes in, not `seed_inference.py` itself,
+  meaning `gdelt_backfill.py`'s call sites (left untouched, per
+  instructions) are unaffected. Also confirmed `startups.json`/
+  `startup_embeddings.npy` are read at runtime NOWHERE (only by offline
+  training scripts) - nothing to migrate there. `server.py`'s own
+  `load_news()` call is NOT a seed-inference lookup - it's the primary
+  scored corpus itself (combined with real facts and gated via `W` on
+  every `/api/analyze` call) - migrating that would mean fabricated news
+  stops being scored entirely, a fundamentally bigger change in the same
+  spirit as retraining `W`; explicitly out of scope, flagged rather than
+  left ambiguous.
+  **Coverage check** (`real_data_inference.py`): of the 11 PESTLE/Porter's
+  dimensions, only 4 (political, economic, technological,
+  competitive_rivalry) currently have enough real facts (≥15 scoring above
+  the sub-cluster relevance threshold, with ≥3 of EACH polarity among
+  them) to support a reliable k-NN lookup. The other 7 - notably
+  "environmental", which had ZERO positive real examples at check time,
+  meaning any new environmental-topic fact could never be inferred
+  positive no matter what it said - keep falling back to the fabricated
+  corpus, dimension by dimension, not silently. All 7 geographic scope
+  classes DO have real coverage (even the thinnest, Jalandhar/Phagwara at
+  2 each) - scope's per-class-BEST-match mechanism only needs one good
+  exemplar per class to work correctly, unlike the pooled k-NN voting
+  relevance/polarity use, so its bar is much lower and it migrates for
+  every class today.
+  **Migration mechanism** (`infer_hybrid`/`infer_scope_hybrid`): for each
+  new fact, BOTH pools (real and fabricated) are queried independently;
+  each of the 11 relevance dimensions takes its value from whichever pool
+  passed coverage for that specific dimension - a real per-dimension
+  blend, not one pool winning the whole fact. Polarity (a single field,
+  not splittable per dimension) is drawn from whichever pool covers the
+  fact's own dominant (highest-relevance) dimension. The relevance GATE
+  THRESHOLD recalibrates to the real corpus's own distribution once there
+  are enough facts (≥50, currently cleared at 133) for a 5th-percentile
+  estimate to be stable - below that it stays fabricated-calibrated, same
+  as before. Coverage is re-checked fresh on every ingestion run, so a
+  dimension is expected to graduate from fabricated to real as more real
+  data accumulates, with no code change needed. Each stored fact now
+  carries `inference_source`/`scope_source` fields recording exactly which
+  pool it drew from, for spot-checking.
+- **Sub-cluster structure still depends on the fabricated corpus - flagged,
+  not migrated, per instructions.** `discover_subclusters.py`'s taxonomy
+  (dimension → sub-cluster labels/assignments) is built once, offline,
+  from the fabricated corpus only; `live_facts.py::compute_subcluster_centroids()`
+  reads `news.json`/`news_embeddings.npy` fresh at server startup to place
+  new real facts into those existing, fabricated-defined clusters (a real
+  runtime dependency on fabricated data, distinct from both the
+  seed-inference case above and the frozen-`W` case). Two options, neither
+  chosen here: (a) leave as-is - stable cluster IDs/labels, but the
+  taxonomy's shape and its labels' vocabulary reflect only the fabricated
+  corpus's narrative patterns, and a real-world topic with no good
+  fabricated analog gets force-fit into the nearest existing cluster
+  regardless of fit; (b) periodically re-run discovery against the
+  accumulated real corpus (or a combined pool) - would let the taxonomy
+  reflect real-world topic distribution over time, but re-clustering
+  changes cluster IDs/labels (breaking continuity with existing fact
+  assignments) and hits the exact same per-dimension thinness problem
+  found above (the 7 fabricated-only dimensions almost certainly don't
+  have enough real volume yet to support meaningful re-clustering either).
+  This is a separate decision from the seed-inference migration above -
+  not resolved here.
 - Scope-fix validation (`scripts/validate_scope_fix.py`) now hard-
   asserts against the exact two original failure headlines (constructed
   inline, not searched for in whatever's currently stored). The NFL

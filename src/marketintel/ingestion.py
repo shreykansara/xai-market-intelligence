@@ -3,8 +3,25 @@ set of free, no-key sources, decomposes each fetched article into one or more
 atomic facts (a local Ollama model, see fact_extraction.py), deduplicates
 near-identical FACTS via embedding similarity, and infers PESTLE/Porter's
 relevance, polarity, and (for facts that clear a relevance gate) geographic
-scope - all by looking up the fabricated seed corpus, see seed_inference.py.
-No per-source scope tagging, no trained classifier.
+scope. No per-source scope tagging, no trained classifier.
+
+**Migrated off the fabricated seed corpus onto the accumulated real-fact
+corpus itself, per dimension** (see real_data_inference.py) - new real facts
+are now scored primarily against OLDER real facts, self-referentially,
+rather than the 1000 fabricated articles. This is per-dimension, not
+all-or-nothing: a dimension only draws from real data once the accumulated
+corpus has enough of its own (a direct coverage check, re-run fresh on every
+ingestion pass - see real_data_inference.assess_dimension_coverage); thin
+dimensions keep falling back to the fabricated corpus rather than silently
+degrading. Geographic scope migrates per SCOPE CLASS instead, with a much
+lower bar (one real exemplar is enough, given how per-class-best-match
+already works). The relevance GATE THRESHOLD itself also switches to being
+calibrated from the real corpus once there's enough of it (see
+real_data_inference.choose_gate_threshold). None of this affects the GDELT
+bulk backfill (gdelt_backfill.py), which still looks up the fabricated
+corpus unchanged - the underlying seed_inference.py functions were already
+parameterized on their reference pool, so only THIS module's call sites
+needed to change.
 
 Shares its grounding safeguards (grounding.py) and comparative-fact matching
 (comparative_matching.py) with the GDELT bulk backfill (gdelt_backfill.py) -
@@ -89,18 +106,18 @@ from .config import (
     REAL_FACT_EMBEDDINGS_PATH,
     REAL_FACTS_PATH,
 )
-from .data_loader import load_news
+from .data_loader import load_news, load_real_facts
 from .embeddings import embed_text
 from .fact_extraction import extract_facts_detailed
 from .grounding import is_grounded, is_likely_non_content
-from .seed_inference import (
-    calibrate_relevance_threshold,
-    group_indices_by_scope,
-    infer_categorical,
-    infer_relevance,
-    infer_scope_best_match,
-    nearest_neighbors,
+from .real_data_inference import (
+    assess_dimension_coverage,
+    assess_scope_coverage,
+    choose_gate_threshold,
+    infer_hybrid,
+    infer_scope_hybrid,
 )
+from .seed_inference import group_indices_by_scope
 
 USER_AGENT = "Mozilla/5.0 (compatible; MarketIntelBot/0.1)"
 SAMPLE_LOG_SIZE = 8
@@ -251,12 +268,28 @@ def run_ingestion_once(verbose: bool = True) -> dict:
             print(msg)
 
     seed_news, seed_embeddings = load_news()
-    relevance_threshold = calibrate_relevance_threshold(seed_news)
-    scope_indices = group_indices_by_scope(seed_news)
-    log(f"Relevance gate threshold (5th percentile of seed corpus): {relevance_threshold:.4f}\n")
+    fabricated_scope_indices = group_indices_by_scope(seed_news)
 
     state = load_state()
     articles, facts, fact_embeddings = load_existing()
+
+    # Frozen snapshot of the real corpus BEFORE this run's new facts get appended -
+    # "new real facts get scored against older real facts", not against each other
+    # from within the same batch. See real_data_inference.py for the coverage-gated
+    # per-dimension/per-scope-class blending policy this feeds into.
+    real_pool_facts = list(facts)
+    real_pool_embeddings = np.array(fact_embeddings) if fact_embeddings else np.empty((0, 384))
+    dimension_coverage = assess_dimension_coverage(real_pool_facts)
+    scope_coverage = assess_scope_coverage(real_pool_facts)
+    real_scope_indices = group_indices_by_scope(real_pool_facts) if real_pool_facts else {}
+    relevance_threshold, gate_source = choose_gate_threshold(real_pool_facts, seed_news)
+
+    log(f"Relevance gate threshold ({gate_source} corpus, 5th percentile): {relevance_threshold:.4f}")
+    log(f"Real-data dimension coverage ({len(real_pool_facts)} accumulated real facts): "
+        + ", ".join(f"{d}={'real' if ok else 'fabricated'}" for d, ok in dimension_coverage.items()))
+    log(f"Real-data scope coverage: "
+        + ", ".join(f"{s}={'real' if ok else 'fabricated'}" for s, ok in scope_coverage.items()) + "\n")
+
     next_article_id = len(articles) + 1
     next_fact_id = len(facts) + 1
     now = datetime.now(timezone.utc)
@@ -266,6 +299,7 @@ def run_ingestion_once(verbose: bool = True) -> dict:
     new_count, dup_count, excluded_count = 0, 0, 0
     noncontent_count, ungrounded_count = 0, 0
     comparative_matched_count, comparative_unmatched_count = 0, 0
+    polarity_from_real_count, polarity_from_fabricated_count = 0, 0
     sample_log = []
     excluded_log = []
 
@@ -321,8 +355,9 @@ def run_ingestion_once(verbose: bool = True) -> dict:
                     dup_count += 1
                     continue
 
-                top_idx, weights = nearest_neighbors(embedding, seed_embeddings)
-                relevance = infer_relevance(seed_news, top_idx, weights)
+                relevance, polarity, inference_source = infer_hybrid(
+                    embedding, real_pool_facts, real_pool_embeddings, seed_news, seed_embeddings, dimension_coverage
+                )
                 max_relevance = max(relevance.values())
 
                 if max_relevance < relevance_threshold:
@@ -335,8 +370,10 @@ def run_ingestion_once(verbose: bool = True) -> dict:
                     })
                     continue
 
-                polarity = infer_categorical(seed_news, top_idx, weights, "polarity")
-                scope, _ = infer_scope_best_match(embedding, seed_embeddings, scope_indices)
+                scope, _, scope_source = infer_scope_hybrid(
+                    embedding, real_pool_embeddings, real_scope_indices,
+                    seed_embeddings, fabricated_scope_indices, scope_coverage,
+                )
                 pestle_scores = {d: relevance[d] for d in PESTLE_DIMS}
                 porters_scores = {d: relevance[d] for d in PORTERS_DIMS}
 
@@ -376,11 +413,21 @@ def run_ingestion_once(verbose: bool = True) -> dict:
                     "mention_count": 1,
                     "first_seen": now.isoformat(),
                     "last_seen": now.isoformat(),
+                    # Which pool each part of this fact's inference actually came from -
+                    # see real_data_inference.py. Kept per-fact (not just logged in
+                    # aggregate) so a spot-check can see exactly why any given fact was
+                    # scored the way it was.
+                    "inference_source": inference_source,
+                    "scope_source": scope_source,
                 })
                 fact_embeddings.append(embedding)
                 next_fact_id += 1
                 new_count += 1
                 article_fact_ids.append(fact_id)
+                if inference_source["polarity_source"] == "real":
+                    polarity_from_real_count += 1
+                else:
+                    polarity_from_fabricated_count += 1
 
                 if len(sample_log) < SAMPLE_LOG_SIZE:
                     sample_log.append({
@@ -429,6 +476,11 @@ def run_ingestion_once(verbose: bool = True) -> dict:
         f"Comparative-fact matching: {comparative_matched_count} matched a prior value, "
         f"{comparative_unmatched_count} left unmatched (see {INGESTION_UNMATCHED_LOG_PATH})."
     )
+    log(
+        f"Polarity source for new facts: {polarity_from_real_count} from the real corpus, "
+        f"{polarity_from_fabricated_count} from the fabricated corpus (per-dimension relevance "
+        f"blending happens per-fact too - see each fact's \"inference_source\" field)."
+    )
     log(f"Total real_facts records: {len(facts)} (from {len(articles)} provenance article records)\n")
 
     if excluded_log:
@@ -459,5 +511,10 @@ def run_ingestion_once(verbose: bool = True) -> dict:
         "facts_rejected_ungrounded": ungrounded_count,
         "comparative_matches_found": comparative_matched_count,
         "comparative_matches_unmatched": comparative_unmatched_count,
+        "polarity_from_real": polarity_from_real_count,
+        "polarity_from_fabricated": polarity_from_fabricated_count,
+        "dimension_coverage": dimension_coverage,
+        "scope_coverage": scope_coverage,
+        "gate_threshold_source": gate_source,
         "total_fact_records": len(facts),
     }

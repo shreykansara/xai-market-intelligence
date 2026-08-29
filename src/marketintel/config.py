@@ -180,6 +180,36 @@ SEED_NEIGHBOR_K = 10
 # business being forced into a geographic scope it has no real bearing on.
 RELEVANCE_GATE_PERCENTILE = 5
 
+# --- Real-data seed inference (src/marketintel/real_data_inference.py) ---
+# The live ingestion path (ingestion.py only - NOT the GDELT bulk backfill,
+# which keeps looking up the fabricated corpus untouched) migrates its k-NN
+# reference pool from the fabricated seed corpus to the accumulated real-fact
+# corpus itself, PER DIMENSION - a dimension only cuts over once the real
+# corpus has enough of its own data to support a reliable lookup; thin
+# dimensions keep falling back to the fabricated corpus rather than silently
+# degrading. Two thresholds gate that per-dimension decision, checked fresh
+# against whatever's accumulated so far on every ingestion run (so a
+# dimension can - and is expected to - graduate from fabricated to real as
+# more data comes in, with no code change needed):
+#   - at least this many real facts must exceed SUBCLUSTER_RELEVANCE_THRESHOLD
+#     on that dimension (roughly 1.5x SEED_NEIGHBOR_K, so a k=10 nearest-
+#     neighbor query has a real chance of actually surfacing on-topic real
+#     neighbors, not mostly off-topic ones diluting the signal);
+REAL_DATA_MIN_TOTAL_PER_DIM = 15
+#   - AND at least this many of EACH polarity class among those, so a
+#     polarity vote for a new fact on this dimension isn't structurally
+#     incapable of ever producing one of the two labels (e.g. environmental
+#     coverage that's 100% negative in the accumulated corpus so far would
+#     make "positive environmental news" unrepresentable, regardless of what
+#     a new fact actually says) - diagnosed as a real, current gap via a
+#     direct coverage check, not a hypothetical.
+REAL_DATA_MIN_PER_POLARITY = 3
+# Below this many total real facts, the relevance GATE THRESHOLD itself
+# (calibrate_relevance_threshold) stays computed from the fabricated corpus
+# regardless of per-dimension coverage - a 5th-percentile estimate from
+# under ~50 samples is too noisy to trust as a cutoff for everything else.
+REAL_DATA_MIN_FACTS_FOR_GATE_RECALIBRATION = 50
+
 # --- GDELT bulk backfill (src/marketintel/gdelt_bulk.py, comparative_matching.py) ---
 # A separate, one-off/batch collection process from the live ingestion_service.py
 # (which keeps running on its own 30-minute schedule for ongoing Punjab/LPU-area

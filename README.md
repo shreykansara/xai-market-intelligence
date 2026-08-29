@@ -210,10 +210,20 @@ each score.
    **Labeling is one mechanism for all three fields** (`src/marketintel/
    seed_inference.py`): relevance, polarity, *and* geographic scope are all
    inferred by the same similarity-weighted vote among a fact's 10 nearest
-   neighbors in the fabricated seed corpus - the only hand-labeled data
-   anywhere in the system. There's no per-source scope tagging and no
-   trained polarity classifier; every field is read off the same
-   nearest-neighbor lookup. Dedup (cosine similarity ≥0.92 against the last
+   neighbors. There's no per-source scope tagging and no trained polarity
+   classifier; every field is read off the same nearest-neighbor lookup.
+   **The reference pool itself has since migrated from the fabricated seed
+   corpus onto the accumulated real-fact corpus, per PESTLE/Porter's
+   dimension and per scope class** (`src/marketintel/real_data_inference.py`)
+   - new real facts are now scored primarily against OLDER real facts,
+   self-referentially, once a direct coverage check confirms there's enough
+   real data (of both polarities) to trust for that specific dimension;
+   thin dimensions keep falling back to the fabricated corpus rather than
+   cutting over silently. See "Migrated seed-based inference..." in
+   `CLAUDE.md`'s "Known gaps" for the exact coverage numbers, which
+   dimensions still fall back, and why - this only affects live ingestion,
+   not the GDELT bulk backfill, which still looks up the fabricated corpus
+   unchanged. Dedup (cosine similarity ≥0.92 against the last
    48 hours of stored facts) runs at this same fact granularity: the same
    fact reported by multiple outlets collapses into one record with a
    shared `mention_count`, verified in practice by cross-source stories
@@ -333,6 +343,9 @@ src/marketintel/
   grounding.py                     Pre-filter (non-content titles) + post-decomposition
                                     grounding check (rejects facts with fabricated numbers) -
                                     used only by the backfill above
+  real_data_inference.py           Coverage-gated policy layer deciding, per PESTLE/Porter's
+                                    dimension and per scope class, whether live ingestion's
+                                    k-NN lookup draws from real or fabricated data
 scripts/
   generate_news.py                 Builds data/news.json + news_embeddings.npy
   generate_startups.py             Builds data/startups.json (identity only) + embeddings
@@ -360,6 +373,9 @@ scripts/
                                     touches real backfill data (see below)
   validate_grounding.py            Validates grounding.py against the two known real
                                     hallucination cases, plus a false-positive check (see below)
+  validate_real_data_migration.py  Validates the seed-inference migration onto real data -
+                                    coverage check, gate recalibration, per-dimension blending,
+                                    and scope hybrid, all against the live real-fact corpus
   audit_grounding_retroactive.py   Read-only audit: re-checks already-collected backfill facts
                                     against grounding.py, reports the rejection rate + samples
 data/                              Generated datasets + trained W (gitignored, see below)
@@ -678,12 +694,29 @@ This phase is intentionally limited to what's described above:
   data into `server.py`'s live scoring path is also out of scope for now -
   tracked as a separate integration gap.
 - Real headline relevance and polarity are inferred by pooled nearest-
-  neighbor lookup against the fabricated seed corpus; scope by a separate
-  per-class-best-match lookup with a relevance gate in front of it - not a
-  trained classifier or content-based location extraction in any case, and
-  scope is meaningfully improved but still not reliable - see "Real news
-  ingestion" above.
+  neighbor lookup, and scope by a separate per-class-best-match lookup with
+  a relevance gate in front of it - not a trained classifier or
+  content-based location extraction in any case. The reference pool for
+  this lookup (live ingestion only - see below) is now the accumulated real
+  corpus itself, per dimension/scope class once there's enough of it -
+  see "Real news ingestion" above for the coverage numbers and which
+  dimensions still fall back to the fabricated corpus.
 - Geographic scope is stored per article but doesn't yet weight the scoring.
+- **`W` remains trained entirely on fabricated data, and this is NOT
+  changed by the real-data seed-inference migration above.** Migrating
+  `seed_inference.py`'s k-NN lookups onto real data only changes how new
+  real facts get their relevance/polarity/scope LABELED - it has no effect
+  on the shared interaction matrix `W` itself, which was fit once, offline,
+  against the 50 fabricated startups' derived sensitivity profiles and
+  their linked fabricated news articles (see "How it works" above). Every
+  `/api/analyze` prediction is therefore still indirectly shaped by
+  fabricated data through `W`, regardless of how well-labeled real facts
+  are. This won't be fixed until real company financial history exists to
+  retrain `W` against (the same role `data/profit_history.json` currently
+  plays, but from actual observed outcomes instead of a fabricated
+  simulation) - not attempted here, and not a small change: it would mean
+  re-deriving sensitivity profiles from real financial data, not just
+  swapping a lookup table the way this round of changes did.
 - `W` is trained once in batch on the fabricated startups, not updated
   online from real observed outcomes — there aren't any yet.
 - The dimension hierarchy is two levels deep (dimension → sub-cluster) only.

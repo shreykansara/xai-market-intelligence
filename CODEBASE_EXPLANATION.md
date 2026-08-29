@@ -1,684 +1,434 @@
 # AI-Based Explainable Market Intelligence — Complete Codebase Architecture & Code Walkthrough
 
-This document provides a comprehensive, exhaustive walkthrough of the entire **AI-Based Explainable Market Intelligence** codebase. It covers the mathematical foundations, system architecture, data generation, real-time news ingestion microservices, fact decomposition, machine learning algorithms, descriptive flowcharts, and provides an in-depth function-by-function and line-by-line explanation of every module.
+This document describes the system **as it actually runs today**, not as originally designed — including what's finished, what's partially migrated, and what's still a known limitation. It was fully regenerated from the live codebase and current data on disk, not incrementally patched, after the previous version drifted meaningfully out of date (it still described 20 startups, a single fabricated-only inference path, a Streamlit `app.py` that no longer exists, and predated the GDELT backfill, grounding safeguards, comparative-fact matching, and the real-data migration entirely).
 
 ---
 
 ## Table of Contents
-1. [High-Level System Architecture & Operating Mechanics](#1-high-level-system-architecture--operating-mechanics)
-2. [Hierarchical Clustering & Multi-Level News Labelling](#2-hierarchical-clustering--multi-level-news-labelling)
-3. [Real News Ingestion, Fact Decomposition & Seed Transfer](#3-real-news-ingestion-fact-decomposition--seed-transfer)
-4. [End-to-End Mathematical & Machine Learning Formulations](#4-end-to-end-mathematical--machine-learning-formulations)
-5. [Granular File-by-File, Module-by-Module Code Walkthrough](#5-granular-file-by-file-module-by-module-code-walkthrough)
-   - [5.1 Core ML & Analysis Package (`src/marketintel/`)](#51-core-ml--analysis-package-srcmarketintel)
-     - [`config.py`](#srcmarketintelconfigpy)
-     - [`embeddings.py`](#srcmarketintelembeddingspy)
-     - [`data_loader.py`](#srcmarketinteldata_loaderpy)
-     - [`analysis.py`](#srcmarketintelanalysispy)
-     - [`atomic_io.py`](#srcmarketintelatomic_iopy)
-     - [`fact_extraction.py`](#srcmarketintelfact_extractionpy)
-     - [`seed_inference.py`](#srcmarketintelseed_inferencepy)
-     - [`ingestion.py`](#srcmarketintelingestionpy)
-   - [5.2 Offline Training & Data Generation Pipeline (`scripts/`)](#52-offline-training--data-generation-pipeline-scripts)
-     - [`hidden_ground_truth.py`](#scriptshidden_ground_truthpy)
-     - [`generate_news.py`](#scriptsgenerate_newspy)
-     - [`generate_startups.py`](#scriptsgenerate_startupspy)
-     - [`discover_subclusters.py`](#scriptsdiscover_subclusterspy)
-     - [`simulate_profit_history.py`](#scriptssimulate_profit_historypy)
-     - [`derive_sensitivity_profiles.py`](#scriptsderive_sensitivity_profilespy)
-     - [`train_interaction_matrix.py`](#scriptstrain_interaction_matrixpy)
-   - [5.3 Validation & Ingestion Scripts (`scripts/`)](#53-validation--ingestion-scripts-scripts)
-     - [`validate_umbrella_case.py`](#scriptsvalidate_umbrella_casepy)
-     - [`validate_fact_decomposition.py`](#scriptsvalidate_fact_decompositionpy)
-     - [`validate_scope_fix.py`](#scriptsvalidate_scope_fixpy)
-     - [`ingest_news.py`](#scriptsingest_newspy)
-   - [5.4 Application Servers & Frontend](#54-application-servers--frontend)
-     - [`server.py`](#serverpy)
-     - [`ingestion_service.py`](#ingestion_servicepy)
-     - [`app.py`](#apppy)
-     - [`web/index.html`](#webindexhtml)
-6. [Submodule Interaction Matrix & Descriptive System Flowcharts](#6-submodule-interaction-matrix--descriptive-system-flowcharts)
-   - [6.1 Global Submodule Dependency & Interaction Flowchart](#61-global-submodule-dependency--interaction-flowchart)
-   - [6.2 Detailed Flowchart: Offline Training & Sensitivity Modeling](#62-detailed-flowchart-offline-training--sensitivity-modeling)
-   - [6.3 Detailed Flowchart: Real-Time News Ingestion & Fact Processing](#63-detailed-flowchart-real-time-news-ingestion--fact-processing)
-   - [6.4 Detailed Flowchart: Online CVP Inference & Two-Tier Scoring Engine](#64-detailed-flowchart-online-cvp-inference--two-tier-scoring-engine)
-   - [6.5 Submodule Input/Output Contract & Tensor Shape Matrix](#65-submodule-inputoutput-contract--tensor-shape-matrix)
+1. [System Overview — Three Independent Processes](#1-system-overview--three-independent-processes)
+2. [Current Integration Status — Stated Plainly](#2-current-integration-status--stated-plainly)
+3. [End-to-End Fact Journey — One Real Fact's Full Path](#3-end-to-end-fact-journey--one-real-facts-full-path)
+4. [Comparative-Fact Generation](#4-comparative-fact-generation)
+5. [Grounding Safeguards Against Hallucination](#5-grounding-safeguards-against-hallucination)
+6. [Hierarchical Clustering & Sub-Cluster Labeling](#6-hierarchical-clustering--sub-cluster-labeling)
+7. [Real-Data Seed-Inference Migration](#7-real-data-seed-inference-migration)
+8. [Mathematical & Machine Learning Formulations](#8-mathematical--machine-learning-formulations)
+9. [File-by-File Module Walkthrough](#9-file-by-file-module-walkthrough)
+10. [Flowcharts — One Per Service, Not Combined](#10-flowcharts--one-per-service-not-combined)
+    - [10.1 `server.py` — Analysis & Scoring Service](#101-serverpy--analysis--scoring-service)
+    - [10.2 Ingestion Microservice](#102-ingestion-microservice)
+    - [10.3 GDELT Bulk Backfill (batch, currently paused)](#103-gdelt-bulk-backfill-batch-currently-paused)
+    - [10.4 Offline Training Pipeline (not a service — run by hand)](#104-offline-training-pipeline-not-a-service--run-by-hand)
+11. [Submodule Input/Output Contract Matrix](#11-submodule-inputoutput-contract-matrix)
 
 ---
 
-## 1. High-Level System Architecture & Operating Mechanics
+## 1. System Overview — Three Independent Processes
 
-### 1.1 The Core Problem
-Early-stage startups possess **no historical sales or operational track records**. When macroeconomic shifts, supply disruptions, regulatory changes, or technological breakthroughs occur, founders and investors have no systematic, quantifiable, or traceable way to forecast how those external events will impact the company.
+The system is **not** "two subsystems" as earlier documentation described it. It is three processes that start, stop, and fail independently, plus one offline pipeline run by hand:
 
-### 1.2 System Solution Overview
-The system models business sensitivity across **11 strategic dimensions**:
-- **6 PESTLE Dimensions**: Political, Economic, Social, Technological, Legal, Environmental.
-- **5 Porter's Five Forces**: Threat of New Entrants, Supplier Power, Buyer Power, Threat of Substitutes, Competitive Rivalry.
+| Process | Entry point | Port | Runs on | Depends on the others at runtime? |
+|---|---|---|---|---|
+| **Analysis/scoring service** | `server.py` | 8000 (typical) | Demand (`/api/analyze`) | No — runs standalone even with no real data at all (see §2) |
+| **Live ingestion microservice** | `ingestion_service.py` | 8502 | Every 30 min, plus immediately on startup | No |
+| **GDELT bulk backfill** | `scripts/run_gdelt_backfill.py` | none (batch CLI) | Manually invoked, long-running, checkpointed | No — **currently paused** at 24/672 files into the India-tier pilot week |
+| **Offline training pipeline** | `scripts/*.py`, run in order | none | Once, by hand, whenever the fabricated dataset changes | N/A — produces the files the other three read |
 
-The architecture comprises two main subsystems:
-1. **Offline Training & Exposure Pipeline**: Uses a seed corpus of 1000 multi-dimensional fabricated news events and 20 diverse reference startups. By simulating 180-day financial histories with delayed shocks and recovering sensitivity via sub-cluster lagged ridge regression, it trains a bilinear interaction matrix $\mathbf{W} \in \mathbb{R}^{384 \times 384}$ using Kernel Dual Ridge Regression.
-2. **Online Real News Ingestion & Fact Decomposition Microservice**: Pulls real headlines from RSS feeds and GDELT, decomposes complex articles into atomic neutral facts via a local LLM (Ollama `llama3.2:3b`), and transfers scores from the seed corpus using a similarity-gated nearest-neighbor voting mechanism with per-class-best-match geographic scope inference.
+This independence was verified empirically, not assumed: separately-launched `server.py` and `ingestion_service.py` processes were tested (a) with ingestion running while `server.py` was stopped and restarted, (b) with `server.py` running while ingestion was stopped, and (c) with both started in either order — all four scenarios returned correct HTTP responses with no crash.
+
+Business sensitivity is modeled across **11 dimensions**: 6 PESTLE (Political, Economic, Social, Technological, Legal, Environmental) and 5 Porter's Five Forces (Threat of New Entrants, Supplier Power, Buyer Power, Threat of Substitutes, Competitive Rivalry).
 
 ---
 
-## 2. Hierarchical Clustering & Multi-Level News Labelling
+## 2. Current Integration Status — Stated Plainly
 
-The system guarantees full traceability by structuring news into a **three-tier labeling hierarchy**:
+Two separate questions get asked about this system, and they have **different answers**. Conflating them is the single most common way to misdescribe the current state, so they're separated here explicitly.
 
+### 2a. Does `/api/analyze` score against real ingested facts, or only fabricated `news.json`?
+
+**Yes — real facts are part of live scoring today.** `server.py`'s `/api/analyze` calls `live_facts.build_combined_corpus()`, which loads whatever is currently in `data/real_facts.json` (fresh, on every request — not cached, since `ingestion_service.py` keeps appending to it independently of the `server.py` process) and concatenates it with the 1000 fabricated seed articles. Both corpora are then gated through the same bilinear matrix `W` and combined in the same `score_submission()` call, with **equal weighting** — a real fact's contribution to a PESTLE/Porter's score is computed and ranked exactly like a fabricated article's, with no down-weighting by "realness" (see §9, `live_facts.py`, for the reasoning this was a deliberate decision, not an oversight).
+
+The response payload also carries `"live_facts_count"` and `"seed_only"` fields, so a caller can tell whether real data was actually available for that specific request (it degrades to seed-only, not an error, if `real_facts.json` is missing, empty, or corrupted — see §10.1).
+
+At current volume (133 real facts vs. 1000 fabricated), a real fact's contribution is correctly computed and ranked but usually doesn't crack a cluster's top-5 display cutoff in the UI — confirmed by inspecting full, untruncated cluster rankings directly (a real fact lands where its correctly-computed, currently-smaller-magnitude signal should place it, not missing or miscomputed).
+
+### 2b. Is the trained interaction matrix `W` — the thing that actually determines *how* an event affects a business — trained on any real data?
+
+**No. `W` remains trained entirely on fabricated data**, and nothing in this document changes that. `W` was fit once, offline, via `scripts/train_interaction_matrix.py`, against the 50 fabricated startups' *derived* sensitivity profiles (themselves recovered from a fabricated 180-day profit simulation, not real financial history) and their linked fabricated news articles. Every `/api/analyze` prediction — including ones that fold in real ingested facts per §2a — is still indirectly shaped by fabricated data through `W`, because `W` is what defines the *gate* (how strongly a business reacts to a given event) that both fabricated and real facts get evaluated through.
+
+This is not fixed by real facts being scored (§2a), by the seed-inference migration (§7), or by anything else in this codebase so far. It will not be fixed until real company financial history exists to retrain `W` against — playing the role fabricated `profit_history.json` currently plays, but from actually observed outcomes. That is a substantially larger undertaking than anything described in this document (re-deriving sensitivity profiles from real data, not swapping a lookup table), and it has not been attempted.
+
+### 2c. Per-dimension: which of the 11 dimensions currently draw from real data vs. fabricated data?
+
+This applies only to the **live ingestion path**'s seed-inference lookup (§7) — it has no bearing on `W` (§2b) or on what `server.py` scores (§2a, which always includes both corpora regardless of this table).
+
+| Dimension | Current source | Why |
+|---|---|---|
+| Political | **Real** | 55 real facts score above threshold on this dimension, with ≥3 examples of each polarity |
+| Economic | **Real** | Same — 55 facts, both polarities well represented |
+| Technological | **Real** | 25 facts, 9 positive / 16 negative |
+| Competitive Rivalry | **Real** | 21 facts, 5 positive / 16 negative |
+| Social | Fabricated | Only 2 positive real facts — too thin to trust a polarity vote |
+| Legal | Fabricated | Only 10 real facts total — below the minimum sample size |
+| Environmental | Fabricated | **Zero** positive real facts at last check — a real environmental-topic fact could never be inferred positive, regardless of what it said |
+| Threat of New Entrants | Fabricated | Only 4 real facts total |
+| Supplier Power | Fabricated | Only 5 real facts total, zero positive |
+| Buyer Power | Fabricated | 14 real facts, zero positive |
+| Threat of Substitutes | Fabricated | Only 1 real fact total |
+
+**This is expected to shift over time.** The coverage check (`real_data_inference.assess_dimension_coverage()`) is recomputed fresh on every single ingestion run against whatever has accumulated so far — there is no hardcoded snapshot to update. As more real facts accumulate on the thin dimensions above, they will automatically graduate to "real" with no code change. The relevance **gate threshold** itself (a single scalar cutoff, separate from the per-dimension values above) already switched to being calibrated from the real corpus, since the real corpus cleared the 50-fact minimum (currently 133 facts; threshold recalibrated from 0.5849 to 0.5982).
+
+Geographic scope classification, by contrast, already draws from real data for **all 7 scope classes** today (LPU, Phagwara, Jalandhar, Kapurthala, Punjab, India, World) — its per-class-best-match mechanism only needs one good real exemplar per class to work correctly, unlike the pooled k-NN voting relevance/polarity depend on, so it cleared its (much lower) bar for every class already.
+
+---
+
+## 3. End-to-End Fact Journey — One Real Fact's Full Path
+
+This section traces a single real fact through the live ingestion pipeline (`src/marketintel/ingestion.py`, run by `ingestion_service.py` every 30 minutes) from the moment it's fetched to the moment it's durably stored, as one continuous narrative. Concretely: a BBC World RSS item titled *"India raises import tariffs on solar panel components"* arrives.
+
+**1. Fetch.** The RSS feed is polled with a `since` cursor (the last-seen publish timestamp for that source, persisted in `data/ingestion_state.json`), so only items newer than the last run are returned. The title is **HTML-unescaped** at this point (`html.unescape()`) — GDELT and some RSS sources store titles with raw entity codes like `&#x2013;` for an em-dash, and leaving that undecoded was confirmed to corrupt later number-matching (see §5).
+
+**2. Non-content pre-filter.** Before any expensive LLM call, `grounding.is_likely_non_content()` checks whether the title looks like an obvious section label, digest, or horoscope rather than real news (a small keyword list, plus an "all-caps / very-short / no-verb / no-numbers" heuristic). This title passes — it's a real headline with sentence structure and no junk keywords.
+
+**3. Fact decomposition.** The title is sent to a local Ollama model (`llama3.2:3b`, temperature 0.2) via `fact_extraction.extract_facts_detailed()`, asked to return a JSON array of `{"text": ..., "entities": [...]}` objects — one per distinct, independently-scorable claim, with directional/comparative language ("raised", "cut", "from X to Y") explicitly preserved as factual content rather than neutralized away. For this headline, one fact comes back: `{"text": "India raised import tariffs on solar panel components", "entities": ["India", "import tariffs", "solar panel components"]}`. If Ollama were unreachable or returned unparseable output, the pipeline would fall back to treating the whole title as one fact with no entities, rather than failing the run.
+
+**4. Grounding check.** `grounding.is_grounded()` extracts every number the fact states (none, in this example — a later step handles the case where a number-bearing fact needs checking) and confirms each one traces back to the source title, HTML-unescaped and comma/decimal-normalized on both sides. A fact stating a number the source never mentioned is rejected here and logged to `data/ingestion_ungrounded.jsonl` rather than stored — this is the direct response to a confirmed real failure mode where the model injected specific, plausible-sounding but entirely fabricated figures (a real RBI rate history, a real GST change) into unrelated headlines.
+
+**5. Embedding.** The fact's neutral text is embedded via `all-MiniLM-L6-v2` (`embeddings.embed_text()`), producing a 384-dimensional, L2-normalized vector.
+
+**6. Deduplication.** `find_duplicate_fact()` compares this embedding against every fact already stored with a publish timestamp within the last 48 hours. If cosine similarity ≥ 0.92, this is treated as the same underlying story reported by another outlet — `mention_count` increments on the existing record and processing stops here. Assume this is a new story: no match, so it proceeds.
+
+**7. Relevance, polarity, and scope inference — stating which pool feeds each dimension.** This fact's embedding is run through `real_data_inference.infer_hybrid()`, which queries **both** the accumulated real-fact corpus and the fabricated seed corpus independently via `seed_inference.nearest_neighbors()` (k=10 each), then blends the result **per dimension** according to the coverage table in §2c: this fact scores highest on Economic and Political (both real-data-covered dimensions today), so those two values come from the real-corpus lookup; its Environmental and Legal scores (both still fabricated-only) come from the fabricated-corpus lookup instead — one fact, two dimensions sourced from real data, others from fabricated, recorded transparently on the stored record as `inference_source`. Polarity (a single field, not splittable per dimension) is drawn from whichever pool covers this fact's own *dominant* dimension — here, Economic, which is real-covered, so polarity comes from the real corpus's vote: negative (tariffs raising costs). Scope is inferred the same blended way via `infer_scope_hybrid()` — every scope class has real coverage today, so this resolves against the real corpus and returns `India`.
+
+**8. Relevance gate.** The fact's maximum relevance across all 11 dimensions is checked against the gate threshold — itself now calibrated from the real corpus's own distribution (0.5982, since the real corpus has cleared 50 facts). This fact clears it easily (a tariff story scores strongly on Economic/Political). A fact that didn't clear the gate would be excluded here, logged to `data/ingestion_excluded.jsonl`, and never reach the remaining steps.
+
+**9. Comparative-fact matching.** Because this fact's own text already states a direction ("raised"), `comparative_matching.resolve_comparative_fact()` recognizes it as self-contained via `has_own_direction` and skips the prior-value lookup entirely — see §4 for the full mechanism, which matters much more for a *bare* fact like "GST on mobile phones is 18%" that carries no direction of its own.
+
+**10. Sub-cluster assignment.** This step happens downstream, at `server.py` request time, not during ingestion — `live_facts.assign_fact_subclusters()` places the fact into its nearest existing sub-cluster (by cosine similarity to the sub-cluster's centroid) for each dimension it's relevant to, without ever re-running the one-time offline discovery. It's included in this narrative because it's the next thing that happens to this fact's data before it's ever shown to a user.
+
+**11. Atomic write.** The fact record — `id`, `fact_text`, `entities`, `published`, `scope`, `pestle_scores`, `porters_scores`, `polarity`, `comparative`, `mention_count`, `inference_source`, `scope_source` — is appended to the in-memory list for this run and, once the whole batch across all sources finishes, the complete `facts` and `fact_embeddings` lists are written via `atomic_io.atomic_write_json()` / `atomic_write_npy()` (temp file, then atomic rename) to `data/real_facts.json` and `data/real_fact_embeddings.npy`. A concurrent reader — `server.py`, mid-request — never observes a partially-written file. The parent article record (headline, link, timestamp, which fact IDs came from it — no body text, no separate embedding) is written the same way to `data/real_articles.json`.
+
+From this point, the fact is indistinguishable in storage from every other real fact already accumulated, and is itself now eligible to be the "older fact" a *future* bare-state fact gets compared against in step 9.
+
+---
+
+## 4. Comparative-Fact Generation
+
+This is one of the more novel mechanisms in the system and is explained here on its own terms — the problem it solves, the two-tier resolution order, the exact thresholds in use, and the validation evidence behind them — without requiring a read of `comparative_matching.py` itself.
+
+### The problem
+
+A bare state-value fact like *"GST on mobile phones is 18%"* carries a number but no inherent direction — on its own, there's no way to tell whether this represents a tax increase (bad for consumer electronics retailers) or a tax cut (good), because the polarity of a rate depends entirely on what it changed *from*. Naively scoring this fact would leave its polarity ambiguous or force a guess.
+
+### Two-tier resolution order
+
+For every fact produced by decomposition, `comparative_matching.resolve_comparative_fact()` applies exactly this order:
+
+**Tier 1 — already self-contained.** If the fact's own text contains directional or comparative language — `HAS_DIRECTION_PATTERN`, a regex matching words like "raised", "cut", "increased", "hiked", "slashed", "up from", "down from", or a literal "from X to Y" / "to X" numeric pattern — the fact is treated as unambiguous on its own. No lookup happens; `has_own_direction` is set and the fact's own polarity/relevance already fully determine its meaning. This is *why* `fact_extraction.py`'s prompt was specifically changed to preserve this kind of language as factual content during neutralization, rather than stripping it as "rhetorical framing" — doing so would have silently converted every directional fact into an ambiguous bare-state one, defeating this tier before it ever ran.
+
+**Tier 2 — bare state-value lookup.** If the fact has no directional language of its own, the system searches every already-stored fact for the nearest qualifying match, requiring **both** conditions:
+
+1. **Temporal**: the candidate's `published` timestamp must be **strictly earlier** than the new fact's — never a later one, which would mean looking into the future.
+2. **Similarity**: cosine similarity between the two facts' embeddings must clear **`COMPARATIVE_MATCH_SIMILARITY_THRESHOLD = 0.85`** — deliberately stricter than the general relevance gate's ~0.58, because a wrong comparative match doesn't just mis-score relevance, it fabricates a direction and polarity outright.
+3. **Entity consistency**: the two facts' entity sets (extracted by `fact_extraction.py` from the same neutral rewrite, e.g. `["GST on mobile phones", "India"]`) must overlap by **Jaccard similarity ≥ `ENTITY_JACCARD_THRESHOLD = 0.5`** — not merely share *any* entity.
+
+If a qualifying match is found, the two facts' principal numeric values are extracted via regex and compared: a higher current value than the matched prior means `computed_direction = "increase"`, a lower value means `"decrease"`. If either value can't be cleanly parsed as a number, no direction is forced.
+
+If no candidate clears both the similarity and entity checks, the fact is left with `computed_direction = None` and logged to `*_unmatched_directional.jsonl` (a real fact reported one way, not silently dropped) — this is the expected, common outcome early in a corpus's life, before much history has accumulated to match against.
+
+### Why Jaccard, not "any overlap" — a real bug caught before touching real data
+
+The first implementation of the entity check accepted any non-empty intersection between the two entity sets. Validation caught this as a genuine bug before it ever ran against real data: a fact about **mobile-phone GST** and a fact about **textile GST** — two entirely different tax categories — still shared the generic entity `"India"`, which was enough to pass a bare-overlap check even at similarity = 1.0 in a deliberately constructed worst-case test. The fix requires the *overlap fraction* (Jaccard: intersection size over union size) to clear 0.5, not just be non-empty — two facts about the genuinely same subject share all or nearly all of their entities (Jaccard 1.0 in every real validated case below), while two facts sharing only one broad, incidental entity land well under 0.5.
+
+### Validation results (`scripts/validate_comparative_matching.py`, 4/4 passing)
+
+Three independently verifiable real rate/tax changes, each correctly matched to the right prior value with the correct computed direction:
+
+| Case | Prior value | Current value | Computed direction |
+|---|---|---|---|
+| India GST on mobile phones (GST Council, April 2020) | 12% | 18% | increase (similarity 0.9161) |
+| India RBI repo rate (Monetary Policy Committee, Feb 2025) | 6.50% | 6.25% | decrease (similarity 0.9905) |
+| UK standard VAT rate (effective Jan 2011) | 17.5% | 20% | increase (similarity 0.9332) |
+
+Plus the adversarial similar-but-different check described above, tested twice: once with the closest natural phrasing found (mobile-phone GST vs. textile GST, both "Officials confirmed the GST slab applicable to X is now 18 percent nationwide" — real cosine similarity 0.8399, just under the 0.85 threshold on its own) and once as a synthetic worst case that force-sets the similarity to exactly 1.0 by reusing one embedding for both facts — the entity check alone correctly rejects the cross-match in the synthetic case, proving it is genuinely load-bearing rather than redundant with the similarity gate.
+
+### Shared, not duplicated, across both ingestion codepaths
+
+`comparative_matching.py` is a standalone, source-agnostic module with no dependency on either orchestrator. Both the live ingestion path (`ingestion.py`, searching the growing `real_facts.json`) and the GDELT bulk backfill (`gdelt_backfill.py`, searching its own separate `backfill_facts.json`, plus an entity-inverted-index for performance at that pipeline's larger scale) call the exact same `resolve_comparative_fact()` function — no comparative-matching logic is duplicated or reimplemented per pipeline.
+
+---
+
+## 5. Grounding Safeguards Against Hallucination
+
+This section exists because a real, verified failure mode was found during testing: the LLM used for fact decomposition (`llama3.2:3b`) sometimes injects specific, plausible-sounding numeric claims into facts extracted from headlines that have nothing to do with those claims — not random nonsense, but numbers and dates the model appears to have memorized during training (a real RBI rate history, a real GST change) attributed to the wrong, unrelated source. A retroactive audit of the GDELT bulk backfill's already-collected corpus found this affected roughly **18%** of all stored facts before safeguards existed.
+
+Two independent layers (`src/marketintel/grounding.py`), shared by both the live ingestion path and the GDELT bulk backfill:
+
+**Layer 1 — pre-filter (`is_likely_non_content`)**, run *before* any Ollama call. Rejects titles that look like obvious non-content: a small keyword list (`calendar`, `digest`, `roundup`, `horoscope`, `prop picks`, `best bets`, etc.) plus a heuristic for very-short/all-caps/no-verb/no-numbers titles. Cheap, but only catches clear cases — a substantive-looking headline about an unrelated topic (a movie review, an obituary) sails through this layer even though it later triggers the hallucination this system exists to catch.
+
+**Layer 2 — post-decomposition grounding check (`is_grounded`)**, the real safeguard. Every number a fact states (percentage, currency amount, date) is extracted and checked against the source title's own extracted numbers — both sides HTML-unescaped and comma/decimal-normalized first. A fact stating a number the source never mentioned is rejected, regardless of Ollama's temperature setting (lowering temperature to 0.2 fixed a *separate*, structural JSON-schema-compliance problem, but was directly shown to *not* fix hallucination — and in one side-by-side test, made the model fabricate more confidently on a content-free title where default temperature had correctly returned nothing at all).
+
+Two real false-rejection bugs were found and fixed while validating this layer against live data, not just the backfill's fabricated-adjacent titles:
+
+1. **Trailing-period bug**: the number regex treated a sentence-ending period as a decimal point, extracting `"34."` from *"...died at the age of 34."* — which then failed to match a source reading *"...dies aged 34"* with no trailing punctuation at that position. Fixed by only consuming a decimal point when followed by at least one digit.
+2. **Comma-normalization bug**: a fact's number was compared, comma-stripped, against the *raw, unnormalized* source text — so a source written as *"5,000 migrants"* could never match a fact's normalized `"5000"`. Fixed by comparing against the source's own extracted-and-normalized numbers instead of a raw substring search.
+
+Both fixes were validated against `scripts/validate_grounding.py` (3/3 passing against the two known real hallucinations, plus a false-positive check on a genuine grounded fact) and a targeted re-check that specifically samples *accepted* facts to look for coincidental bare-number matches — which caught a third, unrelated real bug: an undecoded HTML entity (`&#x2013;`) in a source title contains the literal digit run `"2013"`, which coincidentally satisfied a completely fabricated fact's `"20%"` claim as "grounded." Fixed by HTML-unescaping titles at the source (`gdelt_bulk.py`) and defensively inside `grounding.py` itself.
+
+---
+
+## 6. Hierarchical Clustering & Sub-Cluster Labeling
+
+The system structures news into a two-level hierarchy for the drill-down UI: **dimension → sub-cluster**. This entire structure is built **once, offline, from the fabricated seed corpus only** (`scripts/discover_subclusters.py`) — this has not changed and is a known, explicitly-flagged limitation, not an oversight (see the callout at the end of this section).
+
+1. **Dimension filtering**: for each of the 11 dimensions independently, every fabricated article scoring above `SUBCLUSTER_RELEVANCE_THRESHOLD = 0.3` on that dimension takes part in that dimension's clustering. An article can land in a different sub-cluster under each dimension it's relevant to.
+2. **Agglomerative clustering**: cosine distance, average linkage, over the dimension's article embeddings.
+3. **Cluster-count selection**: candidate counts `k ∈ [3, 4, 5, 6, 7]` are all tried; rather than a naive `argmax` over silhouette score (biased toward always picking the largest `k` offered on short-text embeddings), the algorithm picks the **smallest `k`** that still reaches at least 90% of the best silhouette score found across the whole range.
+4. **Label synthesis**: each cluster's centroid is computed, the 3 articles nearest it are retrieved, their titles are tokenized and stopword-pruned, and the top 2 most frequent keywords become the cluster's display label (e.g. *"Tariffs Rattle"*), purely for display — never fed back into the clustering itself.
+
+**How real facts join this structure without re-running discovery**: `live_facts.compute_subcluster_centroids()` reads the fabricated `news.json`/`news_embeddings.npy` fresh at `server.py` startup (cached for the process's lifetime, not re-read per request) and computes each existing sub-cluster's centroid as the average embedding of the fabricated articles already assigned to it. `assign_fact_subclusters()` then places each real fact into whichever existing sub-cluster its embedding is closest to, for every dimension the fact clears the sub-cluster relevance threshold on — real facts never trigger new clusters and never change existing ones.
+
+**Explicitly flagged, not decided**: this is a genuine, currently-unresolved dependency on fabricated data at runtime — distinct from both §7's seed-inference migration and §2b's frozen-`W` limitation. Two options exist and neither has been chosen:
+- **(a) Leave as-is** — stable cluster IDs and labels, but the taxonomy's shape and its labels' vocabulary reflect only the fabricated corpus's narrative patterns, and a real-world topic with no good fabricated analog gets force-fit into the nearest existing cluster regardless of fit.
+- **(b) Periodically re-run discovery** against the accumulated real corpus (or a combined pool) — would let the taxonomy reflect real-world topic distribution over time, but re-clustering changes cluster IDs and labels (breaking continuity with already-assigned facts), and would hit the exact same per-dimension data-thinness problem documented in §2c/§7 for the 7 fabricated-only dimensions.
+
+---
+
+## 7. Real-Data Seed-Inference Migration
+
+The live ingestion path's k-NN reference pool has migrated from the fabricated seed corpus onto the accumulated real-fact corpus itself — **per dimension**, not as a single all-or-nothing switch, and **only for the live path** (`ingestion.py`) — the GDELT bulk backfill's call sites into the same underlying functions were deliberately left untouched.
+
+### Why per-dimension, not wholesale
+
+`seed_inference.py`'s functions (`nearest_neighbors`, `infer_relevance`, `infer_categorical`, `infer_scope_best_match`) already took their reference pool as an explicit parameter, with no internal hardcoded dependency on fabricated data — so no change to that module was needed at all. What was needed was a policy layer (`src/marketintel/real_data_inference.py`) deciding, per dimension and per scope class, which pool to trust, based on a direct coverage check rather than an assumption that the accumulating real corpus is uniformly ready.
+
+### The coverage check
+
+`assess_dimension_coverage()` requires, per dimension: at least `REAL_DATA_MIN_TOTAL_PER_DIM = 15` real facts scoring above the sub-cluster relevance threshold on that dimension (roughly 1.5× the k=10 neighbor count, so a lookup has a real chance of surfacing on-topic neighbors), **and** at least `REAL_DATA_MIN_PER_POLARITY = 3` of *each* polarity among them — a polarity vote can't be structurally incapable of producing one of its two labels. `assess_scope_coverage()` uses a much lower bar (at least one real example of a scope class) since per-class-best-match only ever needs a single good exemplar, not statistical breadth. Both are recomputed fresh from whatever's accumulated so far, on every single ingestion run — see §2c for the current concrete pass/fail table.
+
+### The blending mechanism
+
+For every new fact, `infer_hybrid()` queries **both** pools independently (two separate k=10 nearest-neighbor lookups), then merges the results:
+- **Relevance** (a dict over all 11 dimensions) takes each dimension's value from whichever pool passed coverage for that specific dimension — a genuine per-dimension blend within one fact, not one pool winning the whole thing.
+- **Polarity** (a single categorical field, not splittable per dimension) is drawn from whichever pool covers the fact's own *dominant* dimension — its highest real-pool relevance score, since that's the most directly-grounded signal for what the fact is actually about.
+
+`infer_scope_hybrid()` applies the same per-class blending principle to geographic scope: for each of the 7 classes, it uses the real corpus's best match if that class has coverage, otherwise the fabricated corpus's — then picks the overall highest-similarity winner across all classes regardless of source.
+
+### Gate recalibration
+
+`choose_gate_threshold()` switches the relevance gate's cutoff to being calibrated from the real corpus's own relevance distribution once it holds at least `REAL_DATA_MIN_FACTS_FOR_GATE_RECALIBRATION = 50` facts (a 5th-percentile estimate below that is too statistically noisy to trust) — currently active, since the real corpus holds 133 facts and the threshold has moved from 0.5849 (fabricated) to 0.5982 (real).
+
+### Traceability
+
+Every stored real fact now carries `inference_source` (a per-dimension and polarity source breakdown) and `scope_source` fields, so any individual fact's scoring provenance can be inspected directly rather than inferred. Validated end-to-end by `scripts/validate_real_data_migration.py` (9/9 checks passing): coverage matches live data, the gate threshold is genuinely real-corpus-derived and differs from the fabricated value, per-dimension blending routes correctly on a real constructed example, and scope hybrid returns a valid class and source without crashing.
+
+---
+
+## 8. Mathematical & Machine Learning Formulations
+
+### 8.1 The Bilinear Interaction Operator `W`
+
+$$\text{gate}(\mathbf{x}, \mathbf{z}) = \mathbf{x}^\top \mathbf{W} (\mathbf{z} - \bar{\mathbf{z}})$$
+
+where $\mathbf{x}$ is a news/fact embedding, $\mathbf{z}$ is a CVP embedding, and $\bar{\mathbf{z}}$ is the mean of all training CVP embeddings (`data/cvp_mean.npy`) — subtracted before every fit and every inference call. **This mean-centering step is load-bearing, not cosmetic** (see §8.4).
+
+### 8.2 Kernel Dual Ridge Regression
+
+With **50 startups × 11 dimensions = 550** training instances and $384 \times 384 = 147{,}456$ parameters, the primal system is severely underdetermined; solved in the dual instead.
+
+1. **Combined news vector** for startup $s$, dimension $d$: $\mathbf{a}_{s,d} = \sum_{j \in \text{Linked}(s)} \text{relevance}(j,d) \cdot \text{polarity}(j) \cdot \mathbf{x}_j$
+2. **Centered CVP vector**: $\tilde{\mathbf{z}}_s = \mathbf{z}_s - \bar{\mathbf{z}}$
+3. **Dual Gram matrix**: $K_{ij} = (\mathbf{a}_i^\top \mathbf{a}_j)(\tilde{\mathbf{z}}_i^\top \tilde{\mathbf{z}}_j)$
+4. **Dual solve**: $\boldsymbol{\alpha} = (\mathbf{K} + \lambda \mathbf{I}_{550})^{-1}\mathbf{y}$, then $\mathbf{W} = \sum_i \alpha_i (\mathbf{a}_i \tilde{\mathbf{z}}_i^\top)$, with $\lambda = \text{RIDGE\_ALPHA} = 0.2$ (leave-one-startup-out cross-validated).
+
+### 8.3 Sub-Cluster Lagged Profile Recovery
+
+$$\text{Profit}_s(t) = \text{Base}_s + g_s \cdot t + \epsilon(t) + \sum_{a} \text{Shock}(a, s, t - \tau_s)$$
+
+Each startup's hidden sensitivity template also receives a fixed-seed independent Gaussian perturbation ($\sigma=25$/dimension) on top of its hand-authored domain-consistent base — added specifically because the hand-authored templates alone had an effective rank of only ~4.3/11 (every startup in a domain shared essentially the same archetypal shape, just rescaled), which capped how discriminative any downstream model could be regardless of fitting procedure. The perturbation raised template effective rank to ~8.6.
+
+Recovery: for each candidate lag $\tau \in \{1,3,7,14\}$, ridge-regress $\Delta\text{Profit}(t)$ on the preceding day's sub-cluster feature matrix $\mathbf{X}_\tau \in \mathbb{R}^{180\times M}$ ($M \approx 35$–$55$), keep the lag with highest $R^2$, roll sub-cluster coefficients up to their 11 parent dimensions, rescale to max magnitude 100. Currently recovers the true lag for **50/50** startups; pooled correlation against hidden templates ≈ **0.849**.
+
+### 8.4 Why CVP Mean-Centering Exists
+
+Diagnosed after both a 20→50 startup expansion and the template-perturbation step (§8.3) both failed to fix "different CVPs produce near-identical output patterns." `W`'s dominant singular direction, pre-fix, was ~88% cosine-aligned with the *mean* of all training CVP embeddings — the "generic business pitch text" component every CVP shares regardless of actual domain. In a system this underdetermined, ridge regression's minimum-norm solution spent a large share of `W`'s capacity (24% of total energy) modeling that shared, uninformative axis. Subtracting the training mean before every fit and every inference call fixed it: real-business-to-real-business output cosine similarity across a 5-CVP discrimination test dropped from a collapsed 0.90–0.99 to a properly varied **-0.31 to 0.68**, at a training-fit MAE cost of only 27.9 → 29.1.
+
+---
+
+## 9. File-by-File Module Walkthrough
+
+### 9.1 `src/marketintel/` (shared package)
+
+- **`config.py`** — every constant, path, and tuning threshold in the system, each with an inline comment explaining *why* that specific number: `PESTLE_DIMS`/`PORTERS_DIMS`/labels; `SCOPES`/`SCOPE_WEIGHTS`; all `data/` file paths including `CVP_MEAN_PATH`; `SUBCLUSTER_RELEVANCE_THRESHOLD=0.3`; `RIDGE_ALPHA=0.2`; `CVP_CENTERING_ENABLED=True`; real-ingestion paths and thresholds (`DEDUP_SIMILARITY_THRESHOLD=0.92`, `OLLAMA_TIMEOUT_SECONDS=120`, `SEED_NEIGHBOR_K=10`, `RELEVANCE_GATE_PERCENTILE=5`); the real-data migration thresholds (`REAL_DATA_MIN_TOTAL_PER_DIM=15`, `REAL_DATA_MIN_PER_POLARITY=3`, `REAL_DATA_MIN_FACTS_FOR_GATE_RECALIBRATION=50`); GDELT bulk backfill paths; `COMPARATIVE_MATCH_SIMILARITY_THRESHOLD=0.85`.
+- **`embeddings.py`** — `get_model()` (cached `SentenceTransformer("all-MiniLM-L6-v2")`), `embed_texts()`/`embed_text()` (L2-normalized output).
+- **`data_loader.py`** — `load_news()`, `load_startups()`, `load_interaction_matrix()`, `load_cvp_mean()` (returns a zero vector if `cvp_mean.npy` doesn't exist yet, for backward compatibility), `load_subclusters()`, `load_real_facts()` (returns `([], empty array)` on missing/empty/corrupted/shape-mismatched files — see §10.1), `load_real_articles()`.
+- **`analysis.py`** — `compute_gates()` (`news_embeddings @ (W @ (cvp_embedding - cvp_mean))`), `subcluster_breakdown_for_dim()`, `dimension_breakdowns()`, `raw_dimension_scores()`, `normalize_for_display()`, `near_zero_dims()`, `score_submission()` — the full per-request scoring coordinator, source-agnostic (doesn't care whether the news list it's given is fabricated-only or fabricated+real).
+- **`atomic_io.py`** — `atomic_write_json()`/`atomic_write_npy()`, temp-file-then-rename, used by every writer in the system (`ingestion.py`, `gdelt_backfill.py`).
+- **`fact_extraction.py`** — `EXTRACTION_PROMPT` (now explicitly instructs preserving directional language and returning per-fact entities); `_call_ollama()` (temperature 0.2, fixing a measured ~7% malformed-JSON rate at default temperature, though this does *not* fix hallucination — see §5); `_parse_facts()` (tolerates both the new object schema and a bare-string fallback); `extract_facts_detailed()` (returns `[{"text", "entities"}, ...]`); `extract_facts()` (backward-compatible string-only wrapper).
+- **`seed_inference.py`** — `nearest_neighbors()`, `infer_relevance()`, `infer_categorical()`, `calibrate_relevance_threshold()`, `group_indices_by_scope()`, `infer_scope_best_match()`. Every function takes its reference pool as an explicit parameter — unchanged by the real-data migration, since the caller decides what pool to pass in (see §7).
+- **`real_data_inference.py`** *(new)* — `assess_dimension_coverage()`, `assess_scope_coverage()`, `infer_hybrid()`, `infer_scope_hybrid()`, `choose_gate_threshold()`. The policy layer described in §7.
+- **`comparative_matching.py`** *(new)* — `has_own_direction()`, `extract_numeric_value()`, `entities_overlap()` (Jaccard-based), `find_prior_match()`, `compute_direction()`, `resolve_comparative_fact()`. Described fully in §4.
+- **`grounding.py`** *(new)* — `is_likely_non_content()`, `extract_numbers()`, `is_grounded()`. Described fully in §5.
+- **`ingestion.py`** — `fetch_rss()`/`fetch_gdelt()` (both HTML-unescape titles), `find_duplicate_fact()` (dedup relative to wall-clock "now" — appropriate for a live stream), `run_ingestion_once()` — the complete live-per-item coordinator: fetch → pre-filter → decompose → grounding check → embed → dedup → hybrid relevance/polarity/scope inference → relevance gate → comparative matching → atomic write. The single implementation both `ingestion_service.py` and `scripts/ingest_news.py` call.
+- **`gdelt_bulk.py`** *(new)* — `gkg_timestamps()`, `gkg_url_for()`, `download_gkg_file()`, `_extract_title()` (real crawled `<PAGE_TITLE>` from the GKG `Extras` field, HTML-unescaped, with a URL-slug fallback for the rare record missing it), `_extract_country_codes()`, `parse_gkg_bytes()`, `matches_tier()`, `fetch_and_filter()`.
+- **`gdelt_backfill.py`** *(new)* — `_EntityIndex` (inverted index for comparative-matching performance at bulk scale), `find_duplicate_fact()` (dedup relative to the fact's *own* publish timestamp — appropriate for a historical replay, deliberately different from `ingestion.py`'s wall-clock version), `run_backfill()` — the reordered batch coordinator: fetch (tier-filtered) → embed → relevance gate → pre-filter + decompose survivors → grounding check → dedup → seed inference (still fabricated-only, untouched by §7) → comparative matching → atomic write, checkpointed every 20 files.
+- **`live_facts.py`** — `compute_subcluster_centroids()`, `assign_fact_subclusters()`, `merge_subclusters()`, `normalize_fact_as_article()`, `build_combined_corpus()` (now returns a 4-tuple including `live_facts_count`). Described fully in §2a and §6.
+
+### 9.2 `scripts/` — offline training pipeline (run once, in order, by hand)
+
+`generate_news.py` (1000 fabricated articles + embeddings) → `generate_startups.py` (50 fabricated startups, up from an original 20 — see §8.3) → `discover_subclusters.py` (§6) → `hidden_ground_truth.py` (hidden templates + Gaussian perturbation, §8.3) → `simulate_profit_history.py` → `derive_sensitivity_profiles.py` → `train_interaction_matrix.py` (now also writes `cvp_mean.npy`, §8.4).
+
+### 9.3 `scripts/` — validation and one-off scripts
+
+`validate_umbrella_case.py`, `validate_fact_decomposition.py`, `validate_scope_fix.py` (existing, updated for hard regression assertions); `validate_comparative_matching.py`, `validate_grounding.py`, `validate_real_data_migration.py` *(new — §4, §5, §7)*; `audit_grounding_retroactive.py` *(new — read-only retroactive audit against already-collected data)*; `remediate_html_entity_corruption.py` *(new — one-time fix for facts collected before the HTML-unescape fix landed)*; `ingest_news.py` (CLI wrapper); `run_gdelt_backfill.py` *(new — CLI for the batch backfill, §10.3)*.
+
+### 9.4 Application processes
+
+- **`server.py`** — `data_ready()`, `get_state()` (caches news/embeddings/`W`/`cvp_mean`/subclusters/centroids for the process's lifetime), `POST /api/analyze` (embeds the CVP, builds the combined real+fabricated corpus fresh every call, scores, returns display data plus `live_facts_count`/`seed_only`), `GET /` (serves `web/index.html`).
+- **`ingestion_service.py`** — `_run_and_record()`, `_ingestion_loop()` (fires immediately on startup, then every 30 minutes via a plain `asyncio` loop), `GET /health` (now reports non-content/ungrounded rejection counts, comparative-match counts, real-vs-fabricated polarity source counts, per-dimension coverage, and gate threshold source, alongside the original fields).
+- **`web/index.html`** — self-contained two-state frontend, Plotly radar charts (PESTLE hexagon, Porter's pentagon), drill-down accordions with a "LIVE" badge on real-fact rows. `app.py` (a legacy Streamlit version) **no longer exists in the repository** — fully replaced.
+
+---
+
+## 10. Flowcharts — One Per Service, Not Combined
+
+Each service below runs, starts, stops, and fails independently — the three diagrams are deliberately not merged into one combined system diagram.
+
+### 10.1 `server.py` — Analysis & Scoring Service
+
+```mermaid
+flowchart TD
+    U["User pastes a CVP<br/>in web/index.html"] -->|"POST /api/analyze<br/>{cvp: ...}"| S["server.py"]
+    S --> DR{"data_ready()?<br/>news.json, embeddings,<br/>W, subclusters all exist"}
+    DR -- "no" --> E503["HTTP 503<br/>run the data pipeline first"]
+    DR -- "yes" --> GS["get_state()<br/>(cached once per process:<br/>news, W, cvp_mean, subclusters, centroids)"]
+    GS --> EMB["embed_text(cvp)<br/>-> 384-d unit vector"]
+    EMB --> LR["load_real_facts()<br/>(fresh every call - NOT cached)"]
+    LR --> LRCHECK{"real_facts.json /<br/>embeddings.npy present,<br/>parseable, row counts match?"}
+    LRCHECK -- "no: missing / empty /<br/>corrupted / stale" --> SEEDONLY["Fall back to seed-only.<br/>Print a visible warning.<br/>live_facts_count = 0"]
+    LRCHECK -- "yes" --> COMBINE["build_combined_corpus():<br/>assign real facts to nearest<br/>existing sub-clusters,<br/>concat with fabricated corpus"]
+    SEEDONLY --> SCORE
+    COMBINE --> SCORE["score_submission():<br/>compute_gates() via W,<br/>per-subcluster contribution,<br/>roll up to 11 dimensions"]
+    SCORE --> SER["serialize_breakdown()<br/>+ live_facts_count + seed_only"]
+    SER --> RESP["HTTP 200 JSON"]
+    RESP --> UI["web/index.html renders<br/>PESTLE hexagon + Porter's pentagon<br/>+ drill-down accordions"]
+
+    style E503 fill:#4a1f1f,color:#fff
+    style SEEDONLY fill:#4a3a1f,color:#fff
 ```
-Level 0: Raw Article Generation (Continuous Soft Multi-Dimensional Relevance + Polarity)
-   │
-   ├── Level 1: Dimension Filtering (Hard thresholding at relevance > 0.3)
-   │      │
-   │      └── Level 2: Sub-Cluster Discovery (Unsupervised Agglomerative Clustering)
-   │             │
-   │             └── Level 3: Centroid N-Gram Label Extraction (Human-readable Sub-Topic Naming)
+
+**Key property**: the `load_real_facts()` → `LRCHECK` branch is why this service never hard-fails on missing or corrupted ingestion output — this was a real, reproduced bug (an empty `real_facts.json` raised an unhandled `JSONDecodeError` → HTTP 500) fixed by treating every failure mode identically to "ingestion hasn't run yet."
+
+### 10.2 Ingestion Microservice
+
+```mermaid
+flowchart TD
+    START(["ingestion_service.py starts<br/>(uvicorn, port 8502)"]) --> IMM["Fires run_ingestion_once()<br/>immediately"]
+    IMM --> LOOP["asyncio loop:<br/>repeat every 30 minutes"]
+    LOOP --> FETCH["Fetch from BBC World RSS,<br/>Al Jazeera RSS, Google News RSS,<br/>GDELT DOC 2.0 API<br/>(HTML-unescape titles)"]
+    FETCH --> PREFILTER{"is_likely_non_content(title)?<br/>grounding.py"}
+    PREFILTER -- "yes: junk" --> LOGJUNK["Log to<br/>ingestion_noncontent.jsonl<br/>(skip Ollama call)"]
+    PREFILTER -- "no" --> DECOMP["extract_facts_detailed()<br/>local Ollama llama3.2:3b<br/>-> [{text, entities}, ...]"]
+    DECOMP --> GROUND{"is_grounded(fact, title)?<br/>every stated number traces<br/>to the source"}
+    GROUND -- "no" --> LOGUNGR["Log to<br/>ingestion_ungrounded.jsonl"]
+    GROUND -- "yes" --> EMBED["embed_text(fact)"]
+    EMBED --> DEDUP{"cosine sim >= 0.92 vs.<br/>facts from last 48h?"}
+    DEDUP -- "yes" --> MERGE["Increment mention_count<br/>on existing record"]
+    DEDUP -- "no" --> HYBRID["infer_hybrid() / infer_scope_hybrid()<br/>real_data_inference.py:<br/>per-dimension + per-scope-class,<br/>real pool if coverage passes,<br/>else fabricated pool"]
+    HYBRID --> GATE{"max relevance >= gate threshold?<br/>(real-corpus-calibrated<br/>once >=50 real facts exist)"}
+    GATE -- "no" --> LOGEXCL["Log to<br/>ingestion_excluded.jsonl"]
+    GATE -- "yes" --> COMPARE["resolve_comparative_fact()<br/>comparative_matching.py<br/>(see dedicated flow, section 4)"]
+    COMPARE --> STORE["Assemble fact + article records<br/>(inference_source, scope_source,<br/>comparative fields)"]
+    STORE --> WRITE["atomic_write_json/npy():<br/>real_facts.json, real_articles.json,<br/>real_fact_embeddings.npy"]
+    WRITE --> LOOP
+    MERGE --> LOOP
+    LOGJUNK --> LOOP
+    LOGUNGR --> LOOP
+    LOGEXCL --> LOOP
+
+    HEALTH(["GET /health<br/>(any time)"]) -.-> STATUS["Returns last run's timestamps,<br/>counts (fetched, rejected-noncontent,<br/>extracted, ungrounded, excluded, added),<br/>comparative match counts,<br/>per-dimension coverage,<br/>gate threshold source"]
+
+    style LOGJUNK fill:#3a3a1f,color:#fff
+    style LOGUNGR fill:#4a1f1f,color:#fff
+    style LOGEXCL fill:#3a3a1f,color:#fff
 ```
 
-### Level 0: Soft Multi-Dimensional Ground Truth & Polarity
-- **PESTLE Vector**: 6 continuous values in $[0.0, 1.0]$.
-- **Porter's Vector**: 5 continuous values in $[0.0, 1.0]$.
-- **Polarity**: Binary directional state ($+1.0$ for `"positive"`, $-1.0$ for `"negative"`).
-- **Scope**: Geographic tag (`"LPU"`, `"Phagwara"`, `"Jalandhar"`, `"Kapurthala"`, `"Punjab"`, `"India"`, `"World"`).
-- **Cross-Dimensional Relevance**: A single event can carry simultaneous relevance across multiple dimensions (e.g., an import tariff is both Political $0.90$ and Economic $0.80$, while increasing Supplier Power $0.60$).
+### 10.3 GDELT Bulk Backfill (batch, currently paused)
 
-### Level 1: Dimension Partitioning & Cross-Membership
-- Clustering is executed independently for each of the 11 dimensions.
-- An article is included in a dimension's cluster pool if:
-  $$\text{relevance}(a, d) > \text{SUBCLUSTER\_RELEVANCE\_THRESHOLD} \quad (0.30)$$
-- **Cross-Membership**: Because an article can be relevant to several dimensions, it is assigned independently to sub-clusters in each relevant dimension.
+```mermaid
+flowchart TD
+    CLI(["python scripts/run_gdelt_backfill.py<br/>--tier india --start ... --end ..."]) --> RESUME{"data/backfill_state.json:<br/>resume from last checkpoint?"}
+    RESUME --> LOOP["For each 15-minute GKG file<br/>in the date range"]
+    LOOP --> DL["download_gkg_file()<br/>+ parse_gkg_bytes():<br/>extract PAGE_TITLE (HTML-unescaped),<br/>country codes, timestamp"]
+    DL --> TIER{"matches_tier()?<br/>'india': country code IN present<br/>'world': always true"}
+    TIER -- "no" --> LOOP
+    TIER -- "yes" --> EMBED["Batch embed_texts()<br/>on tier-filtered titles"]
+    EMBED --> GATE{"relevance gate<br/>(fabricated-corpus-calibrated,<br/>NOT migrated - untouched)"}
+    GATE -- "no" --> EXCL["Log to backfill_excluded.jsonl"]
+    GATE -- "yes" --> PREFILTER{"is_likely_non_content(title)?"}
+    PREFILTER -- "yes" --> NONC["Log to backfill_noncontent.jsonl<br/>(skip Ollama - bounds the<br/>dominant cost at bulk volume)"]
+    PREFILTER -- "no" --> DECOMP["extract_facts_detailed()<br/>local Ollama, survivors only"]
+    DECOMP --> GROUND{"is_grounded()?"}
+    GROUND -- "no" --> UNGR["Log to backfill_ungrounded.jsonl"]
+    GROUND -- "yes" --> DEDUP{"dedup vs. facts published<br/>within 48h BEFORE this<br/>fact's own timestamp<br/>(historical-replay semantics)"}
+    DEDUP -- "duplicate" --> MERGE["Increment mention_count"]
+    DEDUP -- "new" --> SEEDINFER["Seed inference: fabricated<br/>corpus only (untouched by<br/>section 7's migration)"]
+    SEEDINFER --> COMPARE["resolve_comparative_fact()<br/>via entity-inverted-index<br/>for scale"]
+    COMPARE --> APPEND["Append to in-memory<br/>facts / embeddings"]
+    APPEND --> CHECKPOINT{"20 files since<br/>last checkpoint?"}
+    CHECKPOINT -- "yes" --> FLUSH["atomic_write: backfill_facts.json,<br/>backfill_articles.json,<br/>backfill_fact_embeddings.npy,<br/>backfill_state.json"]
+    CHECKPOINT -- "no" --> LOOP
+    FLUSH --> LOOP
+    MERGE --> LOOP
+    EXCL --> LOOP
+    NONC --> LOOP
+    UNGR --> LOOP
+    LOOP -->|"range exhausted"| DONE(["Final flush + exit"])
 
-### Level 2: Semantic Sub-Clustering via Agglomerative Clustering
-For all article embeddings in a dimension:
-1. **Distance Metric**: Cosine distance ($1 - \mathbf{u}^\top \mathbf{v}$) over $L_2$-normalized 384-d vectors.
-2. **Linkage Criterion**: `average` linkage (UPGMA).
-3. **Adaptive Cluster Count Selection (`best_clustering`)**:
-   - Tests candidate cluster counts $k \in [3, 4, 5, 6, 7]$.
-   - Computes Cosine Silhouette Scores $S(k)$.
-   - **Tuning Heuristic**: Rather than a naive $\arg\max_k S(k)$ (which is heavily biased toward over-splitting short texts into singletons), the algorithm chooses the **smallest $k$** that achieves at least **90% (`tolerance = 0.90`)** of the peak silhouette score:
-     $$k^* = \min \{ k \mid S(k) \ge 0.90 \cdot \max_{j} S(j) \}$$
-
-### Level 3: Sub-Cluster Label Generation (`label_cluster`)
-Sub-cluster names are synthesized unsupervised from the articles closest to each cluster's semantic center:
-1. **Centroid Computation**:
-   $$\mathbf{c} = \frac{1}{|C|} \sum_{i \in C} \mathbf{e}_i$$
-2. **Representative Retrieval**: Computes cosine similarities $\mathbf{e}_i^\top \mathbf{c}$ and retrieves the top 3 nearest articles.
-3. **Keyword Extraction & Stopword Pruning**:
-   - Extracts all alphabetic tokens (`[A-Za-z']+`) from the 3 titles.
-   - Discards short tokens ($\le 3$ characters) and 30+ domain stopwords (`the`, `with`, `amid`, `across`, `into`, etc.).
-4. **N-Gram Synthesis**:
-   - Identifies the top 2 most frequent title keywords via `Counter` and capitalizes them (e.g., `"Tariffs Rattle"`, `"Visa Immigration"`, `"Recession Fears"`, `"Monsoon Sowing"`).
-   - If no words qualify, falls back to the exact title of the nearest article.
-
----
-
-## 3. Real News Ingestion, Fact Decomposition & Seed Transfer
-
-The system incorporates a complete live news pipeline (`src/marketintel/ingestion.py`) that operates on real global news while remaining separate from the fabricated training corpus.
-
-### 3.1 The Unit of Analysis: Atomic Facts vs. Articles
-Real news articles often contain mixed claims with divergent business implications (e.g., a tax bill that increases high-income brackets while cutting middle-income brackets).
-- **Fact Decomposition (`src/marketintel/fact_extraction.py`)**: Uses a local Ollama LLM (`llama3.2:3b`) to decompose raw headlines/articles into distinct, independently-scorable atomic facts.
-- **Stylistic Neutralization**: Strips loaded editorial framing, opinion, and rhetorical flourishes while preserving exact numbers, thresholds, dates, and named entities.
-- **Fallback Guarantee**: If Ollama is offline or times out, the extractor safely falls back to treating the input text as a single unmodified fact.
-- **Provenance Separation**: `data/real_articles.json` stores container metadata (headline, source URL, timestamp, child fact IDs), while `data/real_facts.json` and `data/real_fact_embeddings.npy` store the individual scorable fact records.
-
-### 3.2 Semantic Deduplication
-- Newly extracted facts are compared against facts published within the rolling **48-hour window** (`DEDUP_WINDOW_HOURS`).
-- If cosine similarity $\ge 0.92$ (`DEDUP_SIMILARITY_THRESHOLD`), the fact is recognized as a duplicate story from another outlet. It increments `mention_count` and updates `last_seen` without creating a duplicate record.
-
-### 3.3 The Relevance Gate
-- Global news feeds contain general topics (sports, local crimes, celebrity news) irrelevant to business market scanning.
-- **Gate Calibration**: The system computes the 5th percentile of the maximum dimension relevance across the 1000 seed articles (yielding a cutoff threshold of $\approx 0.58$).
-- **Noise Filtering**: Any real fact whose maximum inferred relevance across all 11 dimensions is below this threshold is rejected, prevented from entering the downstream pipeline, and logged to `data/ingestion_excluded.jsonl`.
-
-### 3.4 Seed Corpus Transfer & Scope Bias Elimination
-Because no human-labeled real dataset exists, real facts infer their properties from the 1000-article seed corpus (`src/marketintel/seed_inference.py`):
-1. **Relevance & Polarity**: Computed via similarity-weighted voting across the $k=10$ nearest seed neighbors.
-2. **Geographic Scope (Per-Class-Best-Match)**:
-   - *The Bias Problem*: In naive pooled $k$-NN voting, majority classes in the seed corpus (`India`=300, `Punjab`=150) frequently won out over smaller classes (`World`=250, `LPU`=50) simply due to density, causing foreign stories to be misclassified as Indian.
-   - *The Solution*: For each of the 7 scope classes, the algorithm finds only that class's **single closest seed article**. The fact is assigned whichever class's single best match has the highest cosine similarity. This prevents population volume from distorting geographic attribution.
-
----
-
-## 4. End-to-End Mathematical & Machine Learning Formulations
-
-### 4.1 The Bilinear Interaction Operator $W$
-The interaction between a business positioning vector $\mathbf{z} \in \mathbb{R}^{384}$ and an event vector $\mathbf{x} \in \mathbb{R}^{384}$ is defined as:
-$$\text{gate}(\mathbf{x}, \mathbf{z}) = \mathbf{x}^\top \mathbf{W} \mathbf{z}$$
-
-### 4.2 Kernel Dual Ridge Regression
-With $N = 20 \text{ startups} \times 11 \text{ dimensions} = 220$ training instances and $384 \times 384 = 147,456$ parameters, solving in the primal space would be severely ill-conditioned.
-
-1. **Combined News Vector** for startup $s$ and dimension $d$:
-   $$\mathbf{a}_{s, d} = \sum_{j \in \text{Linked}(s)} \text{relevance}(j, d) \cdot \text{polarity}(j) \cdot \mathbf{x}_j$$
-2. **Prediction Equivalence**:
-   $$\hat{y}_{s, d} = \mathbf{a}_{s, d}^\top \mathbf{W} \mathbf{z}_s = \text{vec}(\mathbf{a}_{s, d} \mathbf{z}_s^\top)^\top \text{vec}(\mathbf{W})$$
-3. **Dual Kernel Gram Matrix**:
-   Applying the tensor contraction identity $(\mathbf{a}_1 \otimes \mathbf{b}_1)^\top (\mathbf{a}_2 \otimes \mathbf{b}_2) = (\mathbf{a}_1^\top \mathbf{a}_2)(\mathbf{b}_1^\top \mathbf{b}_2)$:
-   $$\mathbf{K}_{ij} = (\mathbf{a}_i^\top \mathbf{a}_j) \cdot (\mathbf{z}_i^\top \mathbf{z}_j)$$
-4. **Dual Closed-Form Solution**:
-   $$\boldsymbol{\alpha} = (\mathbf{K} + \lambda \mathbf{I}_{N})^{-1} \mathbf{y}$$
-   $$\mathbf{W} = \sum_{i=1}^N \alpha_i (\mathbf{a}_i \mathbf{z}_i^\top)$$
-   where $\lambda = \text{RIDGE\_ALPHA} = 0.20$ (selected via leave-one-startup-out cross-validation).
-
-### 4.3 Sub-Cluster Lagged Profile Recovery
-To generate grounded training targets without hand-authoring:
-1. **Profit Simulation**:
-   $$\text{Profit}_s(t) = \text{Base}_s + g_s \cdot t + \epsilon(t) + \sum_{a \in \text{News}} \text{Shock}(a, s, t - \tau_s)$$
-2. **Sub-Cluster Design Matrix** $\mathbf{X}_\tau \in \mathbb{R}^{180 \times M}$ (~35–55 features):
-   $$\mathbf{X}_\tau[t, m] = \sum_{a \in \text{News on } t - \tau, a \in m} \text{relevance}(a, d) \cdot \text{polarity}(a)$$
-3. **Lagged Ridge Regression**:
-   Regresses $\Delta \text{Profit}(t)$ on $\mathbf{X}_\tau[t]$ with unpenalized intercept:
-   $$\boldsymbol{\beta}_\tau = (\mathbf{X}_\tau^\top \mathbf{X}_\tau + \lambda_{\text{profile}} \mathbf{I})^{-1} \mathbf{X}_\tau^\top \Delta \text{Profit}$$
-4. **Dimension Rollup & Rescaling**:
-   Selects $\tau^* = \arg\max_\tau R^2(\tau)$, sums sub-cluster coefficients to parent dimensions, and scales the maximum magnitude to $100.0$.
-
----
-
-## 5. Granular File-by-File, Module-by-Module Code Walkthrough
-
----
-
-### 5.1 Core ML & Analysis Package (`src/marketintel/`)
-
-#### `src/marketintel/config.py`
-- **Lines 1–27**: Defines canonical lists `PESTLE_DIMS` and `PORTERS_DIMS` and display label maps `PESTLE_LABELS` and `PORTERS_LABELS`.
-- **Lines 28–39**: Defines `SCOPES` and `SCOPE_WEIGHTS`, establishing realistic geographic distributions.
-- **Line 41**: Sets `EMBEDDING_MODEL_NAME = "all-MiniLM-L6-v2"`.
-- **Lines 43–51**: Resolves project root and paths for all data artifacts (`data/news.json`, `data/startups.json`, `data/subclusters.json`, `data/interaction_matrix.npy`, `data/profit_history.json`).
-- **Lines 53–59**: Defines `SUBCLUSTER_RELEVANCE_THRESHOLD = 0.3` and `SUBCLUSTER_K_RANGE = [3, 4, 5, 6, 7]`.
-- **Lines 61–74**: Configures profile regression penalty `PROFILE_REGRESSION_ALPHA = 4.0`, time horizon `N_PROFIT_DAYS = 180`, and `CANDIDATE_LAGS = [1, 3, 7, 14]`.
-- **Lines 76–92**: Sets dataset scale `N_NEWS_ARTICLES = 1000`, `RIDGE_ALPHA = 0.2`, and `NEAR_ZERO_FRACTION = 0.10`.
-- **Lines 94–141**: Real news ingestion settings: paths for `real_articles.json`, `real_facts.json`, `real_fact_embeddings.npy`, `ingestion_state.json`, `ingestion_samples.jsonl`, and `ingestion_excluded.jsonl`. Sets `DEDUP_WINDOW_HOURS = 48`, `DEDUP_SIMILARITY_THRESHOLD = 0.92`, `OLLAMA_HOST = "http://localhost:11434"`, `OLLAMA_MODEL = "llama3.2:3b"`, `SEED_NEIGHBOR_K = 10`, and `RELEVANCE_GATE_PERCENTILE = 5`.
-
-#### `src/marketintel/embeddings.py`
-- `get_model()`: Cached wrapper with `@lru_cache(maxsize=1)` loading `SentenceTransformer(EMBEDDING_MODEL_NAME)`.
-- `embed_texts(texts: list[str]) -> np.ndarray`: Encodes batches of text with `normalize_embeddings=True` ($L_2$ unit vectors).
-- `embed_text(text: str) -> np.ndarray`: Encodes a single text string returning a 1D vector of shape `(384,)`.
-
-#### `src/marketintel/data_loader.py`
-- `load_news()`: Loads `news.json` and `news_embeddings.npy`.
-- `load_startups()`: Loads `startups.json` and `startup_embeddings.npy`.
-- `news_by_id(news)`: Returns dictionary mapping `id` to article object.
-- `load_interaction_matrix()`: Loads `interaction_matrix.npy` ($384 \times 384$).
-- `load_subclusters()`: Loads `subclusters.json`.
-- `load_real_facts()`: Loads `real_facts.json` and `real_fact_embeddings.npy` (returns empty lists if not present).
-- `load_real_articles()`: Loads `real_articles.json`.
-
-#### `src/marketintel/analysis.py`
-- `polarity_sign(article: dict) -> float`: Returns `1.0` if polarity is `"positive"` else `-1.0`.
-- `compute_gates(news_embeddings, cvp_embedding, W)`: Vectorized calculation `news_embeddings @ (W @ cvp_embedding)`.
-- `subcluster_breakdown_for_dim(news, gates, dim, score_field, dim_subclusters, top_n_articles=5)`:
-  - Multiplies $\text{relevance} \times \text{polarity} \times \text{gate}$ for assigned articles.
-  - Groups contributions by sub-cluster, identifies top 5 articles per cluster, and sorts clusters by descending absolute score.
-- `dimension_breakdowns(...)`: Computes sub-cluster breakdowns across all requested dimensions.
-- `raw_dimension_scores(breakdown)`: Sums sub-cluster raw scores to parent dimension scores.
-- `normalize_for_display(raw_scores)`: Linearly rescales scores so the largest absolute value equals $100.0$.
-- `near_zero_dims(raw_pestle, raw_porters, fraction)`: Identifies dimensions whose score is $<10\%$ of the maximum magnitude.
-- `score_submission(news, news_embeddings, cvp_embedding, W, subclusters)`: Full analysis coordinator returning display scores, breakdowns, and negligible flags.
-
-#### `src/marketintel/atomic_io.py`
-- `atomic_write_json(path: Path, data) -> None`: Dumps JSON to `path.tmp` and executes atomic `tmp_path.replace(path)`.
-- `atomic_write_npy(path: Path, array: np.ndarray) -> None`: Saves NumPy array to a binary `.tmp` stream and renames it atomically over the target.
-
-#### `src/marketintel/fact_extraction.py`
-- `EXTRACTION_PROMPT`: Structured prompt instructing the LLM to extract distinct factual claims, preserve specifics (numbers, dates, entities), strip rhetorical framing, and output a raw JSON array of strings.
-- `_call_ollama(text: str) -> str`: Dispatches POST request to `{OLLAMA_HOST}/api/generate` with timeout handling.
-- `_parse_facts(raw_response: str) -> list[str] | None`: Uses regex `r"\[.*\]"` with `re.DOTALL` to parse the JSON array from the response.
-- `extract_facts(text: str) -> list[str]`: Main entry point returning extracted fact strings; catches network/parsing errors and safely falls back to `[text]`.
-
-#### `src/marketintel/seed_inference.py`
-- `nearest_neighbors(embedding, seed_embeddings, k=10)`: Computes dot products, finds top $k$ neighbors, clips similarities to $\ge 0$, and normalizes weights to sum to 1.
-- `infer_relevance(seed_news, top_idx, weights)`: Computes weighted average of neighbor relevance scores across all 11 dimensions.
-- `infer_categorical(seed_news, top_idx, weights, field)`: Performs weighted plurality voting among neighbors for discrete fields (`polarity`).
-- `calibrate_relevance_threshold(seed_news, percentile=5)`: Computes the 5th percentile of maximum dimension relevance across the seed dataset.
-- `group_indices_by_scope(seed_news)`: Partitions seed article indices by their geographic scope.
-- `infer_scope_best_match(embedding, seed_embeddings, scope_indices)`: Evaluates maximum similarity within each scope partition and assigns the scope associated with the highest individual match.
-
-#### `src/marketintel/ingestion.py`
-- `fetch_rss(url, since)` / `fetch_gdelt(since)`: Fetches items from RSS feeds and the GDELT DOC 2.0 API published after the `since` cursor.
-- `find_duplicate_fact(new_embedding, facts, fact_embeddings, now)`: Searches facts within the 48-hour window for cosine similarity $\ge 0.92$.
-- `run_ingestion_once(verbose=True)`: Complete ingestion coordinator executing fetch, fact decomposition, dedup, relevance gating, seed scoring, and atomic saving.
-
----
-
-### 5.2 Offline Training & Data Generation Pipeline (`scripts/`)
-
-#### `scripts/hidden_ground_truth.py`
-- `HIDDEN_TEMPLATES`: Defines domain-grounded hidden sensitivity profiles across all 20 reference startups.
-- `shock_lag_days`: Deterministically assigns lag values cycling through $[1, 3, 7, 14]$ days ($i \pmod 4$).
-
-#### `scripts/generate_news.py`
-- `TEMPLATES`: Parameterized news templates covering diverse PESTLE and Porter's dimensions.
-- `build_scores(base, dims, rng)`: Adds uniform noise ($\pm 0.08$) to active dimensions and background noise ($0.02 - 0.12$) to inactive dimensions.
-- `generate_articles(n, rng)`: Generates 1000 synthetic news articles with scopes, polarities, dates, and score vectors.
-- `main()`: Persists `data/news.json` and generates `data/news_embeddings.npy` (shape $1000 \times 384$).
-
-#### `scripts/generate_startups.py`
-- `STARTUPS`: Definitions of 20 Indian startup concepts with detailed CVPs.
-- `pick_linked_articles(hidden, news, rng)`: Links 3 to 5 matching seed articles to each startup based on dominant hidden dimensions.
-- `main()`: Writes `data/startups.json` and embeds CVPs into `data/startup_embeddings.npy` ($20 \times 384$).
-
-#### `scripts/discover_subclusters.py`
-- `best_clustering(embeddings, k_range, tolerance=0.9)`: Agglomeratively clusters dimension embeddings and selects the smallest $k$ achieving $90\%$ of peak silhouette score.
-- `label_cluster(articles, embeddings, member_idx)`: Finds the 3 articles closest to the centroid, prunes stopwords, and returns the top 2 frequent title keywords.
-- `discover_for_dimension(news, embeddings, score_field, dim)`: Filters articles with relevance $>0.30$ and executes clustering and labeling.
-- `main()`: Generates and saves `data/subclusters.json`.
-
-#### `scripts/simulate_profit_history.py`
-- `simulate_one(hidden, news, rng)`: Generates 180-day baseline profit series with trend, Gaussian noise ($\sigma = 4\%$), and delayed financial shocks from relevant news events.
-- `main()`: Writes synthetic financial histories to `data/profit_history.json`.
-
-#### `scripts/derive_sensitivity_profiles.py`
-- `build_feature_columns(subclusters)`: Creates indexed feature columns for all (dimension, sub-cluster) pairs.
-- `build_daily_signal(news, subclusters, columns, n_days)`: Builds the $(180 \times M)$ daily event signal matrix.
-- `fit_lag_ridge(profit, signal, lag, alpha)`: Solves lagged ridge regression on daily profit differences $\Delta \text{Profit}$.
-- `derive_profile(profit, signal, columns)`: Selects optimal lag via $R^2$, rolls sub-cluster coefficients up to dimensions, and normalizes.
-- `main()`: Updates `data/startups.json` with derived profiles and prints validation metrics against hidden ground truth.
-
-#### `scripts/train_interaction_matrix.py`
-- `build_training_examples(...)`: Constructs 220 $(startup, dimension)$ training tuples with combined news vectors $\mathbf{a}_{s, d}$ and CVP vectors $\mathbf{z}_s$.
-- `fit_interaction_matrix(combined_vecs, cvp_vecs, targets, alpha)`: Solves Kernel Dual Ridge Regression using $\mathbf{K} = (\mathbf{A}\mathbf{A}^\top) \odot (\mathbf{Z}\mathbf{Z}^\top)$ and constructs $\mathbf{W} \in \mathbb{R}^{384 \times 384}$.
-- `main()`: Fits $\mathbf{W}$ ($\alpha=0.20$) and saves `data/interaction_matrix.npy`.
-
----
-
-### 5.3 Validation & Ingestion Scripts (`scripts/`)
-
-#### `scripts/validate_umbrella_case.py`
-- Runs a synthetic umbrella-retailer CVP through the full scoring pipeline.
-- Asserts that the rain/monsoon sub-cluster scores $>0$, the drought sub-cluster scores $<0$, and the unrelated deforestation sub-cluster scores near-zero ($\le 10\%$).
-
-#### `scripts/validate_fact_decomposition.py`
-- Tests `extract_facts()` on a multi-clause tax reform article.
-- Validates that the article decomposes into two separate facts with opposing polarities.
-
-#### `scripts/validate_scope_fix.py`
-- Evaluates real facts stored in `data/real_facts.json` against the relevance gate and per-class-best-match scope rule.
-- Confirms the exclusion of non-business noise (e.g., sports studies) and reports the rebalanced geographic distribution.
-
-#### `scripts/ingest_news.py`
-- CLI script calling `run_ingestion_once(verbose=True)` for manual execution or cron scheduling.
-
----
-
-### 5.4 Application Servers & Frontend
-
-#### `server.py`
-- **FastAPI Application**: Backend adapting the ML pipeline to HTTP.
-- `data_ready()`: Verifies required data artifacts exist.
-- `get_state()`: In-memory cache holding news, embeddings, interaction matrix $\mathbf{W}$, and sub-clusters.
-- `POST /api/analyze`: Accepts JSON payload `{"cvp": "..."}`, generates CVP embedding, runs `score_submission()`, and returns serialized display scores and breakdowns.
-- `GET /`: Serves `web/index.html`.
-- Mounts `/static` for static frontend assets.
-
-#### `ingestion_service.py`
-- **FastAPI Microservice**: Standalone ingestion scheduler running on port 8502.
-- `lifespan`: Spawns an `asyncio` background task that runs `run_ingestion_once()` on startup and repeats every 30 minutes.
-- Uses `asyncio.to_thread` to ensure blocking network and embedding tasks do not stall the event loop.
-- `GET /health`: Returns last run timestamp, success status, and counts of articles fetched and facts extracted/excluded/added.
-
-#### `app.py`
-- Legacy Streamlit implementation featuring dual Plotly radar charts, color-coded vertices, and hierarchical drill-down accordions.
-
-#### `web/index.html`
-- Self-contained, zero-build web interface.
-- Custom dark-mode styling utilizing CSS design tokens (`Space Grotesk` and `IBM Plex Mono`).
-- Uses local vendored Plotly.js (`/static/vendor/plotly.min.js`).
-- Features a two-state UI (input card and results dashboard) with side-by-side PESTLE and Porter's radar charts and interactive dimension drill-down accordions.
-
----
-
-## 6. Submodule Interaction Matrix & Descriptive System Flowcharts
-
-This section provides comprehensive flowcharts formatted in clean ASCII / Unicode block architecture (guaranteed to render perfectly in every markdown editor, browser, and terminal) alongside syntax-validated Mermaid diagrams.
-
----
-
-### 6.1 Global Submodule Dependency & Interaction Flowchart
-
+    style EXCL fill:#3a3a1f,color:#fff
+    style NONC fill:#3a3a1f,color:#fff
+    style UNGR fill:#4a1f1f,color:#fff
 ```
-========================================================================================================================
-                                     GLOBAL SYSTEM SUBMODULE INTERACTION MAP
-========================================================================================================================
 
-                                         +-----------------------------+
-                                         |      src/marketintel/       |
-                                         |          config.py          |
-                                         | (Dimensions, Paths, Params) |
-                                         +--------------+--------------+
-                                                        |
-         +----------------------------------------------+----------------------------------------------+
-         |                                              |                                              |
-         v                                              v                                              v
-+------------------+                          +-------------------+                          +-------------------+
-| src/marketintel/ |                          | src/marketintel/  |                          | src/marketintel/  |
-|  embeddings.py   |                          |  data_loader.py   |                          |   atomic_io.py    |
-| (all-MiniLM-L6)  |                          | (Safe JSON / NPY) |                          | (Safe .tmp write) |
-+--------+---------+                          +---------+---------+                          +---------+---------+
-         |                                              |                                              |
-         +----------------------+-----------------------+----------------------------------------------+
-                                |
-+-------------------------------+--------------------------------------------------------------------------------------+
-| OFFLINE TRAINING & SENSITIVITY MODELING PIPELINE                                                                     |
-|                                                                                                                      |
-|   1. generate_news.py ──────► data/news.json & data/news_embeddings.npy (1000 x 384)                                |
-|            |                                                                                                         |
-|            +──────────────────────┐                                                                                  |
-|            v                      v                                                                                  |
-|   2. generate_startups.py   3. discover_subclusters.py ──────► data/subclusters.json (Agglomerative + Silhouette)    |
-|            |                                                         |                                               |
-|            v                                                         |                                               |
-|   4. simulate_profit_history.py (hidden_ground_truth.py) ──► data/profit_history.json (180 days daily revenue series)|
-|            |                                                         |                                               |
-|            +─────────────────────────────────────────────────────────+                                               |
-|            v                                                                                                         |
-|   5. derive_sensitivity_profiles.py (Lagged Ridge on Delta Profit) ──► Overwrites data/startups.json                 |
-|            |                                                                                                         |
-|            v                                                                                                         |
-|   6. train_interaction_matrix.py (Dual Kernel Ridge Regression) ──► data/interaction_matrix.npy (384 x 384 W)       |
-+----------------------------------------------------------------------------------------------------------------------+
-                                |
-                                +----------------------------------------------------------------+
-                                |                                                                |
-                                v                                                                v
-+-------------------------------------------------------------+ +------------------------------------------------------+
-| ONLINE ANALYSIS & SCORING PIPELINE (server.py)              | | REAL-TIME NEWS INGESTION TRACK (ingestion_service.py)|
-|                                                             | |                                                      |
-| [web/index.html]                                            | | [Sources: BBC, Al Jazeera, Google News, GDELT]       |
-|       │                                                     | |       │                                              |
-|       ▼ HTTP POST /api/analyze {"cvp": "..."}               | |       ▼ fetch_rss() / fetch_gdelt()                  |
-| [server.py]                                                 | | [src/marketintel/ingestion.py]                       |
-|       │                                                     | |       │                                              |
-|       ▼ embed_text(cvp) -> (384,) ndarray                   | |       ▼ extract_facts()                              |
-| [src/marketintel/embeddings.py]                             | | [src/marketintel/fact_extraction.py] (Ollama LLM)    |
-|       │                                                     | |       │                                              |
-|       ▼ score_submission()                                  | |       ▼ find_duplicate_fact() (48h Window, >= 0.92)  |
-| [src/marketintel/analysis.py]                               | | [src/marketintel/ingestion.py]                       |
-|       │                                                     | |       │                                              |
-|       ├─► compute_gates() [gates = news_emb @ (W @ cvp_emb)]| |       ▼ calibrate_relevance_threshold() (5th perc)   |
-|       ├─► subcluster_breakdown_for_dim()                    | | [src/marketintel/seed_inference.py]                  |
-|       ├─► raw_dimension_scores() & normalize_for_display()  | |       │                                              |
-|       └─► near_zero_dims() [flag < 10% max magnitude]       | |       ├─► infer_relevance() & infer_categorical()    |
-|       │                                                     | |       └─► infer_scope_best_match() (Per-Class Best)  |
-|       ▼ HTTP 200 JSON Response                              | |       │                                              |
-| [web/index.html] -> Plotly Radar Charts & Drilldown View    | |       ▼ atomic_write_json() & atomic_write_npy()     |
-|                                                             | | [data/real_articles.json & real_facts.json]          |
-+-------------------------------------------------------------+ +------------------------------------------------------+
-========================================================================================================================
+**Current real status**: paused at 24/672 files into the India-tier pilot week (did not survive a session/process boundary — background jobs of this length need to be restarted, not assumed to have kept running). Not merged into `server.py`'s live scoring path — a separate, not-yet-started integration.
+
+### 10.4 Offline Training Pipeline (not a service — run by hand)
+
+```mermaid
+flowchart TD
+    A["generate_news.py<br/>1000 fabricated articles + embeddings"] --> B["generate_startups.py<br/>50 fabricated startups + CVP embeddings"]
+    A --> C["discover_subclusters.py<br/>-> subclusters.json"]
+    B --> D["hidden_ground_truth.py<br/>hidden templates + Gaussian<br/>perturbation (never exposed downstream)"]
+    D --> E["simulate_profit_history.py<br/>-> profit_history.json"]
+    C --> F
+    E --> F["derive_sensitivity_profiles.py<br/>sub-cluster lagged ridge regression<br/>-> overwrites startups.json"]
+    F --> G["train_interaction_matrix.py<br/>kernel dual ridge regression<br/>+ CVP mean-centering<br/>-> interaction_matrix.npy, cvp_mean.npy"]
+    G --> H(["Consumed by server.py<br/>as a frozen artifact"])
 ```
 
 ---
 
-### 6.2 Detailed Flowchart: Offline Training & Sensitivity Modeling
+## 11. Submodule Input/Output Contract Matrix
 
-```
-+----------------------------------------------------------------------------------------------------------------------+
-| STEP 1: GENERATE SEED NEWS & EMBEDDINGS (scripts/generate_news.py)                                                   |
-|                                                                                                                      |
-|  [Templates + Entity Sampling] ──► 1000 Articles (Title, Body, Scope, Polarity, 11-Dim Relevance Scores)            |
-|                                         │                                                                            |
-|                                         ▼                                                                            |
-|                             embed_texts(texts) via all-MiniLM-L6-v2                                                  |
-|                                         │                                                                            |
-|                                         ▼                                                                            |
-|                 Saves: data/news.json (744 KB) & data/news_embeddings.npy (1000 x 384)                               |
-+----------------------------------------------------------------------------------------------------------------------+
-                                                  │
-                                                  ├──────────────────────────────────────────────┐
-                                                  ▼                                              ▼
-+------------------------------------------------------------------+ +-------------------------------------------------+
-| STEP 2: GENERATE STARTUPS (scripts/generate_startups.py)         | | STEP 3: DISCOVER SUB-CLUSTERS                   |
-|                                                                  | | (scripts/discover_subclusters.py)               |
-|  [20 Startup CVP Definitions]                                    | |                                                 |
-|               │                                                  | | For each of the 11 dimensions:                  |
-|               ▼                                                  | |   1. Filter news where relevance > 0.30         |
-|  Link 3-5 justifying news articles matching dominant dimensions  | |   2. AgglomerativeClustering(k in [3..7], cosine)|
-|               │                                                  | |   3. Pick smallest k within 90% max silhouette  |
-|               ▼                                                  | |   4. Centroid -> Top 3 titles -> Top 2 keywords |
-|  embed_texts(cvp_list) ──► (20, 384) L2-normalized array         | |                                                 |
-|               │                                                  | | Saves: data/subclusters.json                    |
-|               ▼                                                  | |        (k, labels, article assignment mapping)  |
-|  Saves: data/startups.json & data/startup_embeddings.npy         | +-------------------------------------------------+
-+------------------------------------------------------------------+                          │
-                                                  │                                           │
-                                                  ▼                                           │
-+----------------------------------------------------------------------------------+          │
-| STEP 4: SIMULATE 180-DAY PROFIT HISTORIES (scripts/simulate_profit_history.py)   |          │
-|                                                                                  |          │
-|  For each startup:                                                               |          │
-|    Profit(t) = BaseRevenue + Trend*t + GaussianNoise(4%)                         |          │
-|    On day (t_news + shock_lag_days):                                             |          │
-|       Inject shock: sum(Relevance * HiddenSensitivity / 100) * Polarity * Scale  |          │
-|                                                                                  |          │
-|  Saves: data/profit_history.json (20 startups x 180 daily revenue observations)  |          │
-+----------------------------------------------------------------------------------+          │
-                                                  │                                           │
-                                                  └────────────────────┬──────────────────────┘
-                                                                       ▼
-+----------------------------------------------------------------------------------------------------------------------+
-| STEP 5: DERIVE SENSITIVITY PROFILES VIA SUB-CLUSTER LAGGED RIDGE (scripts/derive_sensitivity_profiles.py)            |
-|                                                                                                                      |
-|  1. Construct Daily Event Signal Matrix X_tau (180 x M sub-cluster features)                                         |
-|  2. For candidate lags in [1, 3, 7, 14] days:                                                                        |
-|        Solve Ridge: Delta_Profit = X_tau @ beta + beta_0   (alpha = 4.0, intercept unpenalized)                     |
-|        Select optimal lag tau* = argmax R^2                                                                          |
-|  3. Roll up sub-cluster coefficients to 11 parent dimensions & rescale max magnitude to 100.0                        |
-|  4. Validate: Recovered lags match 20/20 true lags; pooled correlation vs hidden templates = ~0.90                   |
-|                                                                                                                      |
-|  Overwrites: Derived PESTLE & Porter's sensitivity profiles into data/startups.json                                  |
-+----------------------------------------------------------------------------------------------------------------------+
-                                                                       │
-                                                                       ▼
-+----------------------------------------------------------------------------------------------------------------------+
-| STEP 6: TRAIN BILINEAR INTERACTION MATRIX W (scripts/train_interaction_matrix.py)                                    |
-|                                                                                                                      |
-|  1. Form 220 training examples: Combined News Vectors a_sd (384-d), Startup CVP z_s (384-d), Targets y_sd            |
-|  2. Compute Dual Kernel Gram Matrix: K_ij = (a_i . a_j) * (z_i . z_j)  [Hadamard product of Gram matrices]           |
-|  3. Solve Dual Weights: alpha = (K + 0.2 * I)^(-1) @ y                                                               |
-|  4. Assemble Bilinear Operator: W = sum_j (alpha_j * outer(a_j, z_j))  in R^(384 x 384)                              |
-|                                                                                                                      |
-|  Saves: data/interaction_matrix.npy (1.18 MB matrix)                                                                 |
-+----------------------------------------------------------------------------------------------------------------------+
-```
-
----
-
-### 6.3 Detailed Flowchart: Real-Time News Ingestion & Fact Processing
-
-```
-========================================================================================================================
-                          REAL-TIME NEWS INGESTION & FACT PROCESSING PIPELINE
-========================================================================================================================
-
-                                  [ Trigger: ingestion_service.py (Every 30 min) ]
-                                  [        OR scripts/ingest_news.py (Manual)    ]
-                                                         │
-                                                         ▼
-                                 +-----------------------------------------------+
-                                 | Fetch from Free, Keyless Global News Feeds:   |
-                                 | - BBC World RSS                               |
-                                 | - Al Jazeera RSS                              |
-                                 | - Google News Topic WORLD RSS                 |
-                                 | - GDELT DOC 2.0 API (via gdeltdoc)            |
-                                 +-----------------------+-----------------------+
-                                                         │
-                                                         ▼
-                                 +-----------------------------------------------+
-                                 | Fact Decomposition (fact_extraction.py):      |
-                                 | POST to local Ollama LLM (llama3.2:3b)        |
-                                 | Prompt: Extract atomic, neutral claims        |
-                                 +-----------------------+-----------------------+
-                                                         │
-                                    ┌────────────────────┴────────────────────┐
-                          [Ollama Success]                          [Ollama Offline / Timeout]
-                                    │                                         │
-                                    ▼                                         ▼
-                     [Parsed Array of Fact Strings]             [Fallback: Use full title as 1 fact]
-                                    │                                         │
-                                    └────────────────────┬────────────────────┘
-                                                         │
-                                                         ▼
-                                 +-----------------------------------------------+
-                                 | Embed Fact via Sentence-Transformers:         |
-                                 | embed_text(fact) -> (384,) L2-normalized      |
-                                 +-----------------------+-----------------------+
-                                                         │
-                                                         ▼
-                                 +-----------------------------------------------+
-                                 | 48-Hour Semantic Deduplication:               |
-                                 | Compare vs. stored facts in rolling 48h window|
-                                 +-----------------------+-----------------------+
-                                                         │
-                                    ┌────────────────────┴────────────────────┐
-                       [Cosine Sim >= 0.92]                      [Cosine Sim < 0.92]
-                                    │                                         │
-                                    ▼                                         ▼
-                     [Increment mention_count]                  +-------------------------------+
-                     [Update last_seen timestamp]               | Seed Corpus k-NN Transfer:    |
-                     [Link to parent article]                   | Dot-product vs 1000 seed embs |
-                                                                | Retrieve top 10 neighbors     |
-                                                                +---------------+---------------+
-                                                                                │
-                                                                                ▼
-                                                                +-------------------------------+
-                                                                | Compute Inferred Relevance:   |
-                                                                | Soft-weighted vote across 11  |
-                                                                | dimensions                    |
-                                                                +---------------+---------------+
-                                                                                │
-                                                                                ▼
-                                                                +-------------------------------+
-                                                                | Relevance Gate Check:         |
-                                                                | Max relevance >= 5th perc     |
-                                                                | seed threshold (~0.58)?       |
-                                                                +---------------+---------------+
-                                                                                │
-                                                   ┌────────────────────────────┴────────────────────────────┐
-                                              [Passed Gate]                                             [Failed Gate]
-                                                   │                                                         │
-                                                   ▼                                                         ▼
-                                    +------------------------------+                          [Discard from downstream]
-                                    | 1. Infer Polarity:           |                          [Append to excluded log: ]
-                                    |    Weighted plurality vote   |                          [ingestion_excluded.jsonl]
-                                    |                              |
-                                    | 2. Infer Scope:              |
-                                    |    Per-Class-Best-Match      |
-                                    |    (Highest individual sim   |
-                                    |     among 7 scope partitions)|
-                                    +--------------+---------------+
-                                                   │
-                                                   ▼
-                                    +------------------------------+
-                                    | Assemble Structured Records: |
-                                    | - fact_XXXXX record          |
-                                    | - article_XXXXX record       |
-                                    +--------------+---------------+
-                                                   │
-                                                   ▼
-                                    +------------------------------+
-                                    | Atomic IO Persistence:       |
-                                    | atomic_write_json() & npy()  |
-                                    | - data/real_articles.json    |
-                                    | - data/real_facts.json       |
-                                    | - data/real_fact_embeddings  |
-                                    +------------------------------+
-========================================================================================================================
-```
-
----
-
-### 6.4 Detailed Flowchart: Online CVP Inference & Two-Tier Scoring Engine
-
-```
-========================================================================================================================
-                               ONLINE CVP INFERENCE & EXPLAINABLE DRILL-DOWN FLOW
-========================================================================================================================
-
- [ User / Founder ]
-        │
-        │ 1. Pastes CVP text (e.g. "Mobile app providing Punjab farmers real-time soil moisture and crop advice...")
-        ▼
- [ web/index.html (Client Frontend) ]
-        │
-        │ 2. Dispatches JSON payload: POST /api/analyze { "cvp": "..." }
-        ▼
- [ server.py (FastAPI Server on Port 8000) ]
-        │
-        │ 3. embed_text(cvp)
-        ▼
- [ src/marketintel/embeddings.py ]
-        │
-        │ 4. Returns 384-dimensional unit vector z_cvp
-        ▼
- [ server.py ]
-        │
-        │ 5. Calls score_submission(news, news_embeddings, z_cvp, W, subclusters)
-        ▼
- [ src/marketintel/analysis.py (Analysis Engine) ]
-        │
-        ├────────────────────────────────────────────────────────────────────────────────────────┐
-        │                                                                                        │
-        ▼                                                                                        ▼
- [ Vectorized Interaction Gate ]                                          [ Sub-Cluster Contribution Breakdown ]
-   gate_i = news_emb_i @ (W @ z_cvp)                                        For each dimension d in (PESTLE + Porter's):
-   Evaluates all 1000 articles at once                                         For each article i in dimension's sub-clusters:
-   Produces (1000,) scalar gate array                                            contribution = relevance_i * polarity_i * gate_i
-        │                                                                        Group by sub-cluster id -> Sum raw scores
-        │                                                                        Sort top 5 contributing articles per cluster
-        └────────────────────────────────────────────────────────────────────────────────────────┘
-                                                         │
-                                                         ▼
-                                         [ Dimension Roll-Up & Scaling ]
-                                         - Raw Dimension Score = Sum of its Sub-Cluster Scores
-                                         - normalize_for_display(): Scale largest magnitude to 100.0
-                                         - near_zero_dims(): Flag dimensions with |score| < 10% max magnitude
-                                                         │
-                                                         ▼
- [ server.py (Serialization) ]
-        │
-        │ 6. serialize_breakdown(): Orders dimensions by descending absolute impact
-        │ 7. Returns HTTP 200 JSON Response
-        ▼
- [ web/index.html (Browser UI) ]
-        │
-        ├─► Renders PESTLE Radar Chart (Hexagon: Green=Positive, Red=Negative, Grey=Negligible)
-        ├─► Renders Porter's Five Forces Radar Chart (Pentagon)
-        ├─► Renders Impact Dimension Accordions (sorted by absolute exposure)
-        └─► Expands Sub-Clusters with visual contribution progress bars and specific justifying news articles
-========================================================================================================================
-```
-
----
-
-### 6.5 Submodule Input/Output Contract & Tensor Shape Matrix
-
-| Submodule | Function / Entry Point | Input Parameters & Types | Output Return & Types | Consumed File(s) | Produced / Modified File(s) |
+| Module | Function | Input | Output | Reads | Writes |
 |---|---|---|---|---|---|
-| **`embeddings.py`** | `get_model()` | None | `SentenceTransformer` instance | Local model cache | None |
-| **`embeddings.py`** | `embed_texts(texts)` | `texts: list[str]` | `np.ndarray` of shape `(N, 384)`, $L_2$-normalized | None | None |
-| **`embeddings.py`** | `embed_text(text)` | `text: str` | `np.ndarray` of shape `(384,)`, $L_2$-normalized | None | None |
-| **`data_loader.py`** | `load_news()` | None | `tuple[list[dict], np.ndarray (1000, 384)]` | `data/news.json`, `data/news_embeddings.npy` | None |
-| **`data_loader.py`** | `load_startups()` | None | `tuple[list[dict], np.ndarray (20, 384)]` | `data/startups.json`, `data/startup_embeddings.npy` | None |
-| **`data_loader.py`** | `load_interaction_matrix()` | None | `np.ndarray` of shape `(384, 384)` | `data/interaction_matrix.npy` | None |
-| **`data_loader.py`** | `load_subclusters()` | None | `dict` containing 11 dimension clusters | `data/subclusters.json` | None |
-| **`data_loader.py`** | `load_real_facts()` | None | `tuple[list[dict], np.ndarray (N, 384)]` | `data/real_facts.json`, `data/real_fact_embeddings.npy` | None |
-| **`atomic_io.py`** | `atomic_write_json(path, data)` | `path: Path, data: Any` | `None` (atomic file replacement) | None | Target JSON file via `.tmp` |
-| **`atomic_io.py`** | `atomic_write_npy(path, array)` | `path: Path, array: np.ndarray` | `None` (atomic file replacement) | None | Target `.npy` file via `.tmp` |
-| **`analysis.py`** | `compute_gates(news_emb, cvp_emb, W)` | `news_emb: (N, 384)`, `cvp_emb: (384,)`, `W: (384, 384)` | `np.ndarray` of shape `(N,)` | None | None |
-| **`analysis.py`** | `subcluster_breakdown_for_dim(...)` | `news: list`, `gates: (N,)`, `dim: str`, `score_field: str`, `dim_subclusters: dict` | `list[dict]` sorted by `abs(raw_score)` | None | None |
-| **`analysis.py`** | `score_submission(news, news_emb, cvp_emb, W, subclusters)` | All datasets + embeddings + interaction matrix | `dict` (display scores, breakdowns, near-zero set) | None | None |
-| **`fact_extraction.py`** | `extract_facts(text)` | `text: str` (article headline or text) | `list[str]` (one or more neutral atomic claims) | None | None |
-| **`seed_inference.py`** | `nearest_neighbors(emb, seed_embs, k=10)` | `emb: (384,)`, `seed_embs: (1000, 384)` | `tuple[top_idx: (10,), weights: (10,)]` | None | None |
-| **`seed_inference.py`** | `infer_relevance(seed_news, top_idx, weights)` | Neighbor indices and weights | `dict[str, float]` across all 11 dimensions | None | None |
-| **`seed_inference.py`** | `calibrate_relevance_threshold(seed_news)` | `seed_news: list[dict]` | `float` (5th percentile threshold $\approx 0.58$) | None | None |
-| **`seed_inference.py`** | `infer_scope_best_match(emb, seed_embs, scope_idx)` | `emb: (384,)`, `seed_embs: (1000, 384)`, `scope_idx: dict` | `tuple[best_scope: str, best_sim: float]` | None | None |
-| **`ingestion.py`** | `run_ingestion_once(verbose=True)` | `verbose: bool` | `dict` (ingestion metrics summary) | RSS & GDELT, `data/ingestion_state.json` | `data/real_articles.json`, `data/real_facts.json`, `data/real_fact_embeddings.npy`, logs |
-| **`discover_subclusters.py`** | `best_clustering(embs, k_range)` | `embs: (M, 384)`, `k_range: list[int]` | `tuple[best_k: int, labels: ndarray, silhouette: float]` | None | None |
-| **`discover_subclusters.py`** | `label_cluster(articles, embs, member_idx)` | Cluster members and embeddings | `str` (2-word capitalized n-gram label) | None | None |
-| **`derive_sensitivity_profiles.py`** | `fit_lag_ridge(profit, signal, lag, alpha=4.0)` | `profit: (180,)`, `signal: (180, M)`, `lag: int` | `tuple[r_squared: float, coef: (M,)]` | None | None |
-| **`train_interaction_matrix.py`** | `fit_interaction_matrix(A, Z, targets, alpha=0.2)` | `A: (220, 384)`, `Z: (220, 384)`, `targets: (220,)` | `tuple[W: (384, 384), predictions: (220,)]` | None | `data/interaction_matrix.npy` |
-| **`server.py`** | `POST /api/analyze` | `AnalyzeRequest { cvp: str }` | `JSON` payload with display scores & breakdowns | In-memory cached artifacts | None |
-| **`ingestion_service.py`** | `GET /health` | None | `JSON` status of last ingestion run | None | None |
+| `embeddings.py` | `embed_text(text)` | `str` | `(384,)` ndarray, L2-normalized | model cache | — |
+| `data_loader.py` | `load_news()` | — | `(list[dict], (1000,384) ndarray)` | `news.json`, `news_embeddings.npy` | — |
+| `data_loader.py` | `load_startups()` | — | `(list[dict], (50,384) ndarray)` | `startups.json`, `startup_embeddings.npy` | — |
+| `data_loader.py` | `load_cvp_mean()` | — | `(384,) ndarray` (zeros if absent) | `cvp_mean.npy` | — |
+| `data_loader.py` | `load_real_facts()` | — | `(list[dict], (N,384) ndarray)`, empty on any failure | `real_facts.json`, `real_fact_embeddings.npy` | — |
+| `analysis.py` | `score_submission(news, news_emb, cvp_emb, W, subclusters, cvp_mean)` | corpus + `W` + centered CVP | `dict` (display scores, breakdowns) | — | — |
+| `seed_inference.py` | `nearest_neighbors(emb, pool_emb, k=10)` | `(384,)`, `(M,384)` | `(top_idx: (10,), weights: (10,))` | — | — |
+| `real_data_inference.py` | `assess_dimension_coverage(real_facts)` | `list[dict]` | `dict[str, bool]`, 11 entries | — | — |
+| `real_data_inference.py` | `infer_hybrid(emb, real_news, real_emb, fab_news, fab_emb, coverage)` | both pools + coverage dict | `(relevance: dict, polarity: str, source_summary: dict)` | — | — |
+| `real_data_inference.py` | `choose_gate_threshold(real_facts, fab_news)` | both pools | `(threshold: float, source: "real"\|"fabricated")` | — | — |
+| `fact_extraction.py` | `extract_facts_detailed(text)` | `str` | `list[{"text": str, "entities": list[str]}]` | Ollama (local) | — |
+| `comparative_matching.py` | `resolve_comparative_fact(text, entities, emb, published, stored_facts, stored_emb)` | new fact + prior store | `dict` (has_own_direction, matched_prior_fact_id, match_similarity, computed_direction) | — | — |
+| `grounding.py` | `is_grounded(fact_text, source_text)` | two strings | `(bool, list[str])` — grounded flag + ungrounded numbers | — | — |
+| `grounding.py` | `is_likely_non_content(title)` | `str` | `(bool, str)` — junk flag + reason | — | — |
+| `gdelt_bulk.py` | `fetch_and_filter(timestamp, tier)` | datetime + `"india"`\|`"world"` | `list[dict]` or `None` on fetch failure | GDELT bulk HTTP | — |
+| `ingestion.py` | `run_ingestion_once(verbose=True)` | `bool` | `dict` (full run summary — 13 counters) | RSS/GDELT, `ingestion_state.json` | `real_articles.json`, `real_facts.json`, `real_fact_embeddings.npy`, 4 log files |
+| `gdelt_backfill.py` | `run_backfill(start, end, tier, checkpoint_every_n_files=20)` | date range + tier | `dict` (totals) | GDELT bulk HTTP, `backfill_state.json` | `backfill_articles.json`, `backfill_facts.json`, `backfill_fact_embeddings.npy`, 3 log files |
+| `live_facts.py` | `build_combined_corpus(seed_news, seed_emb, subclusters, centroids)` | fabricated corpus + centroids | `(news, embeddings, subclusters, live_facts_count: int)` | `real_facts.json` (fresh) | — |
+| `server.py` | `POST /api/analyze` | `{"cvp": str}` | JSON: display scores, breakdowns, `live_facts_count`, `seed_only` | in-process cache + `real_facts.json` (fresh) | — |
+| `ingestion_service.py` | `GET /health` | — | JSON status (17 fields) | in-process `status` dict | — |

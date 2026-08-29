@@ -56,6 +56,11 @@ status = {
     "facts_added": None,
     "comparative_matches_found": None,
     "comparative_matches_unmatched": None,
+    "polarity_from_real": None,
+    "polarity_from_fabricated": None,
+    "dimension_coverage": None,
+    "scope_coverage": None,
+    "gate_threshold_source": None,
 }
 
 
@@ -76,6 +81,11 @@ async def _run_and_record() -> None:
         status["facts_added"] = result["facts_added"]
         status["comparative_matches_found"] = result["comparative_matches_found"]
         status["comparative_matches_unmatched"] = result["comparative_matches_unmatched"]
+        status["polarity_from_real"] = result["polarity_from_real"]
+        status["polarity_from_fabricated"] = result["polarity_from_fabricated"]
+        status["dimension_coverage"] = result["dimension_coverage"]
+        status["scope_coverage"] = result["scope_coverage"]
+        status["gate_threshold_source"] = result["gate_threshold_source"]
     except Exception as exc:
         status["last_run_ok"] = False
         status["last_error"] = str(exc)
