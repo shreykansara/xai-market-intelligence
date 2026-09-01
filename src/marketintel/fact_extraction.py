@@ -65,10 +65,10 @@ def _call_ollama(text: str) -> str:
         # strings), and at default temperature llama3.2:3b would sometimes
         # return malformed items (a bare string where an object was expected,
         # or an object missing "text") - measured directly at ~7% of calls in
-        # a real GDELT backfill smoke test. Re-tested at temperature=0.2
+        # a real GDELT smoke test. Re-tested at temperature=0.2
         # against a fresh sample and got 6/6 well-formed responses. This does
         # NOT fix hallucination on sparse/low-content titles (a separate,
-        # unresolved issue - see gdelt_backfill's docs) - a side-by-side test
+        # unresolved issue - see CLAUDE.md) - a side-by-side test
         # found the model fabricated MORE confidently at low temperature for
         # one genuinely content-free title, rather than correctly returning
         # an empty array as it did at default temperature. Low temperature
@@ -137,6 +137,6 @@ def extract_facts_detailed(text: str) -> list[dict]:
 
 def extract_facts(text: str) -> list[str]:
     """Backward-compatible wrapper for callers that only need the fact text (the
-    live ingestion.py path) - entities are only consumed by the batch backfill's
+    live ingestion.py path) - entities are consumed by that path's
     comparative_matching.py, so unchanged callers don't need to know the schema grew."""
     return [f["text"] for f in extract_facts_detailed(text)]

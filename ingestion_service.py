@@ -9,8 +9,8 @@ same function scripts/ingest_news.py calls for one-shot/cron use. Nothing
 about sources, fact decomposition, dedup, the relevance gate, scope
 classification, grounding, or comparative-fact matching is duplicated or
 reimplemented here - all of it lives in marketintel.ingestion (which itself
-shares its grounding/comparative-matching modules with the GDELT bulk
-backfill - see ingestion.py's docstring). /health reports counts at both
+also applies its grounding/comparative-matching safeguards - see
+ingestion.py's docstring). /health reports counts at both
 granularities: articles fetched (raw source items, and how many were
 rejected as non-content before ever reaching Ollama) and facts (extracted,
 rejected as ungrounded, excluded by the relevance gate, added, and how many
@@ -23,8 +23,14 @@ cron or scheduler dependency. The only HTTP surface is GET /health; there is
 no authentication and no way to trigger a run externally, by design - this is
 a local, standalone process.
 
-Run: uvicorn ingestion_service:app --port 8502
-(distinct from server.py's port, e.g. 8000, so the two never collide)
+Run (ingestion microservice only - port 8502):
+    uvicorn ingestion_service:app --port 8502
+
+Deliberately a different port from the analysis engine (server.py, port
+8000) so the two never collide and can be started, stopped, and restarted
+in any order. This process never imports, starts, waits for, or health-
+checks server.py: it writes facts to data/real_facts.json and that file is
+the ONLY thing the two share. See README's "Running the services" section.
 """
 import asyncio
 import sys

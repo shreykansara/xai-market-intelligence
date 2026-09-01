@@ -2,7 +2,8 @@
 language of its own (e.g. "GST on mobile phones is 18%"), find the nearest
 EARLIER fact about the same specific subject and use it to compute a direction
 (increase/decrease) - rather than leaving the fact's polarity ambiguous or
-guessing. Only used by the GDELT bulk backfill pipeline (gdelt_bulk.py); the
+guessing. Originally built for the historical GDELT bulk backfill (since
+removed) and now used by the live ingestion path; the
 live ingestion_service.py's per-item order is unchanged and doesn't call this.
 
 Order of operations, per fact:
@@ -28,7 +29,7 @@ Order of operations, per fact:
       differed completely - see ENTITY_JACCARD_THRESHOLD's comment below.
   (c) If no temporally-prior candidate clears BOTH the similarity threshold and
       the entity check, the fact is left without a computed direction and
-      logged separately (BACKFILL_UNMATCHED_LOG_PATH) - never force a guess.
+      logged separately (INGESTION_UNMATCHED_LOG_PATH) - never force a guess.
 
 A numeric value (percentage, currency amount, or bare number) is extracted
 from each fact's text via regex for the actual increase/decrease comparison
@@ -89,7 +90,7 @@ def extract_numeric_value(fact_text: str) -> float | None:
 
 # Rule (b)'s entity check was originally "do the two entity sets share ANY
 # member" - validation (scripts/validate_comparative_matching.py, test 2b)
-# caught this as a real bug before it ever touched backfill data: two facts
+# caught this as a real bug before it ever touched real data: two facts
 # about DIFFERENT specific subjects (mobile-phone GST vs. textile GST) still
 # shared a generic entity ("India"), which was enough for a bare non-empty
 # intersection to call it a match even at similarity=1.0. A broad entity that
@@ -139,10 +140,10 @@ def find_prior_match(
     rather than forcing a guess.
 
     candidate_pool_idx optionally restricts which stored_facts indices are even
-    considered, before the temporal/entity checks below run - at backfill scale
+    considered, before the temporal/entity checks below run - at high volume
     (millions of stored facts), scanning every single one for entity overlap on
     every new fact would itself become a real bottleneck over a multi-month
-    run. gdelt_backfill.py passes an entity-inverted-index-derived pool here;
+    run. A caller at scale can pass an entity-inverted-index-derived pool here;
     validation (scripts/validate_comparative_matching.py) omits it and gets the
     same result by scanning everything, since a candidate that shares no entity
     at all can never pass entities_overlap regardless."""

@@ -1,5 +1,5 @@
-"""Validates comparative_matching.py (CLAUDE.md's GDELT bulk backfill section)
-BEFORE it ever touches real backfill data, per instructions:
+"""Validates comparative_matching.py BEFORE it ever touches real ingested
+data, per instructions:
 
   1. Three hand-picked, independently verifiable real rate/tax changes - confirm
      the mechanism retrieves the correct prior value and computes the correct
@@ -176,7 +176,7 @@ def main():
     print(f"Similar-but-different (no cross-match) case: {'PASS' if cross_match_result else 'FAIL'}")
     print(f"\n{sum(all_results)}/{len(all_results)} total checks passed.")
     if not all(all_results):
-        print("Do not run this mechanism against real backfill data until every check above passes.")
+        print("Do not run this mechanism against real ingested data until every check above passes.")
 
 
 if __name__ == "__main__":

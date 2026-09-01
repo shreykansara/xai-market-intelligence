@@ -1,7 +1,7 @@
 """Validates the grounding safeguards (src/marketintel/grounding.py) against
 the exact real failure cases that motivated them, BEFORE treating the
 running pilot week as having cleared its spot-check gate (CLAUDE.md's GDELT
-backfill section).
+grounding-safeguards section).
 
 Two known real hallucinations, both captured verbatim during earlier
 smoke-testing:

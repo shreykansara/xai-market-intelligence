@@ -9,18 +9,71 @@
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <script src="/static/vendor/plotly.min.js"></script>
 <style>
+  /* ---------- "Cobalt Grid" theme ----------
+     Supersedes the previous single dark (near-black graphite / indigo) theme
+     entirely. Light is the default token set on bare :root; dark overrides
+     live under [data-theme="dark"], toggled by the user via #theme-toggle
+     and persisted to localStorage (see script at the bottom of this file).
+     --accent (cobalt) is UI chrome only - CTAs, rule-line accents, the
+     toggle itself - and must never be used to encode whether a factor is
+     helping or hurting a business. --positive/--negative are the only
+     colors that carry that directional meaning, and are deliberately NOT
+     swapped between themes - only shifted slightly for contrast against
+     each theme's own background (a darker green/red on light surfaces,
+     the brighter original pair on dark surfaces, same as before this
+     change). --accent-rgb/--positive-rgb/--negative-rgb/--bg-rgb mirror
+     their hex counterparts as bare "r, g, b" triples so rgba() overlays
+     (badge tints, chart fill, dropzone hover, loading backdrop) stay
+     theme-correct without hardcoding a second color anywhere. */
   :root {
-    --bg: #0A0C10;
-    --surface: #13161D;
-    --border: #262B36;
-    --text: #E7E9EE;
-    --text-dim: #9099AA;
-    --accent: #534AB7;
-    --accent-hover: #6A5FD1;
-    --positive: #38B871;
-    --negative: #E2534A;
+    --bg: #EEF2FA;
+    --bg-rgb: 238, 242, 250;
+    --surface: #FFFFFF;
+    --accent: #2E4FE8;
+    --accent-rgb: 46, 79, 232;
+    --accent-hover: #253FC0;
+    --on-accent: #FFFFFF;
+    --text-primary: #101828;
+    --text-secondary: #475069;
+    --divider: #C7D0EA;
+    --positive: #1E8E5A;
+    --positive-rgb: 30, 142, 90;
+    --negative: #C4453A;
+    --negative-rgb: 196, 69, 58;
+    /* Warning/caution - a THIRD status color, distinct from both --accent
+       (UI chrome) and --positive/--negative (data direction). Used only for
+       the demo/sample-data disclosure (see .sample-data-banner below) - never
+       for brand chrome and never to encode whether a factor helps or hurts. */
+    --warning: #B45309;
+    --warning-rgb: 180, 83, 9;
+    --on-warning: #FFFFFF;
     --font-body: 'Space Grotesk', 'Segoe UI', Arial, sans-serif;
     --font-mono: 'IBM Plex Mono', 'Consolas', 'Courier New', monospace;
+  }
+
+  [data-theme="dark"] {
+    --bg: #0B0E1A;
+    --bg-rgb: 11, 14, 26;
+    --surface: #161C30;
+    --accent: #6C8CFF;
+    --accent-rgb: 108, 140, 255;
+    --accent-hover: #89A4FF;
+    --on-accent: #0B0E1A;
+    --text-primary: #EAEEFA;
+    --text-secondary: #98A3C2;
+    --divider: #2A3252;
+    --positive: #38B871;
+    --positive-rgb: 56, 184, 113;
+    --negative: #E2534A;
+    --negative-rgb: 226, 83, 74;
+    --warning: #F5A623;
+    --warning-rgb: 245, 166, 35;
+    --on-warning: #101828;
+  }
+
+  html { transition: background 0.15s; }
+  body, .upload-card, .chart-wrap, .menu-dropdown, .mapping-confirm, #cvp, .mapping-row select {
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
   }
 
   * { box-sizing: border-box; border-radius: 0 !important; }
@@ -29,7 +82,7 @@
     margin: 0;
     padding: 0;
     background: var(--bg);
-    color: var(--text);
+    color: var(--text-primary);
     font-family: var(--font-body);
   }
 
@@ -39,71 +92,356 @@
 
   .topbar {
     padding: 20px 32px;
-    border-bottom: 1px solid var(--border);
+    border-bottom: 1px solid var(--divider);
     font-size: 14px;
     letter-spacing: 0.12em;
     text-transform: uppercase;
-    color: var(--text-dim);
+    color: var(--text-secondary);
     display: flex;
     align-items: center;
     justify-content: space-between;
   }
+  .topbar-brand { cursor: pointer; }
+  .topbar-right { display: flex; align-items: center; gap: 20px; }
 
   .topbar .reset-link {
-    color: var(--text-dim);
+    color: var(--text-secondary);
     cursor: pointer;
     font-size: 13px;
   }
-  .topbar .reset-link:hover { color: var(--text); }
+  .topbar .reset-link:hover { color: var(--text-primary); }
 
-  /* ---------- State 1: input ---------- */
-  .state-input {
-    min-height: calc(100vh - 65px);
+  /* Light/dark toggle - shows the icon for the mode a click would switch TO
+     (moon while in light mode, sun while in dark mode), matching #menu-btn's
+     styling so the two topbar-right controls read as one family. */
+  #theme-toggle {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 4px 6px;
     display: flex;
     align-items: center;
-    justify-content: center;
-    padding: 24px;
+  }
+  #theme-toggle:hover { color: var(--text-primary); }
+  #theme-toggle svg { width: 18px; height: 18px; display: block; }
+
+  .menu-wrap { position: relative; }
+  #menu-btn {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 20px;
+    line-height: 1;
+    letter-spacing: 0.15em;
+    cursor: pointer;
+    padding: 4px 6px;
+  }
+  #menu-btn:hover { color: var(--text-primary); }
+  .menu-dropdown {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    min-width: 180px;
+    background: var(--surface);
+    border: 1px solid var(--divider);
+    z-index: 20;
+  }
+  .menu-dropdown button {
+    display: block;
+    width: 100%;
+    text-align: left;
+    background: none;
+    border: none;
+    color: var(--text-primary);
+    font-family: var(--font-body);
+    font-size: 13px;
+    padding: 12px 16px;
+    cursor: pointer;
+    text-transform: none;
+    letter-spacing: normal;
+  }
+  .menu-dropdown button:hover { background: var(--bg); color: var(--accent-hover); }
+  .menu-dropdown button + button { border-top: 1px solid var(--divider); }
+
+  /* ---------- Eyebrow labels + page headlines (shared across pages 2-3) ---------- */
+  .eyebrow {
+    font-size: 12px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    margin-bottom: 10px;
+  }
+  .page-heading {
+    font-size: 30px;
+    font-weight: 600;
+    line-height: 1.2;
+    margin: 0 0 8px 0;
+  }
+  .page-subhead {
+    font-size: 14px;
+    color: var(--text-secondary);
+    margin: 0 0 32px 0;
   }
 
-  .input-card {
+  /* ---------- Signature motif (hexagon + pentagon line art) ---------- */
+  /* The same two shapes as the PESTLE hexagon / Porter's pentagon radar charts,
+     reused as a deliberate brand signature rather than a one-off illustration -
+     on the landing hero at full size, and at a smaller scale anywhere the app
+     has nothing else to show yet (loading, empty states). */
+  .motif polygon {
+    fill: none;
+    stroke-width: 1.5;
+  }
+  .motif .motif-hexagon { stroke: var(--accent); opacity: 0.55; }
+  .motif .motif-pentagon { stroke: var(--accent-hover); opacity: 0.85; }
+  .motif circle { fill: var(--accent-hover); }
+
+  .motif-spin {
+    animation: motif-pulse 1.8s ease-in-out infinite;
+    transform-origin: center;
+  }
+  @keyframes motif-pulse {
+    0%, 100% { opacity: 0.5; transform: scale(1); }
+    50% { opacity: 1; transform: scale(1.04); }
+  }
+
+  /* ---------- State 1: landing ---------- */
+  .state-landing { padding: 0 32px; }
+
+  .hero {
+    max-width: 1040px;
+    margin: 0 auto;
+    padding: 72px 0 48px 0;
+    display: flex;
+    align-items: center;
+    gap: 56px;
+    flex-wrap: wrap;
+  }
+  .hero-motif { flex: 0 0 300px; }
+  .hero-motif svg { width: 100%; height: auto; }
+
+  .hero-copy { flex: 1 1 420px; min-width: 300px; }
+  .hero-copy .eyebrow { margin-bottom: 16px; }
+  .hero-copy h1 {
+    font-size: 36px;
+    line-height: 1.2;
+    font-weight: 600;
+    margin: 0 0 16px 0;
+  }
+  .hero-copy .hero-subhead {
+    font-size: 15px;
+    line-height: 1.6;
+    color: var(--text-secondary);
+    max-width: 440px;
+    margin: 0 0 28px 0;
+  }
+
+  #get-started-btn {
+    background: var(--accent);
+    color: var(--on-accent);
+    border: none;
+    padding: 16px 36px;
+    font-family: var(--font-body);
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    cursor: pointer;
+  }
+  #get-started-btn:hover { background: var(--accent-hover); }
+
+  .value-props {
+    max-width: 1040px;
+    margin: 0 auto;
+    padding: 32px 0 72px 0;
+    display: flex;
+    gap: 32px;
+    flex-wrap: wrap;
+    border-top: 1px solid var(--divider);
+  }
+  .value-prop { flex: 1 1 240px; padding-top: 28px; }
+  .value-icon {
+    color: var(--accent-hover);
+    margin-bottom: 12px;
+  }
+  .value-icon svg { width: 22px; height: 22px; display: block; }
+  .value-title {
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    margin-bottom: 4px;
+  }
+  .value-desc {
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--text-secondary);
+  }
+
+  /* ---------- State 2: upload ---------- */
+  .state-upload {
+    min-height: calc(100vh - 65px);
+    display: flex;
+    justify-content: center;
+    padding: 56px 24px;
+  }
+
+  .upload-page { width: 100%; max-width: 640px; }
+
+  .upload-card {
     width: 100%;
-    max-width: 640px;
     background: var(--surface);
-    border: 1px solid var(--border);
+    border: 1px solid var(--divider);
     padding: 40px;
   }
 
-  .input-card label {
+  .upload-card label {
     display: block;
     font-size: 12px;
     letter-spacing: 0.12em;
     text-transform: uppercase;
-    color: var(--text-dim);
+    color: var(--text-secondary);
     margin-bottom: 12px;
   }
 
   #cvp {
     width: 100%;
-    height: 200px;
+    height: 180px;
     resize: vertical;
     background: var(--bg);
-    border: 1px solid var(--border);
-    color: var(--text);
+    border: 1px solid var(--divider);
+    color: var(--text-primary);
     font-family: var(--font-body);
     font-size: 15px;
     line-height: 1.5;
     padding: 16px;
   }
   #cvp:focus { outline: 1px solid var(--accent); }
-  #cvp::placeholder { color: var(--text-dim); }
+  #cvp::placeholder { color: var(--text-secondary); }
+
+  .error {
+    margin-top: 12px;
+    color: var(--negative);
+    font-size: 13px;
+  }
+
+  .or-divider {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin: 32px 0 28px 0;
+    color: var(--text-secondary);
+    font-size: 12px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+  }
+  .or-divider::before, .or-divider::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: var(--divider);
+  }
+
+  /* ---------- Optional sales-upload section ---------- */
+  .upload-section .upload-hint {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin: -4px 0 16px 0;
+  }
+
+  /* Real drag-and-drop dropzone wrapping a visually-hidden <input type="file">
+     - click-to-browse and drag-and-drop both work; the input stays functional
+     and accessible, just visually replaced. */
+  .dropzone {
+    position: relative;
+    border: 1px dashed var(--divider);
+    background: var(--bg);
+    padding: 28px 16px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .dropzone:hover, .dropzone.dragover {
+    border-color: var(--accent);
+    background: rgba(var(--accent-rgb), 0.06);
+  }
+  .dropzone .dropzone-icon { color: var(--text-secondary); margin-bottom: 10px; }
+  .dropzone .dropzone-icon svg { width: 22px; height: 22px; }
+  .dropzone .dropzone-label { font-size: 14px; color: var(--text-primary); }
+  .dropzone .dropzone-sub {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-top: 6px;
+  }
+  #sales-file {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    cursor: pointer;
+  }
+  .mapping-confirm {
+    margin-top: 16px;
+    padding: 16px;
+    background: var(--bg);
+    border: 1px solid var(--divider);
+  }
+  .mapping-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 10px;
+  }
+  .mapping-row label {
+    margin: 0;
+    font-size: 12px;
+    color: var(--text-secondary);
+    text-transform: none;
+    letter-spacing: normal;
+  }
+  .mapping-row select {
+    flex: 1;
+    max-width: 260px;
+    background: var(--surface);
+    color: var(--text-primary);
+    border: 1px solid var(--divider);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    padding: 8px;
+  }
+  #confirm-mapping-btn {
+    margin-top: 4px;
+    width: 100%;
+    background: transparent;
+    color: var(--text-primary);
+    border: 1px solid var(--accent);
+    padding: 10px;
+    font-family: var(--font-body);
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    cursor: pointer;
+  }
+  #confirm-mapping-btn:hover { background: var(--accent); }
+  .upload-status, .mapping-result {
+    margin-top: 12px;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  .mapping-result.ok { color: var(--positive); }
+  .mapping-result.warn { color: var(--text-secondary); }
+  .mapping-result.fail { color: var(--negative); }
 
   #run-btn {
-    margin-top: 20px;
-    width: 100%;
+    margin-top: 32px;
     background: var(--accent);
-    color: #fff;
+    color: var(--on-accent);
     border: none;
-    padding: 16px;
+    padding: 14px 32px;
     font-family: var(--font-body);
     font-size: 14px;
     font-weight: 600;
@@ -114,14 +452,90 @@
   #run-btn:hover:not(:disabled) { background: var(--accent-hover); }
   #run-btn:disabled { opacity: 0.5; cursor: default; }
 
-  .error {
-    margin-top: 12px;
-    color: var(--negative);
-    font-size: 13px;
-  }
+  /* ---------- State 3: analysis ---------- */
+  .state-analysis { padding: 32px; max-width: 1100px; margin: 0 auto; }
 
-  /* ---------- State 2: results ---------- */
-  .state-results { padding: 32px; max-width: 1100px; margin: 0 auto; }
+  /* Result-type badge - distinguishes the two possible result types (reuses
+     the backend's own cvp_result_label / sales_derived / primary_result
+     fields exactly as returned, nothing invented). */
+  .result-type-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-primary);
+    border: 1px solid var(--accent);
+    background: rgba(var(--accent-rgb), 0.12);
+    padding: 7px 14px;
+    margin-bottom: 24px;
+  }
+  .result-type-badge .dot {
+    width: 7px;
+    height: 7px;
+    background: var(--accent-hover);
+  }
+  /* "sales" variant: the higher-confidence, own-data-derived result gets a
+     distinct green treatment (matching this app's positive/confirmed
+     direction color) rather than the default accent used for the
+     comparable-business estimate - a semantic step up, not just decoration. */
+  .result-type-badge.sales {
+    border-color: var(--positive);
+    background: rgba(var(--positive-rgb), 0.14);
+    color: var(--positive);
+  }
+  .result-type-badge.sales .dot { background: var(--positive); }
+  /* "demo" variant: today's fabricated-sample-data regression fallback (see
+     config.SALES_REGRESSION_NEWS_SOURCE) - deliberately NOT the green "sales"
+     treatment above, since that visually reads as "higher confidence, your
+     own data" and this result is neither. Paired with the much louder
+     .sample-data-banner below - this badge alone is not the disclosure. */
+  .result-type-badge.demo {
+    border-color: var(--warning);
+    background: rgba(var(--warning-rgb), 0.16);
+    color: var(--warning);
+  }
+  .result-type-badge.demo .dot { background: var(--warning); }
+
+  /* Mandatory, impossible-to-miss demo/sample-data disclosure - a full-width
+     solid banner (not a tooltip, not fine print) shown whenever the sales-
+     derived result was regressed against the fabricated seed corpus instead
+     of real ingested news (see server.py's news_source field). Sits directly
+     under the page heading, above everything else on the analysis page. */
+  .sample-data-banner {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--warning);
+    color: var(--on-warning);
+    padding: 14px 18px;
+    margin-bottom: 20px;
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.5;
+  }
+  .sample-data-banner-icon { font-size: 16px; flex: 0 0 auto; }
+
+  .comparison-block {
+    margin-top: 48px;
+    padding-top: 24px;
+    border-top: 1px solid var(--divider);
+  }
+  .comparison-label {
+    font-size: 12px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    margin-bottom: 4px;
+  }
+  .comparison-note {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-bottom: 16px;
+  }
+  .charts-row.comparison { transform: scale(0.82); transform-origin: top left; margin-bottom: -60px; }
 
   .charts-row {
     display: flex;
@@ -132,14 +546,14 @@
   .chart-wrap {
     flex: 1 1 460px;
     background: var(--surface);
-    border: 1px solid var(--border);
+    border: 1px solid var(--divider);
   }
   .chart-title {
     padding: 16px 20px 0 20px;
     font-size: 13px;
     letter-spacing: 0.1em;
     text-transform: uppercase;
-    color: var(--text-dim);
+    color: var(--text-secondary);
   }
   .chart { height: 420px; }
 
@@ -147,13 +561,13 @@
     font-size: 13px;
     letter-spacing: 0.12em;
     text-transform: uppercase;
-    color: var(--text-dim);
-    border-bottom: 1px solid var(--border);
+    color: var(--text-secondary);
+    border-bottom: 1px solid var(--divider);
     padding-bottom: 10px;
     margin: 40px 0 4px 0;
   }
 
-  .dim-section { border-bottom: 1px solid var(--border); }
+  .dim-section { border-bottom: 1px solid var(--divider); }
 
   .dim-header {
     display: flex;
@@ -175,11 +589,11 @@
     display: flex;
     justify-content: space-between;
     font-size: 13px;
-    color: var(--text-dim);
+    color: var(--text-secondary);
     padding: 6px 0;
-    border-bottom: 1px solid var(--border);
+    border-bottom: 1px solid var(--divider);
   }
-  .cluster-header .cluster-label { color: var(--text); }
+  .cluster-header .cluster-label { color: var(--text-primary); }
 
   .article-row {
     display: flex;
@@ -187,18 +601,22 @@
     align-items: baseline;
     gap: 16px;
     padding: 10px 0;
-    border-bottom: 1px solid var(--border);
+    border-bottom: 1px solid var(--divider);
     font-size: 14px;
   }
   .article-row:last-child { border-bottom: none; }
   .article-title { flex: 1; }
   .article-meta {
-    color: var(--text-dim);
+    color: var(--text-secondary);
     font-size: 12px;
     white-space: nowrap;
   }
   .article-contribution { white-space: nowrap; font-size: 13px; }
 
+  /* "Live" badge - marks a real ingested fact (article.is_live === true, set by
+     server.py from data/real_facts.json, folded into scoring alongside the
+     fabricated seed corpus - see live_facts.py) as distinct from a fabricated
+     seed article. Genuinely reflects the current data, not a placeholder. */
   .live-badge {
     display: inline-block;
     font-family: var(--font-mono);
@@ -212,37 +630,317 @@
     vertical-align: middle;
   }
 
-  #loading-overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(10, 12, 16, 0.85);
+  /* ---------- State 4: news browser ----------
+     A read-only inspection view over every stored news item across all three
+     corpora (see /api/news + news_browser.py). Deliberately reuses the
+     existing type scale, dividers and direction colors rather than
+     introducing a second visual language for "data" screens. */
+  .state-news { padding: 32px; max-width: 1200px; margin: 0 auto; }
+
+  .corpus-cards {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 28px;
+  }
+  .corpus-card {
+    flex: 1 1 240px;
+    background: var(--surface);
+    border: 1px solid var(--divider);
+    padding: 18px 20px;
+  }
+  .corpus-card .corpus-name {
+    font-size: 12px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    margin-bottom: 10px;
+  }
+  .corpus-card .corpus-count {
+    font-family: var(--font-mono);
+    font-size: 26px;
+    font-weight: 600;
+    line-height: 1;
+    margin-bottom: 8px;
+  }
+  .corpus-card .corpus-range {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+  }
+  /* Whether a corpus actually feeds /api/analyze - the single most
+     important thing this page communicates, so it gets its own explicit
+     chip rather than being left implicit. */
+  .corpus-status {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 3px 7px;
+    margin-top: 12px;
+    border: 1px solid;
+  }
+  .corpus-status.scored { color: var(--positive); border-color: var(--positive); }
+  .corpus-status.unscored { color: var(--warning); border-color: var(--warning); }
+
+  .news-filters {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    padding: 18px 20px;
+    background: var(--surface);
+    border: 1px solid var(--divider);
+    margin-bottom: 20px;
+  }
+  .filter-group { display: flex; flex-direction: column; gap: 6px; }
+  .filter-group label {
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+  }
+  .filter-group select, .filter-group input {
+    background: var(--bg);
+    color: var(--text-primary);
+    border: 1px solid var(--divider);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    padding: 8px 10px;
+    min-width: 130px;
+  }
+  .filter-group input { min-width: 240px; font-family: var(--font-body); }
+  .filter-group select:focus, .filter-group input:focus { outline: 1px solid var(--accent); }
+  #news-reset {
+    background: transparent;
+    color: var(--text-secondary);
+    border: 1px solid var(--divider);
+    font-family: var(--font-body);
+    font-size: 13px;
+    padding: 9px 16px;
+    cursor: pointer;
+  }
+  #news-reset:hover { color: var(--text-primary); border-color: var(--accent); }
+
+  .news-count-line {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-bottom: 12px;
+  }
+
+  .news-row {
+    display: flex;
+    gap: 16px;
+    align-items: baseline;
+    padding: 12px 4px;
+    border-bottom: 1px solid var(--divider);
+  }
+  .news-row-main { flex: 1; min-width: 0; }
+  .news-row-text { font-size: 14px; line-height: 1.45; }
+  .news-row-sub {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-secondary);
+    margin-top: 5px;
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .news-row-sub a { color: var(--accent); text-decoration: none; }
+  .news-row-sub a:hover { text-decoration: underline; }
+  .news-row-meta {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    text-align: right;
+  }
+  .news-row-dim { display: block; margin-top: 5px; }
+
+  /* Source chip - seed / live, using the same LIVE-badge idiom already
+     established in the analysis drill-down. */
+  .source-chip {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 1px 6px;
+    margin-right: 8px;
+    border: 1px solid;
+    vertical-align: middle;
+  }
+  .source-chip.seed { color: var(--text-secondary); border-color: var(--divider); }
+  .source-chip.live { color: var(--accent); border-color: var(--accent); }
+
+  .news-pager {
     display: flex;
     align-items: center;
     justify-content: center;
+    gap: 16px;
+    padding: 28px 0 8px 0;
+  }
+  .news-pager button {
+    background: transparent;
+    color: var(--text-primary);
+    border: 1px solid var(--divider);
+    font-family: var(--font-body);
+    font-size: 13px;
+    padding: 9px 18px;
+    cursor: pointer;
+  }
+  .news-pager button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+  .news-pager button:disabled { opacity: 0.4; cursor: default; }
+  .news-pager .pager-position { font-family: var(--font-mono); font-size: 12px; color: var(--text-secondary); }
+
+  .news-empty {
+    padding: 40px 4px;
+    text-align: center;
+    color: var(--text-secondary);
+    font-size: 14px;
+  }
+
+  #loading-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(var(--bg-rgb), 0.9);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
     font-size: 14px;
     letter-spacing: 0.12em;
     text-transform: uppercase;
-    color: var(--text-dim);
+    color: var(--text-secondary);
     z-index: 10;
+  }
+  #loading-overlay .motif { width: 90px; }
+
+  @media (max-width: 640px) {
+    .hero { padding-top: 48px; }
+    .hero-copy h1 { font-size: 30px; }
+    .hero-motif { flex-basis: 100%; max-width: 220px; margin: 0 auto; }
   }
 </style>
 </head>
 <body>
   <div class="topbar">
-    <span>Explainable Market Intelligence</span>
-    <span id="reset-link" class="reset-link hidden">&#9664; New analysis</span>
+    <span id="topbar-brand" class="topbar-brand">Explainable Market Intelligence</span>
+    <div class="topbar-right">
+      <span id="reset-link" class="reset-link hidden">&#9664; New analysis</span>
+      <button id="theme-toggle" aria-label="Toggle color theme" title="Toggle color theme">
+        <svg id="theme-icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="4"/><path d="M12 3v2.2M12 18.8V21M4.4 4.4l1.6 1.6M18 18l1.6 1.6M3 12h2.2M18.8 12H21M4.4 19.6l1.6-1.6M18 6l1.6-1.6"/></svg>
+        <svg id="theme-icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" class="hidden"><path d="M20.8 13.8A8.5 8.5 0 1 1 10.2 3.2a6.8 6.8 0 0 0 10.6 10.6z"/></svg>
+      </button>
+      <div class="menu-wrap">
+        <button id="menu-btn" aria-label="Menu" aria-haspopup="true">&#8943;</button>
+        <div id="menu-dropdown" class="menu-dropdown hidden">
+          <button id="menu-home">Home</button>
+          <button id="menu-new-analysis">New analysis</button>
+          <button id="menu-news">Browse news data</button>
+        </div>
+      </div>
+    </div>
   </div>
 
-  <section id="state-input" class="state-input">
-    <div class="input-card">
-      <label for="cvp">Your CVP</label>
-      <textarea id="cvp" placeholder="e.g. We build a mobile app that gives small farmers in Punjab real-time soil moisture readings and irrigation advice in their own language..."></textarea>
-      <button id="run-btn">Run analysis</button>
-      <p id="input-error" class="error hidden"></p>
+  <!-- ============ PAGE 1: LANDING ============ -->
+  <section id="state-landing" class="state-landing">
+    <div class="hero">
+      <div class="hero-copy">
+        <div class="eyebrow">Explainable market scanning</div>
+        <h1>Know what's actually moving your business.</h1>
+        <p class="hero-subhead">Paste a CVP or upload real sales history. Every score traces back to a real event.</p>
+        <button id="get-started-btn">Get started</button>
+      </div>
+      <div class="hero-motif" id="hero-motif-slot"></div>
+    </div>
+
+    <div class="value-props">
+      <div class="value-prop">
+        <div class="value-icon">
+          <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M26,10 A11,11 0 1 0 27,17"/><polyline points="27,4 27,10 21,10"/></svg>
+        </div>
+        <div class="value-title">Explainable</div>
+        <div class="value-desc">Every score traces to a source event.</div>
+      </div>
+      <div class="value-prop">
+        <div class="value-icon">
+          <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="5" y="6" width="22" height="20"/><line x1="9" y1="12" x2="23" y2="12"/><line x1="9" y1="17" x2="23" y2="17"/><line x1="9" y1="22" x2="18" y2="22"/></svg>
+        </div>
+        <div class="value-title">Grounded in real events</div>
+        <div class="value-desc">Not opinion, not hallucination.</div>
+      </div>
+      <div class="value-prop">
+        <div class="value-icon">
+          <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="16" cy="16" r="11"/><circle cx="16" cy="16" r="6"/><circle cx="16" cy="16" r="1.2" fill="currentColor"/></svg>
+        </div>
+        <div class="value-title">Built for both sides</div>
+        <div class="value-desc">Founders and investors alike.</div>
+      </div>
     </div>
   </section>
 
-  <section id="state-results" class="state-results hidden">
+  <!-- ============ PAGE 2: UPLOAD ============ -->
+  <section id="state-upload" class="state-upload hidden">
+    <div class="upload-page">
+      <div class="eyebrow">Step 1 of 2</div>
+      <h2 class="page-heading">Tell us about the business</h2>
+      <p class="page-subhead">Use either path below, or both.</p>
+
+      <div class="upload-card">
+        <label for="cvp">Paste your CVP</label>
+        <textarea id="cvp" placeholder="e.g. We sell handcrafted leather bags to young professionals in urban India..."></textarea>
+        <p id="input-error" class="error hidden"></p>
+
+        <div class="or-divider"><span>or</span></div>
+
+        <div class="upload-section">
+          <label for="sales-file">Upload sales history (CSV or XLSX)</label>
+          <p class="upload-hint">Adds a second, richer result derived from your own sales data alongside the CVP estimate - not a replacement for it.</p>
+          <div class="dropzone" id="dropzone">
+            <input type="file" id="sales-file" accept=".csv,.xlsx,.xls">
+            <div class="dropzone-icon">
+              <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.6"><polyline points="16,22 16,6"/><polyline points="9,13 16,6 23,13"/><path d="M6,24 L6,27 L26,27 L26,24"/></svg>
+            </div>
+            <div class="dropzone-label">Drop a file, or click to browse</div>
+            <div class="dropzone-sub" id="dropzone-filename"></div>
+          </div>
+          <div id="upload-status" class="upload-status hidden"></div>
+          <div id="mapping-confirm" class="mapping-confirm hidden">
+            <label style="margin-bottom:14px;">Confirm column mapping</label>
+            <div class="mapping-row">
+              <label for="date-col-select">Date column</label>
+              <select id="date-col-select"></select>
+            </div>
+            <div class="mapping-row">
+              <label for="value-col-select">Revenue column</label>
+              <select id="value-col-select"></select>
+            </div>
+            <button id="confirm-mapping-btn">Confirm mapping</button>
+          </div>
+          <div id="mapping-result" class="mapping-result hidden"></div>
+        </div>
+
+        <button id="run-btn">Run analysis</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ PAGE 3: ANALYSIS ============ -->
+  <section id="state-analysis" class="state-analysis hidden">
+    <div class="eyebrow">Step 2 of 2</div>
+    <h2 class="page-heading" style="margin-bottom:20px;">Your sensitivity analysis</h2>
+    <div id="sample-data-banner" class="sample-data-banner hidden">
+      <span class="sample-data-banner-icon">&#9888;</span>
+      <span>Demo mode: this result is regressed against representative sample news, not your live news feed.</span>
+    </div>
+    <div id="result-type-badge" class="result-type-badge"><span class="dot"></span><span id="result-type-text"></span></div>
+    <div id="result-type-meta" class="mono" style="font-size:12px;color:var(--text-secondary);margin:-16px 0 24px 0;"></div>
+
     <div class="charts-row">
       <div class="chart-wrap">
         <div class="chart-title">PESTLE</div>
@@ -254,16 +952,118 @@
       </div>
     </div>
 
-    <div class="group-heading">PESTLE breakdown</div>
-    <div id="breakdown-pestle"></div>
+    <!-- The article-level breakdown is inherently CVP-similarity-based (it
+         comes from gating each article against the CVP embedding via W) -
+         there's no equivalent per-article breakdown for the sales-derived
+         regression, which only produces dimension-level numbers. So this
+         whole block is hidden, with an explanatory note instead, whenever no
+         CVP was provided (see showResults() - data.cvp_provided). -->
+    <div id="cvp-breakdown-section">
+      <div class="group-heading">PESTLE breakdown</div>
+      <div id="breakdown-pestle"></div>
 
-    <div class="group-heading">Porter's Five Forces breakdown</div>
-    <div id="breakdown-porters"></div>
+      <div class="group-heading">Porter's Five Forces breakdown</div>
+      <div id="breakdown-porters"></div>
+    </div>
+    <p id="no-cvp-breakdown-note" class="comparison-note hidden" style="margin-top:24px;">
+      No CVP was provided, so there's no per-article breakdown to show here - the dimension
+      scores above come entirely from your sales history regression.
+    </p>
+
+    <div id="comparison-block" class="comparison-block hidden">
+      <div class="comparison-label">For comparison</div>
+      <div id="comparison-note" class="comparison-note"></div>
+      <div class="charts-row comparison">
+        <div class="chart-wrap">
+          <div class="chart-title">PESTLE</div>
+          <div id="chart-pestle-comparison" class="chart"></div>
+        </div>
+        <div class="chart-wrap">
+          <div class="chart-title">Porter's Five Forces</div>
+          <div id="chart-porters-comparison" class="chart"></div>
+        </div>
+      </div>
+    </div>
   </section>
 
-  <div id="loading-overlay" class="hidden">Analyzing&hellip;</div>
+  <!-- ============ PAGE 4: NEWS DATA BROWSER ============ -->
+  <section id="state-news" class="state-news hidden">
+    <div class="eyebrow">Collected data</div>
+    <h2 class="page-heading">News items in the system</h2>
+    <p class="page-subhead">
+      Everything currently stored, across all three corpora - what feeds analysis, and what's only been collected.
+    </p>
+
+    <div id="corpus-cards" class="corpus-cards"></div>
+
+    <div class="news-filters">
+      <div class="filter-group">
+        <label for="news-search">Search</label>
+        <input type="text" id="news-search" placeholder="Search headline or fact text...">
+      </div>
+      <div class="filter-group">
+        <label for="news-source">Corpus</label>
+        <select id="news-source">
+          <option value="all">All</option>
+          <option value="seed">Fabricated seed</option>
+          <option value="live">Live ingested</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label for="news-scope">Scope</label>
+        <select id="news-scope"><option value="all">All</option></select>
+      </div>
+      <div class="filter-group">
+        <label for="news-polarity">Polarity</label>
+        <select id="news-polarity">
+          <option value="all">All</option>
+          <option value="positive">Positive</option>
+          <option value="negative">Negative</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label for="news-dimension">Top dimension</label>
+        <select id="news-dimension"><option value="all">All</option></select>
+      </div>
+      <button id="news-reset">Reset</button>
+    </div>
+
+    <div id="news-count-line" class="news-count-line"></div>
+    <div id="news-list"></div>
+
+    <div class="news-pager">
+      <button id="news-prev">&#9664; Previous</button>
+      <span id="news-position" class="pager-position"></span>
+      <button id="news-next">Next &#9654;</button>
+    </div>
+  </section>
+
+  <div id="loading-overlay" class="hidden">
+    <div class="motif" id="loading-motif-slot"></div>
+    <span>Analyzing&hellip;</span>
+  </div>
 
 <script>
+// ---------- Signature motif: overlapping hexagon + pentagon line art ----------
+// The same two shapes as the PESTLE hexagon / Porter's pentagon radar charts on
+// the analysis page - reused here as a deliberate brand signature (hero, and
+// anywhere the app has nothing else to show yet) rather than a one-off graphic.
+function motifSvg({ spin = false } = {}) {
+  const cls = spin ? "motif motif-spin" : "motif";
+  return `
+    <svg class="${cls}" viewBox="0 0 300 270" xmlns="http://www.w3.org/2000/svg">
+      <polygon class="motif-hexagon" points="130,40 216.6,90 216.6,190 130,240 43.4,190 43.4,90" />
+      <polygon class="motif-pentagon" points="190,33 258.5,82.8 232.3,163.2 147.7,163.2 121.5,82.8" />
+      <circle cx="130" cy="40" r="4" />
+      <circle cx="216.6" cy="190" r="4" />
+      <circle cx="190" cy="33" r="4" />
+      <circle cx="232.3" cy="163.2" r="4" />
+    </svg>`;
+}
+
+document.getElementById("hero-motif-slot").innerHTML = motifSvg();
+document.getElementById("loading-motif-slot").innerHTML = motifSvg({ spin: true });
+
 const AXIS_LABEL_OVERRIDES = {
   threat_new_entrants: "New Entrants",
   threat_substitutes: "Substitutes",
@@ -278,21 +1078,42 @@ function directionClass(v) {
   return v >= 0 ? "positive" : "negative";
 }
 
+// Plotly draws to canvas/SVG via its own JS color parsing, not the page's CSS
+// cascade, so a literal "var(--accent)" string passed as a trace color never
+// resolves - charts have to read the CURRENT theme's resolved values at
+// render time instead. Re-invoking makeRadar() (done on every theme toggle,
+// see the toggle wiring below) is what keeps charts in sync with light/dark.
+function themeColor(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
 function makeRadar(elId, dims, labels, values) {
   const axisLabels = dims.map(d => AXIS_LABEL_OVERRIDES[d] || labels[d]);
   const categories = axisLabels.concat([axisLabels[0]]);
   const radii = dims.map(d => Math.abs(values[d])).concat([Math.abs(values[dims[0]])]);
   const signed = dims.map(d => values[d]).concat([values[dims[0]]]);
-  const colors = signed.map(v => v >= 0 ? "#38B871" : "#E2534A");
+
+  const accent = themeColor("--accent");
+  const accentRgb = themeColor("--accent-rgb");
+  const positive = themeColor("--positive");
+  const negative = themeColor("--negative");
+  const surface = themeColor("--surface");
+  const divider = themeColor("--divider");
+  const textPrimary = themeColor("--text-primary");
+  const textSecondary = themeColor("--text-secondary");
+  const fontBody = "Space Grotesk, sans-serif";
+  const fontMono = "IBM Plex Mono, monospace";
+
+  const colors = signed.map(v => v >= 0 ? positive : negative);
 
   const trace = {
     type: "scatterpolar",
     r: radii,
     theta: categories,
     fill: "toself",
-    fillcolor: "rgba(83, 74, 183, 0.35)",
-    line: { color: "#534AB7", width: 2 },
-    marker: { size: 10, color: colors, line: { width: 1, color: "#0A0C10" } },
+    fillcolor: `rgba(${accentRgb}, 0.35)`,
+    line: { color: accent, width: 2 },
+    marker: { size: 10, color: colors, line: { width: 1, color: surface } },
     customdata: signed,
     hovertemplate: "%{theta}: %{customdata:+.1f}<extra></extra>",
   };
@@ -306,19 +1127,19 @@ function makeRadar(elId, dims, labels, values) {
       radialaxis: {
         visible: true,
         range: [0, 100],
-        tickfont: { family: "IBM Plex Mono, monospace", size: 9, color: "#9099AA" },
-        gridcolor: "#262B36",
-        linecolor: "#262B36",
+        tickfont: { family: fontMono, size: 9, color: textSecondary },
+        gridcolor: divider,
+        linecolor: divider,
       },
       angularaxis: {
-        tickfont: { family: "Space Grotesk, sans-serif", size: 12, color: "#E7E9EE" },
-        gridcolor: "#262B36",
-        linecolor: "#262B36",
+        tickfont: { family: fontBody, size: 12, color: textPrimary },
+        gridcolor: divider,
+        linecolor: divider,
       },
     },
     showlegend: false,
     margin: { t: 20, b: 20, l: 40, r: 40 },
-    font: { family: "Space Grotesk, sans-serif", color: "#E7E9EE" },
+    font: { family: fontBody, color: textPrimary },
   };
 
   Plotly.newPlot(elId, [trace], layout, { displayModeBar: false, responsive: true });
@@ -327,6 +1148,9 @@ function makeRadar(elId, dims, labels, values) {
 function articleRow(item) {
   const a = item.article;
   const cls = directionClass(item.contribution);
+  // Reflects article.is_live exactly as server.py returns it (real ingested
+  // facts, folded into scoring via live_facts.build_combined_corpus() -
+  // genuinely wired into /api/analyze today, not a placeholder).
   const liveBadge = a.is_live ? '<span class="live-badge">Live</span>' : "";
   const row = document.createElement("div");
   row.className = "article-row";
@@ -377,42 +1201,486 @@ function renderBreakdown(containerId, dims) {
   });
 }
 
-function showResults(data) {
-  makeRadar("chart-pestle", data.pestle_dims, Object.fromEntries(data.pestle_breakdown.map(d => [d.dim, d.label])), data.pestle_display);
-  makeRadar("chart-porters", data.porters_dims, Object.fromEntries(data.porters_breakdown.map(d => [d.dim, d.label])), data.porters_display);
-  renderBreakdown("breakdown-pestle", data.pestle_breakdown);
-  renderBreakdown("breakdown-porters", data.porters_breakdown);
+// Retained so a theme toggle while the analysis page is showing can redraw
+// the Plotly charts with the new theme's resolved colors (see themeColor()
+// above) without re-fetching or recomputing anything from the backend.
+let lastAnalysisData = null;
 
-  document.getElementById("state-input").classList.add("hidden");
-  document.getElementById("state-results").classList.remove("hidden");
+function showResults(data) {
+  lastAnalysisData = data;
+  const pestleLabels = Object.fromEntries(data.pestle_breakdown.map(d => [d.dim, d.label]));
+  const portersLabels = Object.fromEntries(data.porters_breakdown.map(d => [d.dim, d.label]));
+
+  // The badge and the primary charts both reflect `primary_result` exactly as
+  // returned by /api/analyze - "sales" when a valid, sufficiently-overlapping
+  // uploaded-history profile exists, "cvp" otherwise. No new backend fields.
+  const isSalesPrimary = data.primary_result === "sales" && data.sales_derived;
+  // A sales-derived result regressed against the fabricated seed corpus
+  // (config.SALES_REGRESSION_NEWS_SOURCE == "fabricated" - today's time-boxed
+  // demo default) is REAL server-computed output, but on sample data, not the
+  // user's live news feed - this must never look like a normal "sales" result.
+  const isDemoSourced = isSalesPrimary && data.sales_derived.news_source === "fabricated";
+  const badgeEl = document.getElementById("result-type-badge");
+  const badgeTextEl = document.getElementById("result-type-text");
+  const metaEl = document.getElementById("result-type-meta");
+  const bannerEl = document.getElementById("sample-data-banner");
+  badgeEl.classList.toggle("sales", isSalesPrimary && !isDemoSourced);
+  badgeEl.classList.toggle("demo", isDemoSourced);
+  // The badge/label alone is not treated as sufficient disclosure - this
+  // banner is the loud, impossible-to-miss one (full-width, solid warning
+  // color, sits above everything else on the page).
+  bannerEl.classList.toggle("hidden", !isDemoSourced);
+
+  if (isSalesPrimary) {
+    const sd = data.sales_derived;
+    badgeTextEl.textContent = sd.label || "Derived from your sales history";
+    const uncovered = sd.uncovered_dimensions.length
+      ? ` Still using the comparable-business estimate for: ${sd.uncovered_dimensions.join(", ")} (not enough real news data yet for those).`
+      : "";
+    const sourceNote = isDemoSourced
+      ? " Regressed against the fabricated sample news corpus (demo mode), not real ingested news."
+      : "";
+    metaEl.textContent = `Recovered from a ${sd.lag_days}-day lag between news and revenue, R²=${sd.r_squared.toFixed(2)}.${sourceNote}${uncovered}`;
+    makeRadar("chart-pestle", data.pestle_dims, pestleLabels, sd.pestle_display);
+    makeRadar("chart-porters", data.porters_dims, portersLabels, sd.porters_display);
+  } else {
+    badgeTextEl.textContent = data.cvp_result_label || "Estimated from comparable businesses";
+    metaEl.textContent = "";
+    makeRadar("chart-pestle", data.pestle_dims, pestleLabels, data.pestle_display);
+    makeRadar("chart-porters", data.porters_dims, portersLabels, data.porters_display);
+  }
+
+  // The article-level breakdown only exists when a real CVP was scored (see
+  // server.py's cvp_provided) - without one there's nothing genuine to show,
+  // so the whole section is replaced with an explanatory note rather than
+  // rendering an empty-looking (or, worse, meaningless empty-string-CVP-based)
+  // breakdown.
+  document.getElementById("cvp-breakdown-section").classList.toggle("hidden", !data.cvp_provided);
+  document.getElementById("no-cvp-breakdown-note").classList.toggle("hidden", data.cvp_provided);
+  if (data.cvp_provided) {
+    renderBreakdown("breakdown-pestle", data.pestle_breakdown);
+    renderBreakdown("breakdown-porters", data.porters_breakdown);
+  }
+
+  // If a sales-derived result IS primary AND a real CVP was also provided,
+  // the CVP-similarity estimate is still shown - as a smaller, explicitly-
+  // marked lower-confidence comparison, per the sales-upload design (never
+  // dropped, never presented as equally strong). With no CVP at all, there
+  // is nothing to compare against, so this stays hidden entirely rather than
+  // showing a "comparison" built from a meaningless empty-string CVP.
+  const comparisonBlock = document.getElementById("comparison-block");
+  const showComparison = isSalesPrimary && data.cvp_provided;
+  if (showComparison) {
+    document.getElementById("comparison-note").textContent =
+      (data.cvp_result_label || "Estimated from comparable businesses") + " - lower confidence than your own sales history.";
+    makeRadar("chart-pestle-comparison", data.pestle_dims, pestleLabels, data.pestle_display);
+    makeRadar("chart-porters-comparison", data.porters_dims, portersLabels, data.porters_display);
+    comparisonBlock.classList.remove("hidden");
+  } else {
+    comparisonBlock.classList.add("hidden");
+  }
+
+  document.getElementById("state-news").classList.add("hidden");
+  document.getElementById("state-upload").classList.add("hidden");
+  document.getElementById("state-analysis").classList.remove("hidden");
   document.getElementById("reset-link").classList.remove("hidden");
   window.scrollTo({ top: 0 });
 }
 
-function resetToInput() {
-  document.getElementById("state-results").classList.add("hidden");
-  document.getElementById("state-input").classList.remove("hidden");
-  document.getElementById("reset-link").classList.add("hidden");
+let confirmedSalesUploadId = null;
+let pendingUploadId = null;
 
+function goToLanding() {
+  document.getElementById("state-upload").classList.add("hidden");
+  document.getElementById("state-analysis").classList.add("hidden");
+  document.getElementById("state-news").classList.add("hidden");
+  document.getElementById("state-landing").classList.remove("hidden");
+  document.getElementById("reset-link").classList.add("hidden");
+  window.scrollTo({ top: 0 });
+}
+
+function goToUpload() {
+  document.getElementById("state-landing").classList.add("hidden");
+  document.getElementById("state-analysis").classList.add("hidden");
+  document.getElementById("state-news").classList.add("hidden");
+  document.getElementById("state-upload").classList.remove("hidden");
+  window.scrollTo({ top: 0 });
+  document.getElementById("cvp").focus();
+}
+
+function resetToUpload() {
   // "New analysis" means a clean slate, not the previous submission still sitting
   // there - without this, the old CVP text (and any old error) stuck around, so
   // going back and pasting a new CVP could look like nothing changed if the old
-  // text wasn't fully replaced.
+  // text wasn't fully replaced. Same reasoning extends to a previously-uploaded
+  // sales file - a fresh analysis shouldn't silently reuse a stale upload.
   const cvpField = document.getElementById("cvp");
   cvpField.value = "";
   document.getElementById("input-error").classList.add("hidden");
-  cvpField.focus();
+  document.getElementById("sales-file").value = "";
+  document.getElementById("dropzone-filename").textContent = "";
+  document.getElementById("upload-status").classList.add("hidden");
+  document.getElementById("mapping-confirm").classList.add("hidden");
+  document.getElementById("mapping-result").classList.add("hidden");
+  confirmedSalesUploadId = null;
+  pendingUploadId = null;
+  document.getElementById("reset-link").classList.add("hidden");
+  goToUpload();
 }
 
-document.getElementById("reset-link").addEventListener("click", resetToInput);
+document.getElementById("get-started-btn").addEventListener("click", goToUpload);
+document.getElementById("topbar-brand").addEventListener("click", goToLanding);
+document.getElementById("reset-link").addEventListener("click", resetToUpload);
+
+// "Cobalt Grid" light/dark toggle - light is the default token set (bare
+// :root), dark is applied via [data-theme="dark"] on <html>. The user's
+// choice is persisted to localStorage so it survives a reload; absent any
+// saved choice, the page stays on the documented light default rather than
+// guessing from system preference.
+const THEME_STORAGE_KEY = "emi-theme";
+const sunIcon = document.getElementById("theme-icon-sun");
+const moonIcon = document.getElementById("theme-icon-moon");
+
+function applyTheme(theme) {
+  if (theme === "dark") {
+    document.documentElement.setAttribute("data-theme", "dark");
+  } else {
+    document.documentElement.removeAttribute("data-theme");
+  }
+  // Icon shown is the mode a click would switch TO, not the current mode.
+  sunIcon.classList.toggle("hidden", theme === "dark");
+  moonIcon.classList.toggle("hidden", theme !== "dark");
+  // Chart colors are read from resolved CSS variables at draw time (see
+  // themeColor() above), so an already-rendered analysis page needs an
+  // explicit redraw to pick up the new theme - nothing else on the page
+  // needs this since everything else is plain CSS that repaints on its own.
+  if (lastAnalysisData && !document.getElementById("state-analysis").classList.contains("hidden")) {
+    showResults(lastAnalysisData);
+  }
+}
+
+let storedTheme = null;
+try { storedTheme = localStorage.getItem(THEME_STORAGE_KEY); } catch (e) { /* storage unavailable - fall back to light */ }
+applyTheme(storedTheme === "dark" ? "dark" : "light");
+
+document.getElementById("theme-toggle").addEventListener("click", () => {
+  const next = document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark";
+  applyTheme(next);
+  try { localStorage.setItem(THEME_STORAGE_KEY, next); } catch (e) { /* non-fatal - just won't persist */ }
+});
+
+// Small "..." menu - reuses the same navigation actions as the brand link /
+// reset link above, just also reachable from a persistent menu (matches the
+// reference design's top-right affordance rather than inventing new behavior).
+const menuBtn = document.getElementById("menu-btn");
+const menuDropdown = document.getElementById("menu-dropdown");
+menuBtn.addEventListener("click", (e) => {
+  e.stopPropagation();
+  menuDropdown.classList.toggle("hidden");
+});
+document.addEventListener("click", () => menuDropdown.classList.add("hidden"));
+document.getElementById("menu-home").addEventListener("click", goToLanding);
+document.getElementById("menu-new-analysis").addEventListener("click", resetToUpload);
+document.getElementById("menu-news").addEventListener("click", () => goToNews());
+
+// ---------- News data browser (page 4) ----------
+// Read-only view over /api/news - every stored item across the fabricated
+// fabricated-seed and live-ingested corpora. Filtering and paging are done
+// server-side so this keeps working as the live corpus grows, and this page
+// never touches the analysis state.
+const CORPUS_LABELS = {
+  seed: "Fabricated seed",
+  live: "Live ingested",
+};
+let newsPage = 1;
+let newsFacetsLoaded = false;
+
+function newsQuery() {
+  const params = new URLSearchParams({
+    source: document.getElementById("news-source").value,
+    q: document.getElementById("news-search").value.trim(),
+    scope: document.getElementById("news-scope").value,
+    polarity: document.getElementById("news-polarity").value,
+    dimension: document.getElementById("news-dimension").value,
+    page: String(newsPage),
+    page_size: "50",
+  });
+  return params.toString();
+}
+
+function renderCorpusCards(summary) {
+  const wrap = document.getElementById("corpus-cards");
+  wrap.innerHTML = "";
+  ["seed", "live"].forEach(key => {
+    const s = summary[key];
+    if (!s) return;
+    const card = document.createElement("div");
+    card.className = "corpus-card";
+    const range = s.count
+      ? `${s.start} &rarr; ${s.end}<br>${s.distinct_days} distinct day${s.distinct_days === 1 ? "" : "s"}`
+      : "nothing collected yet";
+    // in_scoring comes straight from the backend - it reports the actual
+    // current wiring, so a corpus that's collected but unused says so here
+    // rather than looking equivalent to one that feeds analysis.
+    const status = s.in_scoring
+      ? '<span class="corpus-status scored">Feeds analysis</span>'
+      : '<span class="corpus-status unscored">Collected, not scored</span>';
+    card.innerHTML = `
+      <div class="corpus-name">${CORPUS_LABELS[key]}</div>
+      <div class="corpus-count">${s.count.toLocaleString()}</div>
+      <div class="corpus-range">${range}</div>
+      ${s.count ? status : ""}
+    `;
+    wrap.appendChild(card);
+  });
+}
+
+function populateFacets(facets) {
+  if (newsFacetsLoaded) return;
+  const scopeSel = document.getElementById("news-scope");
+  facets.scopes.forEach(s => {
+    const o = document.createElement("option");
+    o.value = s; o.textContent = s;
+    scopeSel.appendChild(o);
+  });
+  const dimSel = document.getElementById("news-dimension");
+  facets.dimensions.forEach(d => {
+    const o = document.createElement("option");
+    o.value = d.value; o.textContent = d.label;
+    dimSel.appendChild(o);
+  });
+  newsFacetsLoaded = true;
+}
+
+function newsRow(item) {
+  const row = document.createElement("div");
+  row.className = "news-row";
+  const polarityClass = item.polarity === "positive" ? "positive" : "negative";
+  const link = item.link
+    ? `<a href="${item.link}" target="_blank" rel="noopener noreferrer">source &#8599;</a>`
+    : "";
+  // The parent article's headline is shown under a decomposed fact, so it's
+  // clear which real article a fact was extracted from (facts are Ollama's
+  // reworded atoms, not the original headline).
+  const detail = item.detail && item.detail !== item.text
+    ? `<span title="${item.detail.replace(/"/g, "&quot;")}">from: ${item.detail.slice(0, 90)}${item.detail.length > 90 ? "…" : ""}</span>`
+    : "";
+  const mentions = item.mention_count > 1 ? `<span>&times;${item.mention_count} mentions</span>` : "";
+  row.innerHTML = `
+    <div class="news-row-main">
+      <div class="news-row-text"><span class="source-chip ${item.source}">${item.source}</span>${item.text}</div>
+      <div class="news-row-sub">
+        <span>${item.origin}</span>
+        ${detail}
+        ${mentions}
+        ${link}
+      </div>
+    </div>
+    <div class="news-row-meta">
+      ${item.date} &middot; ${item.scope}
+      <span class="news-row-dim ${polarityClass}">${item.polarity} &middot; ${item.top_dimension_label} ${item.top_dimension_score}</span>
+    </div>
+  `;
+  return row;
+}
+
+async function loadNews() {
+  const listEl = document.getElementById("news-list");
+  const countEl = document.getElementById("news-count-line");
+  countEl.textContent = "Loading…";
+  try {
+    const res = await fetch(`/api/news?${newsQuery()}`);
+    if (!res.ok) throw new Error(`Request failed (${res.status})`);
+    const data = await res.json();
+
+    renderCorpusCards(data.summary);
+    populateFacets(data.facets);
+
+    listEl.innerHTML = "";
+    if (data.items.length === 0) {
+      const empty = document.createElement("div");
+      empty.className = "news-empty";
+      empty.textContent = "No news items match these filters.";
+      listEl.appendChild(empty);
+    } else {
+      data.items.forEach(item => listEl.appendChild(newsRow(item)));
+    }
+
+    const from = (data.page - 1) * data.page_size + 1;
+    const to = Math.min(data.page * data.page_size, data.total);
+    countEl.textContent = data.total
+      ? `${data.total.toLocaleString()} item${data.total === 1 ? "" : "s"} - showing ${from}-${to}`
+      : "0 items";
+    document.getElementById("news-position").textContent = `Page ${data.page} of ${data.total_pages}`;
+    document.getElementById("news-prev").disabled = data.page <= 1;
+    document.getElementById("news-next").disabled = data.page >= data.total_pages;
+  } catch (err) {
+    countEl.textContent = err.message || "Could not load news data.";
+    listEl.innerHTML = "";
+  }
+}
+
+function goToNews() {
+  document.getElementById("state-landing").classList.add("hidden");
+  document.getElementById("state-upload").classList.add("hidden");
+  document.getElementById("state-analysis").classList.add("hidden");
+  document.getElementById("state-news").classList.remove("hidden");
+  window.scrollTo({ top: 0 });
+  loadNews();
+}
+
+// Any filter change resets to page 1 - staying on page 12 of a previous,
+// larger result set would otherwise show an empty list.
+["news-source", "news-scope", "news-polarity", "news-dimension"].forEach(id =>
+  document.getElementById(id).addEventListener("change", () => { newsPage = 1; loadNews(); })
+);
+let newsSearchTimer = null;
+document.getElementById("news-search").addEventListener("input", () => {
+  clearTimeout(newsSearchTimer);
+  newsSearchTimer = setTimeout(() => { newsPage = 1; loadNews(); }, 250);
+});
+document.getElementById("news-reset").addEventListener("click", () => {
+  document.getElementById("news-search").value = "";
+  ["news-source", "news-scope", "news-polarity", "news-dimension"].forEach(
+    id => { document.getElementById(id).value = "all"; }
+  );
+  newsPage = 1;
+  loadNews();
+});
+document.getElementById("news-prev").addEventListener("click", () => {
+  if (newsPage > 1) { newsPage--; loadNews(); window.scrollTo({ top: 0 }); }
+});
+document.getElementById("news-next").addEventListener("click", () => {
+  newsPage++; loadNews(); window.scrollTo({ top: 0 });
+});
+
+// Drag-and-drop dropzone wrapping the (visually-hidden) file input - both
+// click-to-browse and real drag-and-drop trigger the same "change"-driven
+// upload flow below, so there's exactly one upload code path either way.
+const dropzone = document.getElementById("dropzone");
+const salesFileInput = document.getElementById("sales-file");
+["dragenter", "dragover"].forEach(evt =>
+  dropzone.addEventListener(evt, (e) => { e.preventDefault(); dropzone.classList.add("dragover"); })
+);
+["dragleave", "drop"].forEach(evt =>
+  dropzone.addEventListener(evt, (e) => { e.preventDefault(); dropzone.classList.remove("dragover"); })
+);
+dropzone.addEventListener("drop", (e) => {
+  const file = e.dataTransfer.files[0];
+  if (!file) return;
+  salesFileInput.files = e.dataTransfer.files;
+  salesFileInput.dispatchEvent(new Event("change"));
+});
+
+document.getElementById("sales-file").addEventListener("change", async (e) => {
+  const file = e.target.files[0];
+  const statusEl = document.getElementById("upload-status");
+  const mappingEl = document.getElementById("mapping-confirm");
+  const resultEl = document.getElementById("mapping-result");
+  confirmedSalesUploadId = null;
+  resultEl.classList.add("hidden");
+  mappingEl.classList.add("hidden");
+  if (!file) return;
+
+  document.getElementById("dropzone-filename").textContent = file.name;
+  statusEl.textContent = "Reading file...";
+  statusEl.classList.remove("hidden");
+
+  try {
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await fetch("/api/sales/upload", { method: "POST", body: formData });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.detail || `Upload failed (${res.status})`);
+    }
+    const data = await res.json();
+    pendingUploadId = data.upload_id;
+
+    const dateSelect = document.getElementById("date-col-select");
+    const valueSelect = document.getElementById("value-col-select");
+    dateSelect.innerHTML = data.columns.map(c => `<option value="${c}">${c}</option>`).join("");
+    valueSelect.innerHTML = data.columns.map(c => `<option value="${c}">${c}</option>`).join("");
+    if (data.guessed_date_col) dateSelect.value = data.guessed_date_col;
+    if (data.guessed_value_col) valueSelect.value = data.guessed_value_col;
+
+    // Best-guess only - never trusted silently. The caller reviews (and can
+    // correct) the mapping below before anything is computed.
+    statusEl.textContent = `Parsed ${file.name}. Confirm which columns are which before we analyze it:`;
+    mappingEl.classList.remove("hidden");
+  } catch (err) {
+    statusEl.textContent = err.message || "Could not read that file.";
+  }
+});
+
+document.getElementById("confirm-mapping-btn").addEventListener("click", async () => {
+  const resultEl = document.getElementById("mapping-result");
+  resultEl.classList.remove("hidden");
+  resultEl.className = "mapping-result";
+  if (!pendingUploadId) {
+    resultEl.textContent = "Upload a file first.";
+    resultEl.classList.add("fail");
+    return;
+  }
+
+  const dateCol = document.getElementById("date-col-select").value;
+  const valueCol = document.getElementById("value-col-select").value;
+  resultEl.textContent = "Checking your sales history and preparing your sensitivity profile...";
+
+  try {
+    const res = await fetch("/api/sales/confirm", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ upload_id: pendingUploadId, date_col: dateCol, value_col: valueCol }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || `Request failed (${res.status})`);
+
+    if (!data.valid) {
+      resultEl.textContent = data.reason;
+      resultEl.classList.add("fail");
+      confirmedSalesUploadId = null;
+      return;
+    }
+    if (!data.sales_derived_available) {
+      const o = data.overlap;
+      resultEl.textContent = o.overlap_days > 0
+        ? `Your upload spans ${o.upload_span_days} days, but real news coverage only overlaps ${o.overlap_days} of them - not enough yet for a reliable sales-driven profile. The CVP-based estimate will be used instead.`
+        : `Your upload and the real news corpus don't overlap in time yet (real coverage: ${o.real_news_start} to ${o.real_news_end}). The CVP-based estimate will be used instead.`;
+      resultEl.classList.add("warn");
+      confirmedSalesUploadId = null;
+      return;
+    }
+
+    // The confirmed-mapping message must also reflect which news pool the
+    // regression actually ran against - "have enough real news data" would
+    // be flatly wrong to say during today's fabricated-corpus demo fallback
+    // (see config.SALES_REGRESSION_NEWS_SOURCE). The loud, mandatory demo
+    // disclosure itself lives on the analysis page banner (see showResults);
+    // this is just keeping this earlier confirmation message honest too.
+    resultEl.textContent = data.derived_profile.news_source === "fabricated"
+      ? `Confirmed. DEMO MODE: your sales history will be the primary result, regressed against representative fabricated sample news (not your live feed) across all 11 dimensions.`
+      : `Confirmed. Your sales history will be the primary result (${data.derived_profile.covered_dimensions.length}/11 dimensions currently have enough real news data).`;
+    resultEl.classList.add("ok");
+    confirmedSalesUploadId = pendingUploadId;
+  } catch (err) {
+    resultEl.textContent = err.message || "Something went wrong.";
+    resultEl.classList.add("fail");
+    confirmedSalesUploadId = null;
+  }
+});
 
 document.getElementById("run-btn").addEventListener("click", async () => {
   const cvp = document.getElementById("cvp").value.trim();
   const errorEl = document.getElementById("input-error");
   errorEl.classList.add("hidden");
 
-  if (!cvp) {
-    errorEl.textContent = "Paste a CVP first.";
+  // CVP and a confirmed sales upload are each independently sufficient -
+  // either one alone is enough to run analysis, matching /api/analyze's own
+  // gate (see server.py) so this never blocks a request the backend would
+  // actually accept.
+  if (!cvp && !confirmedSalesUploadId) {
+    errorEl.textContent = "Paste a CVP, or upload and confirm a sales history file, before running analysis.";
     errorEl.classList.remove("hidden");
     return;
   }
@@ -422,10 +1690,12 @@ document.getElementById("run-btn").addEventListener("click", async () => {
   document.getElementById("loading-overlay").classList.remove("hidden");
 
   try {
+    const payload = { cvp };
+    if (confirmedSalesUploadId) payload.sales_upload_id = confirmedSalesUploadId;
     const res = await fetch("/api/analyze", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ cvp }),
+      body: JSON.stringify(payload),
     });
     if (!res.ok) {
       const body = await res.json().catch(() => ({}));

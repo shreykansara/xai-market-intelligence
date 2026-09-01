@@ -15,6 +15,8 @@ dependencies = [
     "scikit-learn",
     "feedparser",
     "gdeltdoc",
+    "openpyxl",
+    "python-multipart",
 ]
 
 [tool.hatch.build.targets.wheel]

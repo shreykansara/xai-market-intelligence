@@ -78,6 +78,21 @@ N_PROFIT_DAYS = 180
 # profile from its fabricated profit history - see scripts/derive_sensitivity_profiles.py.
 CANDIDATE_LAGS = [1, 3, 7, 14]
 
+# Which news pool the OPTIONAL sales-history-upload regression
+# (sales_upload.derive_sales_profile) draws on: "real" (the accumulated real
+# ingested-fact corpus, data/real_facts.json) or "fabricated" (the 1000-article
+# fabricated seed corpus, data/news.json - the same corpus scripts/
+# derive_sensitivity_profiles.py already regresses fabricated startups against).
+# Intended, production value is "real". Set to "fabricated" as a TIME-BOXED,
+# pragmatic fix for a live class demo (today's real-news corpus is far too
+# sparse to ever clear the upload<->real-news overlap bar - see CLAUDE.md's
+# "Known gaps" - so the "real" path would just fall back to CVP-only every
+# time). Flip this single flag back to "real" once real coverage grows enough
+# to demo meaningfully; every result computed under "fabricated" is labeled as
+# demo/sample-data to the caller (never silently presented as derived from the
+# user's live news feed - see sales_upload.py and web/index.html).
+SALES_REGRESSION_NEWS_SOURCE = "fabricated"  # "real" | "fabricated"
+
 N_NEWS_ARTICLES = 1000
 TOP_K_STARTUPS = 3
 
@@ -131,12 +146,11 @@ REAL_FACT_EMBEDDINGS_PATH = DATA_DIR / "real_fact_embeddings.npy"
 INGESTION_STATE_PATH = DATA_DIR / "ingestion_state.json"
 INGESTION_SAMPLE_LOG_PATH = DATA_DIR / "ingestion_samples.jsonl"
 INGESTION_EXCLUDED_LOG_PATH = DATA_DIR / "ingestion_excluded.jsonl"
-# Grounding safeguards (src/marketintel/grounding.py), ported into the live
-# path from the GDELT bulk backfill so both ingestion codepaths share the
-# same safety guarantees rather than diverging - see ingestion.py. A
-# different kind of filter from INGESTION_EXCLUDED_LOG_PATH above (relevance-
-# gate exclusions), logged separately for the same reason BACKFILL_*
-# equivalents are.
+# Grounding safeguards (src/marketintel/grounding.py) - a different kind of
+# filter from INGESTION_EXCLUDED_LOG_PATH above (relevance-gate exclusions),
+# so rejections are logged separately rather than pooled: NONCONTENT logs
+# titles rejected before any Ollama call, UNGROUNDED logs facts rejected
+# after decomposition for stating a number not traceable to the source.
 INGESTION_NONCONTENT_LOG_PATH = DATA_DIR / "ingestion_noncontent.jsonl"
 INGESTION_UNGROUNDED_LOG_PATH = DATA_DIR / "ingestion_ungrounded.jsonl"
 INGESTION_UNMATCHED_LOG_PATH = DATA_DIR / "ingestion_unmatched_directional.jsonl"
@@ -181,8 +195,7 @@ SEED_NEIGHBOR_K = 10
 RELEVANCE_GATE_PERCENTILE = 5
 
 # --- Real-data seed inference (src/marketintel/real_data_inference.py) ---
-# The live ingestion path (ingestion.py only - NOT the GDELT bulk backfill,
-# which keeps looking up the fabricated corpus untouched) migrates its k-NN
+# The live ingestion path (ingestion.py) migrates its k-NN
 # reference pool from the fabricated seed corpus to the accumulated real-fact
 # corpus itself, PER DIMENSION - a dimension only cuts over once the real
 # corpus has enough of its own data to support a reliable lookup; thin
@@ -210,35 +223,11 @@ REAL_DATA_MIN_PER_POLARITY = 3
 # under ~50 samples is too noisy to trust as a cutoff for everything else.
 REAL_DATA_MIN_FACTS_FOR_GATE_RECALIBRATION = 50
 
-# --- GDELT bulk backfill (src/marketintel/gdelt_bulk.py, comparative_matching.py) ---
-# A separate, one-off/batch collection process from the live ingestion_service.py
-# (which keeps running on its own 30-minute schedule for ongoing Punjab/LPU-area
-# coverage). Sourced from GDELT 2.0's bulk export files (data.gdeltproject.org),
-# not the DOC 2.0 API (limited to ~3 months of lookback) and not RSS (no history
-# at all) - the only free, no-key source with multi-year depth.
-GDELT_BULK_BASE_URL = "http://data.gdeltproject.org/gdeltv2"
-BACKFILL_ARTICLES_PATH = DATA_DIR / "backfill_articles.json"
-BACKFILL_FACTS_PATH = DATA_DIR / "backfill_facts.json"
-BACKFILL_FACT_EMBEDDINGS_PATH = DATA_DIR / "backfill_fact_embeddings.npy"
-BACKFILL_STATE_PATH = DATA_DIR / "backfill_state.json"
-BACKFILL_EXCLUDED_LOG_PATH = DATA_DIR / "backfill_excluded.jsonl"
-BACKFILL_UNMATCHED_LOG_PATH = DATA_DIR / "backfill_unmatched_directional.jsonl"
-# Grounding safeguards (src/marketintel/grounding.py) - a DIFFERENT kind of
-# filter from BACKFILL_EXCLUDED_LOG_PATH above (which logs relevance-gate
-# exclusions). BACKFILL_NONCONTENT_LOG_PATH logs titles the pre-filter
-# rejected before any Ollama call (section labels, digests, etc.);
-# BACKFILL_UNGROUNDED_LOG_PATH logs facts rejected AFTER decomposition
-# because they stated a number not traceable to the source title - the
-# direct response to a real observed hallucination (see CLAUDE.md).
-BACKFILL_NONCONTENT_LOG_PATH = DATA_DIR / "backfill_noncontent.jsonl"
-BACKFILL_UNGROUNDED_LOG_PATH = DATA_DIR / "backfill_ungrounded.jsonl"
-
 # Comparative-fact matching (src/marketintel/comparative_matching.py): a bare
 # state-value fact ("GST on mobile phones is 18%") only gets compared against a
 # candidate PRIOR fact if their similarity clears this threshold - deliberately
 # stricter than RELEVANCE_GATE_PERCENTILE's cutoff (~0.58 on the same cosine
 # scale), since a wrong comparative match silently fabricates a direction/
-# polarity rather than just mis-scoring relevance. Starting point per CLAUDE.md
-# instructions; tune from validation results (scripts/validate_comparative_matching.py)
-# before this ever touches real backfill data.
+# polarity rather than just mis-scoring relevance. Tune from validation
+# results (scripts/validate_comparative_matching.py), not by eyeballing.
 COMPARATIVE_MATCH_SIMILARITY_THRESHOLD = 0.85

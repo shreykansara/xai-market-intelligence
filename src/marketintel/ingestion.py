@@ -18,21 +18,22 @@ lower bar (one real exemplar is enough, given how per-class-best-match
 already works). The relevance GATE THRESHOLD itself also switches to being
 calibrated from the real corpus once there's enough of it (see
 real_data_inference.choose_gate_threshold). None of this affects the GDELT
-bulk backfill (gdelt_backfill.py), which still looks up the fabricated
+historical GDELT bulk backfill (since removed), which looked up the fabricated
 corpus unchanged - the underlying seed_inference.py functions were already
 parameterized on their reference pool, so only THIS module's call sites
 needed to change.
 
 Shares its grounding safeguards (grounding.py) and comparative-fact matching
-(comparative_matching.py) with the GDELT bulk backfill (gdelt_backfill.py) -
+(comparative_matching.py) - originally built for the historical GDELT bulk
+backfill (since removed), retained here because this path relies on them -
 these are standalone, source-agnostic modules, not tied to either pipeline,
 so both codepaths call the SAME underlying safety logic rather than each
 maintaining their own. The two ORCHESTRATION pipelines remain intentionally
-separate (different sources, different step ordering - see gdelt_backfill.py's
+separate (different sources, different step ordering - see this module's
 docstring for why bulk volume needs the relevance gate before decomposition,
 which this live per-item path does not), but neither has weaker safety
 guarantees than the other. Titles are HTML-unescaped at fetch time for the
-same reason gdelt_bulk.py now does it: an entity like "&#x2013;" left
+same reason the bulk fetcher did: an entity like "&#x2013;" left
 undecoded contains a spurious digit run that can corrupt the grounding
 check's number matching.
 
@@ -378,7 +379,7 @@ def run_ingestion_once(verbose: bool = True) -> dict:
                 porters_scores = {d: relevance[d] for d in PORTERS_DIMS}
 
                 # Comparative-fact matching (see comparative_matching.py) - shared with the
-                # GDELT bulk backfill. `facts` here is the SAME growing in-memory list this
+                # historical bulk backfill. `facts` here is the SAME growing in-memory list this
                 # loop appends to below, so a bare state-value fact can match against
                 # anything already ingested earlier in THIS run or a prior one.
                 comparative = resolve_comparative_fact(

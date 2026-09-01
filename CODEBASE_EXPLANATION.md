@@ -1,6 +1,6 @@
 # AI-Based Explainable Market Intelligence — Complete Codebase Architecture & Code Walkthrough
 
-This document describes the system **as it actually runs today**, not as originally designed — including what's finished, what's partially migrated, and what's still a known limitation. It was fully regenerated from the live codebase and current data on disk, not incrementally patched, after the previous version drifted meaningfully out of date (it still described 20 startups, a single fabricated-only inference path, a Streamlit `app.py` that no longer exists, and predated the GDELT backfill, grounding safeguards, comparative-fact matching, and the real-data migration entirely).
+This document describes the system **as it actually runs today**, not as originally designed — including what's finished, what's partially migrated, and what's still a known limitation. It was fully regenerated from the live codebase and current data on disk, not incrementally patched, after the previous version drifted meaningfully out of date (it still described 20 startups, a single fabricated-only inference path, a Streamlit `app.py` that no longer exists, and predated the grounding safeguards, comparative-fact matching, and the real-data migration entirely). A historical GDELT bulk backfill subsystem described in earlier versions has since been removed outright — see CLAUDE.md for that decision and its reasoning.
 
 ---
 
@@ -17,7 +17,6 @@ This document describes the system **as it actually runs today**, not as origina
 10. [Flowcharts — One Per Service, Not Combined](#10-flowcharts--one-per-service-not-combined)
     - [10.1 `server.py` — Analysis & Scoring Service](#101-serverpy--analysis--scoring-service)
     - [10.2 Ingestion Microservice](#102-ingestion-microservice)
-    - [10.3 GDELT Bulk Backfill (batch, currently paused)](#103-gdelt-bulk-backfill-batch-currently-paused)
     - [10.4 Offline Training Pipeline (not a service — run by hand)](#104-offline-training-pipeline-not-a-service--run-by-hand)
 11. [Submodule Input/Output Contract Matrix](#11-submodule-inputoutput-contract-matrix)
 
@@ -31,7 +30,6 @@ The system is **not** "two subsystems" as earlier documentation described it. It
 |---|---|---|---|---|
 | **Analysis/scoring service** | `server.py` | 8000 (typical) | Demand (`/api/analyze`) | No — runs standalone even with no real data at all (see §2) |
 | **Live ingestion microservice** | `ingestion_service.py` | 8502 | Every 30 min, plus immediately on startup | No |
-| **GDELT bulk backfill** | `scripts/run_gdelt_backfill.py` | none (batch CLI) | Manually invoked, long-running, checkpointed | No — **currently paused** at 24/672 files into the India-tier pilot week |
 | **Offline training pipeline** | `scripts/*.py`, run in order | none | Once, by hand, whenever the fabricated dataset changes | N/A — produces the files the other three read |
 
 This independence was verified empirically, not assumed: separately-launched `server.py` and `ingestion_service.py` processes were tested (a) with ingestion running while `server.py` was stopped and restarted, (b) with `server.py` running while ingestion was stopped, and (c) with both started in either order — all four scenarios returned correct HTTP responses with no crash.
@@ -154,26 +152,26 @@ Plus the adversarial similar-but-different check described above, tested twice: 
 
 ### Shared, not duplicated, across both ingestion codepaths
 
-`comparative_matching.py` is a standalone, source-agnostic module with no dependency on either orchestrator. Both the live ingestion path (`ingestion.py`, searching the growing `real_facts.json`) and the GDELT bulk backfill (`gdelt_backfill.py`, searching its own separate `backfill_facts.json`, plus an entity-inverted-index for performance at that pipeline's larger scale) call the exact same `resolve_comparative_fact()` function — no comparative-matching logic is duplicated or reimplemented per pipeline.
+`comparative_matching.py` is a standalone, source-agnostic module with no dependency on either orchestrator. The live ingestion path (`ingestion.py`) searches the growing `real_facts.json` through it. It was originally written for a historical GDELT bulk backfill (since removed) that searched its own separate store through the same `resolve_comparative_fact()` entry point — the module survived that removal because live ingestion depends on it.
 
 ---
 
 ## 5. Grounding Safeguards Against Hallucination
 
-This section exists because a real, verified failure mode was found during testing: the LLM used for fact decomposition (`llama3.2:3b`) sometimes injects specific, plausible-sounding numeric claims into facts extracted from headlines that have nothing to do with those claims — not random nonsense, but numbers and dates the model appears to have memorized during training (a real RBI rate history, a real GST change) attributed to the wrong, unrelated source. A retroactive audit of the GDELT bulk backfill's already-collected corpus found this affected roughly **18%** of all stored facts before safeguards existed.
+This section exists because a real, verified failure mode was found during testing: the LLM used for fact decomposition (`llama3.2:3b`) sometimes injects specific, plausible-sounding numeric claims into facts extracted from headlines that have nothing to do with those claims — not random nonsense, but numbers and dates the model appears to have memorized during training (a real RBI rate history, a real GST change) attributed to the wrong, unrelated source. A retroactive audit of the corpus collected at the time found this affected roughly **18%** of all stored facts before safeguards existed (later corrected to ~14.6% after two false-rejection bugs in the checker itself were fixed).
 
-Two independent layers (`src/marketintel/grounding.py`), shared by both the live ingestion path and the GDELT bulk backfill:
+Two independent layers (`src/marketintel/grounding.py`), used by the live ingestion path:
 
 **Layer 1 — pre-filter (`is_likely_non_content`)**, run *before* any Ollama call. Rejects titles that look like obvious non-content: a small keyword list (`calendar`, `digest`, `roundup`, `horoscope`, `prop picks`, `best bets`, etc.) plus a heuristic for very-short/all-caps/no-verb/no-numbers titles. Cheap, but only catches clear cases — a substantive-looking headline about an unrelated topic (a movie review, an obituary) sails through this layer even though it later triggers the hallucination this system exists to catch.
 
 **Layer 2 — post-decomposition grounding check (`is_grounded`)**, the real safeguard. Every number a fact states (percentage, currency amount, date) is extracted and checked against the source title's own extracted numbers — both sides HTML-unescaped and comma/decimal-normalized first. A fact stating a number the source never mentioned is rejected, regardless of Ollama's temperature setting (lowering temperature to 0.2 fixed a *separate*, structural JSON-schema-compliance problem, but was directly shown to *not* fix hallucination — and in one side-by-side test, made the model fabricate more confidently on a content-free title where default temperature had correctly returned nothing at all).
 
-Two real false-rejection bugs were found and fixed while validating this layer against live data, not just the backfill's fabricated-adjacent titles:
+Two real false-rejection bugs were found and fixed while validating this layer against live data:
 
 1. **Trailing-period bug**: the number regex treated a sentence-ending period as a decimal point, extracting `"34."` from *"...died at the age of 34."* — which then failed to match a source reading *"...dies aged 34"* with no trailing punctuation at that position. Fixed by only consuming a decimal point when followed by at least one digit.
 2. **Comma-normalization bug**: a fact's number was compared, comma-stripped, against the *raw, unnormalized* source text — so a source written as *"5,000 migrants"* could never match a fact's normalized `"5000"`. Fixed by comparing against the source's own extracted-and-normalized numbers instead of a raw substring search.
 
-Both fixes were validated against `scripts/validate_grounding.py` (3/3 passing against the two known real hallucinations, plus a false-positive check on a genuine grounded fact) and a targeted re-check that specifically samples *accepted* facts to look for coincidental bare-number matches — which caught a third, unrelated real bug: an undecoded HTML entity (`&#x2013;`) in a source title contains the literal digit run `"2013"`, which coincidentally satisfied a completely fabricated fact's `"20%"` claim as "grounded." Fixed by HTML-unescaping titles at the source (`gdelt_bulk.py`) and defensively inside `grounding.py` itself.
+Both fixes were validated against `scripts/validate_grounding.py` (3/3 passing against the two known real hallucinations, plus a false-positive check on a genuine grounded fact) and a targeted re-check that specifically samples *accepted* facts to look for coincidental bare-number matches — which caught a third, unrelated real bug: an undecoded HTML entity (`&#x2013;`) in a source title contains the literal digit run `"2013"`, which coincidentally satisfied a completely fabricated fact's `"20%"` claim as "grounded." Fixed by HTML-unescaping titles at the fetch source and defensively inside `grounding.py` itself.
 
 ---
 
@@ -196,7 +194,7 @@ The system structures news into a two-level hierarchy for the drill-down UI: **d
 
 ## 7. Real-Data Seed-Inference Migration
 
-The live ingestion path's k-NN reference pool has migrated from the fabricated seed corpus onto the accumulated real-fact corpus itself — **per dimension**, not as a single all-or-nothing switch, and **only for the live path** (`ingestion.py`) — the GDELT bulk backfill's call sites into the same underlying functions were deliberately left untouched.
+The live ingestion path's k-NN reference pool has migrated from the fabricated seed corpus onto the accumulated real-fact corpus itself — **per dimension**, not as a single all-or-nothing switch.
 
 ### Why per-dimension, not wholesale
 
@@ -259,19 +257,17 @@ Diagnosed after both a 20→50 startup expansion and the template-perturbation s
 
 ### 9.1 `src/marketintel/` (shared package)
 
-- **`config.py`** — every constant, path, and tuning threshold in the system, each with an inline comment explaining *why* that specific number: `PESTLE_DIMS`/`PORTERS_DIMS`/labels; `SCOPES`/`SCOPE_WEIGHTS`; all `data/` file paths including `CVP_MEAN_PATH`; `SUBCLUSTER_RELEVANCE_THRESHOLD=0.3`; `RIDGE_ALPHA=0.2`; `CVP_CENTERING_ENABLED=True`; real-ingestion paths and thresholds (`DEDUP_SIMILARITY_THRESHOLD=0.92`, `OLLAMA_TIMEOUT_SECONDS=120`, `SEED_NEIGHBOR_K=10`, `RELEVANCE_GATE_PERCENTILE=5`); the real-data migration thresholds (`REAL_DATA_MIN_TOTAL_PER_DIM=15`, `REAL_DATA_MIN_PER_POLARITY=3`, `REAL_DATA_MIN_FACTS_FOR_GATE_RECALIBRATION=50`); GDELT bulk backfill paths; `COMPARATIVE_MATCH_SIMILARITY_THRESHOLD=0.85`.
+- **`config.py`** — every constant, path, and tuning threshold in the system, each with an inline comment explaining *why* that specific number: `PESTLE_DIMS`/`PORTERS_DIMS`/labels; `SCOPES`/`SCOPE_WEIGHTS`; all `data/` file paths including `CVP_MEAN_PATH`; `SUBCLUSTER_RELEVANCE_THRESHOLD=0.3`; `RIDGE_ALPHA=0.2`; `CVP_CENTERING_ENABLED=True`; real-ingestion paths and thresholds (`DEDUP_SIMILARITY_THRESHOLD=0.92`, `OLLAMA_TIMEOUT_SECONDS=120`, `SEED_NEIGHBOR_K=10`, `RELEVANCE_GATE_PERCENTILE=5`); the real-data migration thresholds (`REAL_DATA_MIN_TOTAL_PER_DIM=15`, `REAL_DATA_MIN_PER_POLARITY=3`, `REAL_DATA_MIN_FACTS_FOR_GATE_RECALIBRATION=50`); `COMPARATIVE_MATCH_SIMILARITY_THRESHOLD=0.85`.
 - **`embeddings.py`** — `get_model()` (cached `SentenceTransformer("all-MiniLM-L6-v2")`), `embed_texts()`/`embed_text()` (L2-normalized output).
 - **`data_loader.py`** — `load_news()`, `load_startups()`, `load_interaction_matrix()`, `load_cvp_mean()` (returns a zero vector if `cvp_mean.npy` doesn't exist yet, for backward compatibility), `load_subclusters()`, `load_real_facts()` (returns `([], empty array)` on missing/empty/corrupted/shape-mismatched files — see §10.1), `load_real_articles()`.
 - **`analysis.py`** — `compute_gates()` (`news_embeddings @ (W @ (cvp_embedding - cvp_mean))`), `subcluster_breakdown_for_dim()`, `dimension_breakdowns()`, `raw_dimension_scores()`, `normalize_for_display()`, `near_zero_dims()`, `score_submission()` — the full per-request scoring coordinator, source-agnostic (doesn't care whether the news list it's given is fabricated-only or fabricated+real).
-- **`atomic_io.py`** — `atomic_write_json()`/`atomic_write_npy()`, temp-file-then-rename, used by every writer in the system (`ingestion.py`, `gdelt_backfill.py`).
+- **`atomic_io.py`** — `atomic_write_json()`/`atomic_write_npy()`, temp-file-then-rename, used by every writer in the system (`ingestion.py`).
 - **`fact_extraction.py`** — `EXTRACTION_PROMPT` (now explicitly instructs preserving directional language and returning per-fact entities); `_call_ollama()` (temperature 0.2, fixing a measured ~7% malformed-JSON rate at default temperature, though this does *not* fix hallucination — see §5); `_parse_facts()` (tolerates both the new object schema and a bare-string fallback); `extract_facts_detailed()` (returns `[{"text", "entities"}, ...]`); `extract_facts()` (backward-compatible string-only wrapper).
 - **`seed_inference.py`** — `nearest_neighbors()`, `infer_relevance()`, `infer_categorical()`, `calibrate_relevance_threshold()`, `group_indices_by_scope()`, `infer_scope_best_match()`. Every function takes its reference pool as an explicit parameter — unchanged by the real-data migration, since the caller decides what pool to pass in (see §7).
 - **`real_data_inference.py`** *(new)* — `assess_dimension_coverage()`, `assess_scope_coverage()`, `infer_hybrid()`, `infer_scope_hybrid()`, `choose_gate_threshold()`. The policy layer described in §7.
 - **`comparative_matching.py`** *(new)* — `has_own_direction()`, `extract_numeric_value()`, `entities_overlap()` (Jaccard-based), `find_prior_match()`, `compute_direction()`, `resolve_comparative_fact()`. Described fully in §4.
 - **`grounding.py`** *(new)* — `is_likely_non_content()`, `extract_numbers()`, `is_grounded()`. Described fully in §5.
 - **`ingestion.py`** — `fetch_rss()`/`fetch_gdelt()` (both HTML-unescape titles), `find_duplicate_fact()` (dedup relative to wall-clock "now" — appropriate for a live stream), `run_ingestion_once()` — the complete live-per-item coordinator: fetch → pre-filter → decompose → grounding check → embed → dedup → hybrid relevance/polarity/scope inference → relevance gate → comparative matching → atomic write. The single implementation both `ingestion_service.py` and `scripts/ingest_news.py` call.
-- **`gdelt_bulk.py`** *(new)* — `gkg_timestamps()`, `gkg_url_for()`, `download_gkg_file()`, `_extract_title()` (real crawled `<PAGE_TITLE>` from the GKG `Extras` field, HTML-unescaped, with a URL-slug fallback for the rare record missing it), `_extract_country_codes()`, `parse_gkg_bytes()`, `matches_tier()`, `fetch_and_filter()`.
-- **`gdelt_backfill.py`** *(new)* — `_EntityIndex` (inverted index for comparative-matching performance at bulk scale), `find_duplicate_fact()` (dedup relative to the fact's *own* publish timestamp — appropriate for a historical replay, deliberately different from `ingestion.py`'s wall-clock version), `run_backfill()` — the reordered batch coordinator: fetch (tier-filtered) → embed → relevance gate → pre-filter + decompose survivors → grounding check → dedup → seed inference (still fabricated-only, untouched by §7) → comparative matching → atomic write, checkpointed every 20 files.
 - **`live_facts.py`** — `compute_subcluster_centroids()`, `assign_fact_subclusters()`, `merge_subclusters()`, `normalize_fact_as_article()`, `build_combined_corpus()` (now returns a 4-tuple including `live_facts_count`). Described fully in §2a and §6.
 
 ### 9.2 `scripts/` — offline training pipeline (run once, in order, by hand)
@@ -280,7 +276,7 @@ Diagnosed after both a 20→50 startup expansion and the template-perturbation s
 
 ### 9.3 `scripts/` — validation and one-off scripts
 
-`validate_umbrella_case.py`, `validate_fact_decomposition.py`, `validate_scope_fix.py` (existing, updated for hard regression assertions); `validate_comparative_matching.py`, `validate_grounding.py`, `validate_real_data_migration.py` *(new — §4, §5, §7)*; `audit_grounding_retroactive.py` *(new — read-only retroactive audit against already-collected data)*; `remediate_html_entity_corruption.py` *(new — one-time fix for facts collected before the HTML-unescape fix landed)*; `ingest_news.py` (CLI wrapper); `run_gdelt_backfill.py` *(new — CLI for the batch backfill, §10.3)*.
+`validate_umbrella_case.py`, `validate_fact_decomposition.py`, `validate_scope_fix.py` (existing, updated for hard regression assertions); `validate_comparative_matching.py`, `validate_grounding.py`, `validate_real_data_migration.py` *(new — §4, §5, §7)*; `validate_sales_upload.py`; `ingest_news.py` (CLI wrapper).
 
 ### 9.4 Application processes
 
@@ -353,45 +349,6 @@ flowchart TD
     style LOGEXCL fill:#3a3a1f,color:#fff
 ```
 
-### 10.3 GDELT Bulk Backfill (batch, currently paused)
-
-```mermaid
-flowchart TD
-    CLI(["python scripts/run_gdelt_backfill.py<br/>--tier india --start ... --end ..."]) --> RESUME{"data/backfill_state.json:<br/>resume from last checkpoint?"}
-    RESUME --> LOOP["For each 15-minute GKG file<br/>in the date range"]
-    LOOP --> DL["download_gkg_file()<br/>+ parse_gkg_bytes():<br/>extract PAGE_TITLE (HTML-unescaped),<br/>country codes, timestamp"]
-    DL --> TIER{"matches_tier()?<br/>'india': country code IN present<br/>'world': always true"}
-    TIER -- "no" --> LOOP
-    TIER -- "yes" --> EMBED["Batch embed_texts()<br/>on tier-filtered titles"]
-    EMBED --> GATE{"relevance gate<br/>(fabricated-corpus-calibrated,<br/>NOT migrated - untouched)"}
-    GATE -- "no" --> EXCL["Log to backfill_excluded.jsonl"]
-    GATE -- "yes" --> PREFILTER{"is_likely_non_content(title)?"}
-    PREFILTER -- "yes" --> NONC["Log to backfill_noncontent.jsonl<br/>(skip Ollama - bounds the<br/>dominant cost at bulk volume)"]
-    PREFILTER -- "no" --> DECOMP["extract_facts_detailed()<br/>local Ollama, survivors only"]
-    DECOMP --> GROUND{"is_grounded()?"}
-    GROUND -- "no" --> UNGR["Log to backfill_ungrounded.jsonl"]
-    GROUND -- "yes" --> DEDUP{"dedup vs. facts published<br/>within 48h BEFORE this<br/>fact's own timestamp<br/>(historical-replay semantics)"}
-    DEDUP -- "duplicate" --> MERGE["Increment mention_count"]
-    DEDUP -- "new" --> SEEDINFER["Seed inference: fabricated<br/>corpus only (untouched by<br/>section 7's migration)"]
-    SEEDINFER --> COMPARE["resolve_comparative_fact()<br/>via entity-inverted-index<br/>for scale"]
-    COMPARE --> APPEND["Append to in-memory<br/>facts / embeddings"]
-    APPEND --> CHECKPOINT{"20 files since<br/>last checkpoint?"}
-    CHECKPOINT -- "yes" --> FLUSH["atomic_write: backfill_facts.json,<br/>backfill_articles.json,<br/>backfill_fact_embeddings.npy,<br/>backfill_state.json"]
-    CHECKPOINT -- "no" --> LOOP
-    FLUSH --> LOOP
-    MERGE --> LOOP
-    EXCL --> LOOP
-    NONC --> LOOP
-    UNGR --> LOOP
-    LOOP -->|"range exhausted"| DONE(["Final flush + exit"])
-
-    style EXCL fill:#3a3a1f,color:#fff
-    style NONC fill:#3a3a1f,color:#fff
-    style UNGR fill:#4a1f1f,color:#fff
-```
-
-**Current real status**: paused at 24/672 files into the India-tier pilot week (did not survive a session/process boundary — background jobs of this length need to be restarted, not assumed to have kept running). Not merged into `server.py`'s live scoring path — a separate, not-yet-started integration.
-
 ### 10.4 Offline Training Pipeline (not a service — run by hand)
 
 ```mermaid
@@ -426,9 +383,7 @@ flowchart TD
 | `comparative_matching.py` | `resolve_comparative_fact(text, entities, emb, published, stored_facts, stored_emb)` | new fact + prior store | `dict` (has_own_direction, matched_prior_fact_id, match_similarity, computed_direction) | — | — |
 | `grounding.py` | `is_grounded(fact_text, source_text)` | two strings | `(bool, list[str])` — grounded flag + ungrounded numbers | — | — |
 | `grounding.py` | `is_likely_non_content(title)` | `str` | `(bool, str)` — junk flag + reason | — | — |
-| `gdelt_bulk.py` | `fetch_and_filter(timestamp, tier)` | datetime + `"india"`\|`"world"` | `list[dict]` or `None` on fetch failure | GDELT bulk HTTP | — |
 | `ingestion.py` | `run_ingestion_once(verbose=True)` | `bool` | `dict` (full run summary — 13 counters) | RSS/GDELT, `ingestion_state.json` | `real_articles.json`, `real_facts.json`, `real_fact_embeddings.npy`, 4 log files |
-| `gdelt_backfill.py` | `run_backfill(start, end, tier, checkpoint_every_n_files=20)` | date range + tier | `dict` (totals) | GDELT bulk HTTP, `backfill_state.json` | `backfill_articles.json`, `backfill_facts.json`, `backfill_fact_embeddings.npy`, 3 log files |
 | `live_facts.py` | `build_combined_corpus(seed_news, seed_emb, subclusters, centroids)` | fabricated corpus + centroids | `(news, embeddings, subclusters, live_facts_count: int)` | `real_facts.json` (fresh) | — |
 | `server.py` | `POST /api/analyze` | `{"cvp": str}` | JSON: display scores, breakdowns, `live_facts_count`, `seed_only` | in-process cache + `real_facts.json` (fresh) | — |
 | `ingestion_service.py` | `GET /health` | — | JSON status (17 fields) | in-process `status` dict | — |

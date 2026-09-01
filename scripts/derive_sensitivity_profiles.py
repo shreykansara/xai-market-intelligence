@@ -16,6 +16,14 @@ fields in data/startups.json, exactly as before: only the feature granularity
 of the regression changed, not the shape of what gets written out or how the
 shared matrix W is trained on top of it.
 
+The actual regression math (build_feature_columns / build_daily_signal /
+fit_lag_ridge / derive_profile / profile_to_dicts) now lives in
+src/marketintel/sensitivity_regression.py, extracted so the SAME mechanism can
+be reused for a real company's uploaded sales history against the real news
+corpus (see sales_upload.py) instead of being duplicated. This script is now a
+thin caller: it supplies the fabricated corpus's fixed 180-day window anchored
+on TODAY and iterates over the 50 startups; nothing about the math changed.
+
 Then validates the recovery at this finer granularity: compares each derived
 (rolled-up) profile against its hidden generation template (hidden_ground_truth.py,
 never seen by the regression) and reports the correlation, plus how often the
@@ -36,7 +44,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from marketintel.config import (  # noqa: E402
-    CANDIDATE_LAGS,
     N_PROFIT_DAYS,
     PESTLE_DIMS,
     PORTERS_DIMS,
@@ -46,102 +53,18 @@ from marketintel.config import (  # noqa: E402
     SUBCLUSTERS_PATH,
 )
 from marketintel.data_loader import load_news, load_startups  # noqa: E402
+from marketintel.sensitivity_regression import (  # noqa: E402
+    ALL_DIMS,
+    build_daily_signal,
+    build_feature_columns,
+    derive_profile,
+    profile_to_dicts,
+)
 
 from hidden_ground_truth import HIDDEN_TEMPLATES  # noqa: E402
 
 TODAY = datetime(2026, 8, 24)
-ALL_DIMS = [("pestle_scores", d) for d in PESTLE_DIMS] + [("porters_scores", d) for d in PORTERS_DIMS]
-
-
-def polarity_sign(article: dict) -> float:
-    return 1.0 if article["polarity"] == "positive" else -1.0
-
-
-def build_feature_columns(subclusters: dict):
-    """One column per (dimension, sub-cluster id), in a fixed order, plus which
-    parent dimension each column rolls up to."""
-    columns = []  # (dim, cluster_id_str)
-    for _, dim in ALL_DIMS:
-        for cluster_id in sorted(subclusters[dim]["labels"], key=int):
-            columns.append((dim, cluster_id))
-    return columns
-
-
-def build_daily_signal(news: list[dict], subclusters: dict, columns: list[tuple], n_days: int) -> np.ndarray:
-    """signal[day, col] = sum over articles published that day, assigned to that
-    (dimension, sub-cluster), of relevance * polarity. Articles below the
-    clustering relevance threshold for a dimension have no assignment there and
-    contribute nothing to any of that dimension's sub-cluster columns."""
-    col_index = {key: i for i, key in enumerate(columns)}
-    score_field_by_dim = {d: f for f, d in ALL_DIMS}
-    window_start = TODAY - timedelta(days=n_days - 1)
-    signal = np.zeros((n_days, len(columns)))
-
-    for article in news:
-        day = (datetime.strptime(article["date"], "%Y-%m-%d") - window_start).days
-        if not (0 <= day < n_days):
-            continue
-        sign = polarity_sign(article)
-        for _, dim in ALL_DIMS:
-            cluster_id = subclusters[dim]["assignments"].get(article["id"])
-            if cluster_id is None:
-                continue
-            col = col_index[(dim, str(cluster_id))]
-            signal[day, col] += article[score_field_by_dim[dim]][dim] * sign
-
-    return signal
-
-
-def fit_lag_ridge(profit: np.ndarray, signal: np.ndarray, lag: int, alpha: float):
-    """Ridge-regress profit_change[t] = profit[t] - profit[t-1] against
-    signal[t-lag], with an unpenalized intercept to absorb the trend."""
-    n_days = len(profit)
-    n_features = signal.shape[1]
-    profit_change = np.diff(profit)
-
-    t_values = np.arange(lag - 1, n_days - 1)
-    if len(t_values) < n_features // 2:
-        return -np.inf, np.zeros(n_features)
-
-    y = profit_change[t_values]
-    X = signal[t_values + 1 - lag]
-    X_design = np.column_stack([np.ones(len(y)), X])
-
-    penalty = alpha * np.eye(n_features + 1)
-    penalty[0, 0] = 0.0  # don't regularize the intercept
-
-    coef = np.linalg.solve(X_design.T @ X_design + penalty, X_design.T @ y)
-    residuals = y - X_design @ coef
-    ss_res = float(np.sum(residuals ** 2))
-    ss_tot = float(np.sum((y - y.mean()) ** 2))
-    r_squared = 1.0 - ss_res / ss_tot if ss_tot > 1e-9 else 0.0
-    return r_squared, coef[1:]
-
-
-def roll_up_to_dimensions(coef: np.ndarray, columns: list[tuple]) -> np.ndarray:
-    dim_totals = {d: 0.0 for _, d in ALL_DIMS}
-    for value, (dim, _cluster_id) in zip(coef, columns):
-        dim_totals[dim] += value
-    return np.array([dim_totals[d] for _, d in ALL_DIMS])
-
-
-def derive_profile(profit: np.ndarray, signal: np.ndarray, columns: list[tuple]):
-    best_lag, best_r2, best_coef = None, -np.inf, None
-    for lag in CANDIDATE_LAGS:
-        r2, coef = fit_lag_ridge(profit, signal, lag, PROFILE_REGRESSION_ALPHA)
-        if r2 > best_r2:
-            best_lag, best_r2, best_coef = lag, r2, coef
-
-    dim_vector = roll_up_to_dimensions(best_coef, columns)
-    max_abs = np.max(np.abs(dim_vector))
-    scaled = dim_vector / max_abs * 100.0 if max_abs > 1e-9 else dim_vector
-    return best_lag, best_r2, scaled
-
-
-def profile_to_dicts(vector: np.ndarray):
-    pestle = {d: float(v) for d, v in zip(PESTLE_DIMS, vector[: len(PESTLE_DIMS)])}
-    porters = {d: float(v) for d, v in zip(PORTERS_DIMS, vector[len(PESTLE_DIMS) :])}
-    return pestle, porters
+WINDOW_START = TODAY - timedelta(days=N_PROFIT_DAYS - 1)
 
 
 def hidden_vector(hidden: dict) -> np.ndarray:
@@ -158,7 +81,7 @@ def main():
         profit_history = json.load(f)
 
     columns = build_feature_columns(subclusters)
-    signal = build_daily_signal(news, subclusters, columns, N_PROFIT_DAYS)
+    signal = build_daily_signal(news, subclusters, columns, WINDOW_START, N_PROFIT_DAYS)
     print(f"Deriving sensitivity profiles for {len(startups)} startups via sub-cluster lag regression...")
     print(f"({len(columns)} sub-cluster features, ridge alpha={PROFILE_REGRESSION_ALPHA})")
     print(f"{'startup':<24} {'lag':>4} {'true_lag':>9} {'R^2':>7} {'corr_vs_hidden':>15}")
@@ -170,11 +93,12 @@ def main():
         hidden = HIDDEN_TEMPLATES[startup["name"]]
         profit = np.array([p["profit"] for p in profit_history[startup["id"]]])
 
-        best_lag, best_r2, derived = derive_profile(profit, signal, columns)
-        pestle_profile, porters_profile = profile_to_dicts(derived)
+        best_lag, best_r2, dim_totals = derive_profile(profit, signal, columns)
+        pestle_profile, porters_profile = profile_to_dicts(dim_totals)
         startup["pestle_profile"] = pestle_profile
         startup["porters_profile"] = porters_profile
 
+        derived = np.array([dim_totals[d] for _, d in ALL_DIMS])
         h_vec = hidden_vector(hidden)
         corr = float(np.corrcoef(derived, h_vec)[0, 1])
         hidden_vecs.append(h_vec)

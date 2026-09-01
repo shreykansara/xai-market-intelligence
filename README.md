@@ -103,8 +103,9 @@ each score.
    the submission's strongest as negligible; the current frontend's
    two-color helping/hurting design doesn't surface that flag, but a
    near-zero dimension still reads as such by its small radius/small score.)
-7. **Output** — two Plotly radar charts (indigo fill, green/red vertices for
-   direction) side by side, with the news breakdown underneath: one section
+7. **Output** — two Plotly radar charts (cobalt fill, green/red vertices for
+   direction, themed to match the page's current light/dark mode) side by
+   side, with the news breakdown underneath: one section
    per dimension (ranked by |score|, click to expand), sub-grouped by
    sub-cluster, down to the specific bordered rows driving each score -
    real ingested facts marked with a small "LIVE" badge, distinct from
@@ -178,16 +179,6 @@ each score.
    extracted/inferred tags are ever stored - no raw article body text, and
    no vector database.
 
-10. **Historical GDELT bulk backfill** (`src/marketintel/gdelt_bulk.py` +
-    `gdelt_backfill.py`, run via `scripts/run_gdelt_backfill.py`) - a
-    separate, one-off/batch collection process from `ingestion_service.py`
-    above, which keeps running independently on its own schedule. Writes to
-    its own files (`data/backfill_articles.json` / `backfill_facts.json` /
-    `backfill_fact_embeddings.npy`) so the two never contend over the same
-    files, and isn't yet merged into the live scoring path (tracked
-    separately). See "Historical GDELT backfill" below for the full runbook,
-    the timing investigation that shaped its scope, and pilot findings.
-
    **Confirmed working live, and confirmed capable of hallucinating.**
    With Ollama + `llama3.2:3b` actually running, a real headline - "Two
    dead and 10 hurt after car rams into crowd in northern France" -
@@ -222,7 +213,7 @@ each score.
    cutting over silently. See "Migrated seed-based inference..." in
    `CLAUDE.md`'s "Known gaps" for the exact coverage numbers, which
    dimensions still fall back, and why - this only affects live ingestion,
-   not the GDELT bulk backfill, which still looks up the fabricated corpus
+   not any batch pipeline, which looked up the fabricated corpus
    unchanged. Dedup (cosine similarity ≥0.92 against the last
    48 hours of stored facts) runs at this same fact granularity: the same
    fact reported by multiple outlets collapses into one record with a
@@ -310,8 +301,9 @@ ingestion_service.py               Standalone ingestion microservice - self-sche
                                     exposes GET /health. Its own port (8502); no ingestion logic
                                     lives here, only scheduling + status (see below).
 web/
-  index.html                       The whole frontend: two-state page (input / results), inline
-                                    CSS + JS, Plotly.js-driven radar charts
+  index.html                       The whole frontend: three-page flow (landing / upload / analysis)
+                                    as one file with JS-toggled states, inline CSS + JS,
+                                    Plotly.js-driven radar charts
   vendor/plotly.min.js             Vendored Plotly.js (copied from the plotly Python package's
                                     bundled asset) - no CDN dependency
 src/marketintel/
@@ -332,20 +324,22 @@ src/marketintel/
                                     real_facts.json / real_fact_embeddings.npy /
                                     ingestion_state.json, so a concurrent reader never sees a
                                     half-written file
-  gdelt_bulk.py                    GDELT 2.0 bulk export file access (GKG only) - lists/downloads
-                                    15-min files, extracts page title + country tags, tier filter
-  gdelt_backfill.py                The historical backfill pipeline itself (reordered vs. the
-                                    live path) - checkpointed/resumable, separate data files
-                                    from ingestion.py's
   comparative_matching.py          Finds the nearest earlier fact about the same subject to
-                                    compute a direction for a bare state-value fact, used only
-                                    by the backfill above
+                                    compute a direction for a bare state-value fact
   grounding.py                     Pre-filter (non-content titles) + post-decomposition
-                                    grounding check (rejects facts with fabricated numbers) -
-                                    used only by the backfill above
+                                    grounding check (rejects facts with fabricated numbers)
   real_data_inference.py           Coverage-gated policy layer deciding, per PESTLE/Porter's
                                     dimension and per scope class, whether live ingestion's
                                     k-NN lookup draws from real or fabricated data
+  sensitivity_regression.py        Source-agnostic lagged-ridge-regression core (extracted
+                                    from derive_sensitivity_profiles.py) - shared by the
+                                    fabricated offline pipeline and the sales-upload mode
+  sales_upload.py                  Optional second analysis mode: parse/validate an uploaded
+                                    CSV/XLSX sales history, check its overlap with the real
+                                    news corpus, and derive a profile via sensitivity_regression.py
+  news_browser.py                  Read-only browse layer over all three corpora (seed / live /
+                                    behind GET /api/news - normalizes their record
+                                    shapes and reports which corpora actually feed scoring
 scripts/
   generate_news.py                 Builds data/news.json + news_embeddings.npy
   generate_startups.py             Builds data/startups.json (identity only) + embeddings
@@ -366,18 +360,16 @@ scripts/
   validate_fact_decomposition.py   Runs a constructed tax-policy article through fact
                                     extraction and checks it splits into facts with opposing
                                     polarity, not one blended record (see below)
-  run_gdelt_backfill.py            CLI entry point for the historical GDELT bulk backfill
-                                    (see "Historical GDELT backfill" below)
   validate_comparative_matching.py Validates comparative_matching.py against real rate/tax
-                                    changes and a similar-but-different pair, before it ever
-                                    touches real backfill data (see below)
+                                    changes and a similar-but-different pair (see below)
   validate_grounding.py            Validates grounding.py against the two known real
                                     hallucination cases, plus a false-positive check (see below)
+  validate_sales_upload.py         Validates the sales-upload mode: column guessing,
+                                    validation gate, coverage overlap, and (via a synthetic
+                                    overlapping corpus) that the regression itself works
   validate_real_data_migration.py  Validates the seed-inference migration onto real data -
                                     coverage check, gate recalibration, per-dimension blending,
                                     and scope hybrid, all against the live real-fact corpus
-  audit_grounding_retroactive.py   Read-only audit: re-checks already-collected backfill facts
-                                    against grounding.py, reports the rejection rate + samples
 data/                              Generated datasets + trained W (gitignored, see below)
 ```
 
@@ -419,15 +411,83 @@ re-running the last step; a `W` trained on a broken recovery isn't worth much.
 granularity (see "How it works" above) — worth running after any change to
 the news templates or clustering parameters.
 
-## Start the server
+## Running the services
+
+There are two long-running processes, each with its own start command, its
+own port, and no dependency on the other. **Each one is safe to run without
+the other** - neither command starts, waits for, or health-checks the other,
+and the only thing they share is the `data/real_facts.json` file (which the
+analysis engine re-reads per request and treats as optional).
+
+**Start ONLY the analysis engine** (the web UI + `/api/analyze`, port 8000):
 
 ```bash
-uvicorn server:app --reload
+uvicorn server:app --port 8000 --reload
 ```
 
-This serves the app at `http://localhost:8000`. Paste a CVP into the text
-area and click **Run analysis** - the results view replaces the input on the
-same page, no reload.
+**Start ONLY the ingestion microservice** (real news collection, port 8502):
+
+```bash
+uvicorn ingestion_service:app --port 8502
+```
+
+**Start BOTH** - two separate terminals, in either order (the order genuinely
+does not matter; see the independence check below):
+
+```bash
+# terminal 1
+uvicorn server:app --port 8000 --reload
+# terminal 2
+uvicorn ingestion_service:app --port 8502
+```
+
+| | Analysis engine | Ingestion microservice |
+|---|---|---|
+| File | `server.py` | `ingestion_service.py` |
+| Command | `uvicorn server:app --port 8000 --reload` | `uvicorn ingestion_service:app --port 8502` |
+| Port | 8000 | 8502 |
+| Surface | web UI, `/api/analyze`, `/api/sales/*` | `GET /health` only |
+| Schedule | request-driven | one pass on startup, then every 30 min |
+| Needs the other? | No | No |
+
+If you only want a one-shot ingestion run rather than an always-on service,
+use `python scripts/ingest_news.py` instead (same pipeline, no server, no
+port - see "Real news ingestion" below for when to pick which).
+
+**Independence is verified, not just asserted.** Re-checked against real,
+separately-launched processes: (a) analysis engine up with ingestion never
+started - serves normally, including the sales-upload and CVP-less paths;
+(b) ingestion up, analysis engine stopped and restarted underneath it -
+ingestion keeps serving, analysis comes back clean; (c) both stopped, then
+started ingestion-first and analysis-first - no crash either way, no
+startup-order dependency, no tracebacks in any process log.
+
+### Browsing what's actually been collected
+
+The topbar "..." menu → **"Browse news data"** opens a read-only view of every
+news item the system holds, across all three corpora, backed by
+`GET /api/news` (`src/marketintel/news_browser.py`). It shows a count and date
+range per corpus plus, importantly, whether that corpus **currently feeds
+analysis**:
+
+| Corpus | File | Feeds `/api/analyze`? |
+|---|---|---|
+| Fabricated seed | `data/news.json` | Yes |
+| Live ingested | `data/real_facts.json` | Yes |
+
+Each corpus is labelled with whether it feeds scoring, so a corpus that is
+stored but not wired into the serving path could never look equivalent to one
+that is. Filter by corpus, free text, scope, polarity, or top PESTLE/Porter's
+dimension; filtering and paging are server-side.
+
+### What the analysis engine serves
+
+This serves the app at `http://localhost:8000` as a three-page flow - a
+landing page ("Get started"), an upload page (CVP textarea + optional
+CSV/XLSX sales-history upload on one page), and the analysis results -
+all one file with JS-toggled states, no reload between them. Styled with
+the "Cobalt Grid" theme (light by default, dark via the topbar toggle,
+choice persisted in the browser's `localStorage`).
 
 **Runs standalone, with or without ingestion.** `server.py` only requires the
 fabricated data pipeline above - it does NOT require `ingestion_service.py`
@@ -450,13 +510,13 @@ exist - that's the seed corpus every inference (relevance, polarity, scope)
 is looked up against. The pipeline itself (`src/marketintel/ingestion.py`)
 is the same code either way - pick whichever of the two ways to run it fits:
 
-**Shares its grounding safeguards and comparative-fact matching with the
-GDELT bulk backfill** (`src/marketintel/grounding.py` /
-`comparative_matching.py`) - both ingestion codepaths call the same
-underlying safety logic (a non-content pre-filter before any Ollama call, a
-post-decomposition check rejecting facts with fabricated numbers,
-HTML-unescaping of fetched titles, and comparative-fact matching for bare
-state-value facts) rather than diverging. The live pipeline's own step order
+**Grounding safeguards and comparative-fact matching**
+(`src/marketintel/grounding.py` / `comparative_matching.py`) - a non-content
+pre-filter before any Ollama call, a post-decomposition check rejecting facts
+with fabricated numbers, HTML-unescaping of fetched titles, and
+comparative-fact matching for bare state-value facts. Both modules were
+originally written for a historical GDELT bulk backfill (since removed) and
+were kept because this live path depends on them. The pipeline's step order
 is unchanged - fetch -> decompose -> dedup -> seed transfer -> relevance
 gate -> write - only the new checks are inserted at the right points within
 it. Rejections are logged separately: `data/ingestion_noncontent.jsonl` (pre-
@@ -497,7 +557,8 @@ paper over with a bigger number.
 **Option A - `ingestion_service.py`, a standalone microservice.** Runs one
 ingestion pass immediately on startup, then every 30 minutes for as long as
 the process stays up (a plain `asyncio` loop, no external scheduler), on its
-own port so it never conflicts with `server.py`:
+own port so it never conflicts with `server.py` (this is the same command
+listed under "Running the services" above, repeated here for context):
 
 ```bash
 uvicorn ingestion_service:app --port 8502
@@ -554,124 +615,108 @@ splits into two facts with opposing polarity (requires Ollama to be running
 for a meaningful result - otherwise it reports itself as inconclusive rather
 than a false pass).
 
-## Historical GDELT backfill
+## Sales history upload
 
-A separate, one-off/batch collection process from `ingestion_service.py`
-above - that keeps running independently on its own 30-minute schedule for
-ongoing Punjab/LPU-area coverage. This backfill pulls **historical** World/
-India data from GDELT 2.0's bulk export files (`data.gdeltproject.org`), not
-the DOC 2.0 API (~3 months lookback only) or RSS (no history at all).
+An OPTIONAL second analysis mode, layered on top of the CVP flow rather than
+replacing it - the CVP text box stays required and its result is always
+computed and shown. Uploading a CSV/XLSX of your own daily revenue history
+adds a second, richer result derived from regressing that history against
+a news corpus, instead of estimating sensitivity purely from similarity to
+comparable fabricated businesses.
 
-**Timing first, before running anything at real scale.** A real pilot (8 GKG
-files sampled across one day, measured end-to-end, then extrapolated) found
-the full 2-year World(broad)+India backfill would take **~4.7 years**
-unattended - dominated almost entirely by Ollama fact decomposition (mean
-3.35s/call). Scoped down to **India-tier only** (country-tag filtered before
-embedding, not after) - estimated **~4.2 months**. World-broad coverage and
-the Punjab-level extension are both deferred; see `CLAUDE.md`'s "Known gaps"
-for the full numbers and the options considered.
+> **Current default: `config.SALES_REGRESSION_NEWS_SOURCE = "fabricated"`.**
+> This is a TIME-BOXED demo override, not the production setting - the real
+> news corpus is presently too sparse (~2 days of coverage) for the
+> overlap gate below to ever pass, so this flag makes the regression run
+> against the fabricated seed corpus instead, so it actually produces
+> output today. Every result computed this way is labeled to the caller
+> (`news_source: "fabricated"`) and rendered behind a mandatory,
+> impossible-to-miss banner on the analysis page - never presented as
+> derived from real live news. Flip the flag back to `"real"` once real
+> coverage grows; see CLAUDE.md for the full reasoning.
 
-**Reordered pipeline, distinct from the live per-item order above**: fetch
-(GDELT bulk, tier-filtered) -> embed -> relevance gate -> only then fact
-decomposition (Ollama) on survivors -> dedup -> seed inference
-(relevance/polarity/scope) -> comparative-fact matching -> atomic write. The
-gate runs BEFORE decomposition here specifically to avoid spending Ollama
-calls on records that were never going to pass it anyway.
+**The flow, and why it's two confirmed steps, not one:**
 
-**Comparative-fact matching** (`src/marketintel/comparative_matching.py`) -
-for a bare state-value fact with no directional language of its own (e.g.
-"GST on mobile phones is 18%"), finds the nearest strictly-earlier fact about
-the same specific subject and computes a direction, rather than leaving
-polarity ambiguous. A fact that already states its own direction ("raised
-from 12% to 18%") skips the lookup entirely. Validate this BEFORE it ever
-touches real data:
+1. `POST /api/sales/upload` (multipart file) - parses the sheet and
+   BEST-GUESSES which column is the date and which is the revenue/sales
+   metric (by column name first, then by content). This guess is always
+   returned for review, never trusted silently - the frontend shows it as
+   two pre-filled dropdowns you can correct before anything is computed.
+2. `POST /api/sales/confirm` `{upload_id, date_col, value_col}` - validates
+   volume and quality (at least 90 distinct valid daily observations,
+   duplicate-date rows under 5% of the sheet, at least 50% date-range
+   density) and, if that passes, immediately computes the derived profile.
+   A failure here returns a plain-language reason and the frontend falls
+   back to CVP-only - it never runs the regression on data that doesn't
+   clear the bar.
+3. Pass the resulting `upload_id` as `sales_upload_id` in a normal
+   `POST /api/analyze {"cvp": ..., "sales_upload_id": ...}` call. The
+   response's `sales_derived` field is `null` unless a valid, sufficiently-
+   overlapping profile exists; when present, `primary_result: "sales"`
+   tells the frontend to lead with it, with the CVP-similarity result
+   still shown alongside, explicitly labeled as the lower-confidence
+   comparison (`cvp_result_label`).
 
-```bash
-python scripts/validate_comparative_matching.py
-```
+**The regression itself is the same mechanism the offline training pipeline
+uses** (`src/marketintel/sensitivity_regression.py`, extracted out of
+`scripts/derive_sensitivity_profiles.py` so both paths call one
+implementation) - lagged ridge regression of daily profit changes against
+the preceding day's per-sub-cluster relevance-times-polarity signal, same
+math, different inputs (a real uploaded series against either the real news
+corpus or, under today's demo default above, the fabricated corpus).
+`sales_upload.derive_sales_profile()` is the single entry point that
+dispatches between the two based on `SALES_REGRESSION_NEWS_SOURCE` - callers
+don't hardcode which news pool to use.
 
-Checks 3 real, independently verifiable rate/tax changes (India GST on
-mobile phones, RBI repo rate, UK VAT) retrieve the correct prior value and
-direction, and that a deliberately similar-but-different pair (mobile-phone
-GST vs. textile GST) does NOT cross-match - including a synthetic worst-case
-test that forces embedding similarity to 1.0, proving the entity-overlap
-check is genuinely load-bearing rather than redundant with the similarity
-gate. All 4 checks currently pass.
+**Two gates specific to the real-data path, both reported explicitly rather
+than silently degrading:**
 
-**Running it**, checkpointed and resumable at the granularity of one
-15-minute GKG file (safe to interrupt and re-run with the same arguments):
+- **Per-dimension coverage** - the regression's feature columns are
+  restricted to only the PESTLE/Porter's dimensions currently trusted for
+  real data (the same `real_data_inference.assess_dimension_coverage()`
+  check live ingestion uses - see "Real news ingestion" above for the
+  current pass/fail table). Uncovered dimensions are reported explicitly
+  in the response (`uncovered_dimensions`) rather than silently defaulted
+  to zero, which would misleadingly read as "no sensitivity" instead of
+  "not enough real data yet."
+- **Upload<->real-news-coverage overlap** - a regression can only use days
+  where BOTH the uploaded sales history and the real news corpus have
+  data. `compute_coverage_overlap()` computes this window explicitly and
+  requires at least 90 days of it (the same bar as the upload's own
+  volume check) before running anything. **Given the real news corpus
+  currently spans only a couple of days** (it's early - see "Real news
+  ingestion" above), this will presently report insufficient overlap for
+  almost any realistic historical sales upload, and correctly fall back
+  to the CVP-only result with an explicit message - this is expected
+  behavior given how little real history has accumulated so far, not a
+  bug, and should resolve naturally as the corpus grows.
 
-```bash
-# One week pilot, India tier (required before scaling up further):
-python scripts/run_gdelt_backfill.py --tier india --start 2026-08-13 --end 2026-08-20
+`python scripts/validate_sales_upload.py` validates all of this (9/9
+checks): column guessing on a realistic messy sheet, the validation gate
+correctly rejecting a too-short upload and accepting a clean one, the
+overlap check running correctly against the actual live real-fact corpus
+(confirming the expected graceful "insufficient" result today), and - to
+prove the regression mechanism itself works, not just that it fails
+gracefully - a constructed synthetic real-news corpus with genuine 120-day
+overlap and a known injected political-tariff signal, which the regression
+correctly recovers (right lag, right sign, R²=0.88).
 
-# Full backfill (run this unattended - see the timing estimate above):
-python scripts/run_gdelt_backfill.py --tier india --start 2024-08-28 --end 2026-08-28
-```
-
-Writes/reads `data/backfill_articles.json`, `data/backfill_facts.json`,
-`data/backfill_fact_embeddings.npy`, and `data/backfill_state.json` (progress
-checkpoint) - entirely separate from `ingestion_service.py`'s
-`real_*` files. `data/backfill_excluded.jsonl` logs everything the relevance
-gate rejected; `data/backfill_unmatched_directional.jsonl` logs every bare
-state-value fact that found no qualifying prior match for comparative
-matching (expected to be common early in a run, before much history has
-accumulated to match against).
-
-**Grounding safeguards against hallucination** (`src/marketintel/grounding.py`)
-- a pilot smoke test found fact decomposition fabricating specific,
-plausible-sounding claims from content-free titles (a "COMMUNITY CALENDAR"
-section label produced a fake GST policy change). Two independent layers,
-wired into `gdelt_backfill.py`: (1) a pre-filter before any Ollama call,
-rejecting obvious non-content titles (section labels, digests, horoscopes,
-etc.); (2) a post-decomposition grounding check, rejecting any fact whose
-stated numbers (percentages, currency, dates) don't trace back to the source
-title - independent of Ollama's temperature setting, since lowering
-temperature fixed JSON schema compliance but demonstrably not truthfulness.
-Validate this BEFORE trusting pilot output:
-
-```bash
-python scripts/validate_grounding.py                  # against the known real failure cases
-python scripts/audit_grounding_retroactive.py          # retroactive audit of already-collected facts
-```
-
-**A retroactive audit against the pilot's partial output found this is a
-much bigger problem than the isolated cases suggested: ~17.9% of all facts
-collected so far state at least one fabricated number**, and the pattern
-looks like the model injecting real-world facts it memorized during training
-(an actual RBI rate history, an actual GST change) into completely unrelated
-articles - a movie review, an obituary - rather than random nonsense. The
-pilot's original run is being left to finish undisturbed rather than
-restarted (a retroactive audit, not a live fix); the safeguards above are
-active in the pipeline code for the eventual full-scale run.
-
-The audit also specifically samples ACCEPTED facts to check for a known
-limitation of a substring-based grounding check - a number matching the
-source by coincidence, not because it's really the same claim - and this
-caught a real, fixable bug: GDELT stores titles with HTML entities
-undecoded (e.g. literally "&#x2013;" instead of an em-dash), and one such
-entity's embedded digits coincidentally "grounded" a fabricated Punjab
-policy claim against an unrelated magazine masthead title. Fixed by
-HTML-unescaping titles at the source (`gdelt_bulk.py`) and defensively in
-`grounding.py` itself; re-sampling 20 fresh accepted facts afterward found
-no further instances of this pattern.
-
-**The pilot's spot-check gate is not yet satisfied** - see `CLAUDE.md`'s
-"Known gaps" and "Open technical decisions" for exactly what's still
-pending before the full India-tier backfill can start.
-
-Separately (lower priority, not blocking): the fact-decomposition
-over-splitting error above does NOT reliably fail the relevance gate - in
-one measured case, the meaningless fragment scored HIGHER relevance (0.60)
-than the coherent half of the same split (0.48), and the batch pipeline's
-gate runs once per title before decomposition anyway, with no second gate
-after it.
+**Explicitly out of scope for this pass**: uploaded sales data is kept in
+an ephemeral, in-process store (`server.py`'s `_uploads` dict) - never
+written to a shared file, never folded into the reference pool other
+users' CVP-similarity analysis draws on, and never used to retrain `W`
+(a real consent/data-use decision, not a default). Only one date column +
+one numeric metric column is supported - no multi-metric uploads yet.
 
 ## Current scope
 
 This phase is intentionally limited to what's described above:
 
-- No CSV/XLSX upload — next phase.
+- CSV/XLSX sales-history upload now exists as an OPTIONAL second analysis
+  mode (see "Sales history upload" below) - CVP input remains required
+  and unchanged as the default path. Single date column + single numeric
+  metric column only; no multi-metric uploads yet. Uploaded data is never
+  folded into the shared reference pool or used to retrain `W`.
 - No stakeholder/supplier/competitor confirmation screen.
 - The CVP analysis pipeline (`server.py`) now scores against the fabricated
   seed corpus AND real ingested facts together (see item 8 above). What's
@@ -682,17 +727,16 @@ This phase is intentionally limited to what's described above:
   regardless. Real facts only ever get assigned into sub-clusters that
   already exist from that one-time fabricated-only discovery run.
 - Live ingestion (`ingestion_service.py`) is world-level sources only (BBC
-  World, Al Jazeera, Google News, GDELT DOC API). The historical GDELT bulk
-  backfill (see above) adds India-tier depth going backward in time, but is
-  a separate store, not yet merged into live scoring.
-- The GDELT bulk backfill explicitly does NOT cover Jalandhar, Kapurthala, or
-  Phagwara - GDELT almost certainly doesn't tag these at usable granularity,
-  and scraping local newspaper archives to fill that gap is out of scope.
-  Those three scopes continue to be covered only by the live
-  `ingestion_service.py` going forward. LPU/university-level data is sourced
-  separately, not part of this pipeline. Merging the backfill's historical
-  data into `server.py`'s live scoring path is also out of scope for now -
-  tracked as a separate integration gap.
+  World, Al Jazeera, Google News, GDELT DOC API), and covers only forward
+  time from when it started running - there is no historical depth. A
+  historical GDELT bulk backfill was built and then removed (see CLAUDE.md
+  for the reasoning: ~4.2 months of estimated processing for the scoped-down
+  run, ~14.6% fabricated-number rate in what it had collected, and it was
+  never wired into scoring). Jalandhar/Kapurthala/Phagwara depth remains
+  thin for the same reason: GDELT almost certainly doesn't tag these at
+  usable granularity, and scraping local newspaper archives is out of scope.
+  LPU/university-level data is sourced separately, not part of this
+  pipeline.
 - Real headline relevance and polarity are inferred by pooled nearest-
   neighbor lookup, and scope by a separate per-class-best-match lookup with
   a relevance gate in front of it - not a trained classifier or

@@ -1,5 +1,6 @@
 """Grounding safeguards against fact-decomposition hallucination, used only by
-the GDELT bulk backfill (gdelt_backfill.py) - not the live ingestion.py path.
+the historical GDELT bulk backfill (since removed); now used by the live
+ingestion.py path, which is why this module outlived it.
 
 Two independent layers, deliberately different in kind:
 
@@ -33,7 +34,7 @@ produced, not text-level hallucination in general (a real, standing
 limitation - see CLAUDE.md).
 
 Both functions HTML-unescape their input before extracting numbers or
-checking keywords. gdelt_bulk.py now decodes titles at the source, but a
+checking keywords. ingestion.py decodes titles at the source, but a
 retroactive audit against already-collected pilot data found a confirmed,
 concrete false accept caused by NOT doing this: a title reading "...&#x2013;
 Latest News..." (an undecoded em-dash entity) contains the literal digit run
@@ -151,7 +152,7 @@ def is_grounded(fact_text: str, source_text: str) -> tuple[bool, list[str]]:
     This is a lightweight substring check, not rigorous entity linking - a
     short, coincidentally-matching bare number elsewhere in a long source
     could in principle pass as "grounded" when it isn't really the same
-    figure. Acceptable for GDELT bulk titles (short, single-sentence) but
+    figure. Acceptable for news titles (short, single-sentence) but
     worth revisiting if this is ever applied to longer source text."""
     fact_numbers = extract_numbers(fact_text)
     if not fact_numbers:

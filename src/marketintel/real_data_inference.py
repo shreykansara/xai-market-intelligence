@@ -1,5 +1,4 @@
-"""Migrates the live ingestion path's (ingestion.py only - NOT the GDELT bulk
-backfill, which is explicitly left untouched) k-NN reference pool from the
+"""Migrates the live ingestion path's (ingestion.py) k-NN reference pool from the
 fabricated seed corpus onto the accumulated real-fact corpus itself, PER
 DIMENSION rather than as a single all-or-nothing switch.
 
