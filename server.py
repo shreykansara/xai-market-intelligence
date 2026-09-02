@@ -271,9 +271,21 @@ def analyze(req: AnalyzeRequest):
             detail="Provide a CVP, or upload and confirm a sales history file, before running analysis.",
         )
     if not data_ready():
+        # Degraded mode, deliberately explicit rather than a 500. The scored
+        # corpus (news.json/news_embeddings.npy) was removed when the system
+        # migrated to the LPU corpus, and analysis can't run without a scored
+        # corpus + trained W. Browsing (/api/news) and the frontend still work,
+        # so the service stays up and says precisely what is missing instead of
+        # failing opaquely.
+        missing = [p.name for p in (NEWS_PATH, NEWS_EMBEDDINGS_PATH, INTERACTION_MATRIX_PATH, SUBCLUSTERS_PATH)
+                   if not p.exists()]
         raise HTTPException(
             status_code=503,
-            detail="Fabricated data / trained model not found - run the data pipeline (see README) first.",
+            detail=(
+                "Analysis is unavailable: the scored news corpus is not wired up yet. "
+                f"Missing: {', '.join(missing)}. The LPU corpus is still being ingested and is not "
+                "yet connected to the scoring path. Browsing collected news (/api/news) is unaffected."
+            ),
         )
 
     response = {

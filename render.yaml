@@ -1,0 +1,24 @@
+# Render Blueprint for the analysis API (server.py) only.
+# The frontend goes to Vercel and the database to Supabase - see DEPLOYMENT.md.
+services:
+  - type: web
+    name: market-intelligence-api
+    runtime: python
+    plan: free            # free tier spins down when idle; first request cold-starts
+    region: oregon
+    branch: main
+    buildCommand: "pip install -e . && pip install 'psycopg[binary]'"
+    # Render supplies $PORT; binding to it is required or the service is marked unhealthy.
+    startCommand: "uvicorn server:app --host 0.0.0.0 --port $PORT"
+    healthCheckPath: /
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11"
+      # sync:false = Render prompts for the value in the dashboard instead of
+      # storing it here. Secrets must never be committed.
+      - key: DATABASE_URL
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: LLM_PROVIDER
+        value: groq

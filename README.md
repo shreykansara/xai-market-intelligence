@@ -462,6 +462,104 @@ ingestion keeps serving, analysis comes back clean; (c) both stopped, then
 started ingestion-first and analysis-first - no crash either way, no
 startup-order dependency, no tracebacks in any process log.
 
+## Deployment topology
+
+| Component | Host | Notes |
+|---|---|---|
+| `server.py` (API + analysis) | Render, one free Web Service | Free tier spins down when idle; expect cold-start latency on the first request |
+| `web/index.html` + assets | Vercel (static) | No build step; it is a single self-contained file |
+| Postgres + pgvector | Supabase (free) | All *growing* data: facts, announcements, embeddings, ingestion runs |
+| Ingestion schedule | GitHub Actions (`.github/workflows/ingest.yml`) | 30-minute cron; replaces the old persistent service |
+
+**What lives in the database vs. what ships as files.** Anything that grows at
+runtime is in Postgres (facts + `halfvec(384)` embeddings, announcements,
+ingestion run status, exclusions). Static training artifacts stay as deployed
+files, because they are regenerated wholesale by offline scripts and never
+mutated at runtime: `subclusters.json`, `startups.json`,
+`interaction_matrix.npy`, `cvp_mean.npy`.
+
+Apply the schema once with:
+
+```bash
+psql "$DATABASE_URL" -f db/schema.sql     # idempotent, safe to re-run
+```
+
+## Operational risks
+
+These are accepted tradeoffs of running entirely on free tiers, documented
+because each has bitten this project or plausibly will. None is a bug to
+silently work around.
+
+**1. Supabase pauses free projects after 7 days of low activity, and recovery
+is manual.** A paused project must be resumed from the Supabase dashboard
+before anything works; the API simply fails until someone clicks resume.
+Restoration is possible within a 1-year window.
+
+The 30-minute ingestion job is *intended* to prevent this, since Supabase
+measures **database activity** ("a few user requests to the database each day
+over the previous week"), and every run writes a row to `ingestion_runs` even
+when ingestion itself fails. **But this is not contractually guaranteed:**
+Supabase's documentation does not explicitly state that automated/scheduled
+writes count the same as application traffic — it never distinguishes the two.
+A whole ecosystem of third-party "keep-alive" tools exists precisely because
+operators do not trust this to be reliable. Treat scheduled writes as *very
+likely* sufficient, not *certainly* sufficient.
+
+**2. The keep-alive mechanism has its own inactivity failure mode.** GitHub
+disables scheduled workflows in a repository after **60 days without commit
+activity**, and scheduled runs are best-effort — they can be delayed or dropped
+under load. So the component protecting Supabase from pausing can itself stop
+silently. Two chained free tiers, each with independent inactivity behaviour,
+is the actual risk here — not either one alone.
+
+**Concretely: if ingestion stops running for an extended period — which has
+already happened across session boundaries in this project — the Supabase
+project may pause and require a manual unpause from the dashboard before the
+system works again.** Check `ingestion_runs` (surfaced by `server.py`'s health
+reporting) to see when ingestion last actually succeeded rather than assuming
+the cron is running.
+
+**3. Render free-tier spin-down.** The API sleeps when idle, so the first
+request after a quiet period pays a cold start.
+
+### Hosting requirements
+
+LLM calls (fact decomposition and LPU classification) go through
+`config.LLM_PROVIDER`, which selects between the hosted **Groq API** and a
+**local Ollama** model. Both call sites route through it; prompts, parsing,
+grounding and comparative matching are identical either way.
+
+**Under `LLM_PROVIDER = "groq"` there is no persistent local model process.**
+Fact extraction needs only outbound HTTPS to `api.groq.com` plus a
+`GROQ_API_KEY` environment variable. That removes the RAM-heavy always-on
+process that previously had to sit alongside the two services, so the app can
+run on a small instance sized for FastAPI and the sentence-transformer
+embedder rather than for a multi-GB language model. (No Oracle-Cloud-specific
+constraint was ever recorded in this repo, so there is nothing to retract —
+this simply documents the current, lighter requirement.)
+
+**Still required regardless of provider:** `all-MiniLM-L6-v2` runs locally for
+embeddings via `sentence-transformers`. It is small (~90 MB) and CPU-only, but
+it is a real local dependency — switching to Groq removes the *generative*
+model from the host, not the embedding model.
+
+```bash
+export GROQ_API_KEY=...       # read from the environment, never stored in the repo
+```
+
+**Choose the provider by workload — this is measured, not assumed:**
+
+| Workload | Volume | Recommended | Why |
+|---|---|---|---|
+| Live ingestion | a few articles / 30 min | `groq` | Far below any quota; faster per call; no local RAM |
+| Bulk LPU ingestion | 44,695 announcements | `ollama` | Groq's free tier makes it **~343 days** vs **~9.4 days** locally |
+
+Groq's free tier allows 1,000 requests/day and 200,000 tokens/day
+(`openai/gpt-oss-20b`). At ~1,590 tokens and 2 requests per announcement, the
+**token** cap binds roughly 4× harder than the request cap and is what makes
+bulk ingestion impractical on the free tier. See "Groq feasibility" in
+CLAUDE.md for the full arithmetic.
+
 ### Browsing what's actually been collected
 
 The topbar "..." menu → **"Browse news data"** opens a read-only view of every

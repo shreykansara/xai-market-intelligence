@@ -774,7 +774,21 @@
     vertical-align: middle;
   }
   .source-chip.seed { color: var(--text-secondary); border-color: var(--divider); }
-  .source-chip.live { color: var(--accent); border-color: var(--accent); }
+  .source-chip.lpu { color: var(--accent); border-color: var(--accent); }
+  /* A record whose Ollama breakdown failed is the WHOLE announcement stored
+     unsplit, not an atomic fact - flagged so it can't pass as clean. */
+  .quality-chip {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 1px 6px;
+    margin-right: 8px;
+    border: 1px solid var(--warning);
+    color: var(--warning);
+    vertical-align: middle;
+  }
 
   .news-pager {
     display: flex;
@@ -991,7 +1005,8 @@
     <div class="eyebrow">Collected data</div>
     <h2 class="page-heading">News items in the system</h2>
     <p class="page-subhead">
-      Everything currently stored, across all three corpora - what feeds analysis, and what's only been collected.
+      Every atomic fact decomposed from the LPU announcements corpus - including how much of it is
+      fully atomic and fully classified.
     </p>
 
     <div id="corpus-cards" class="corpus-cards"></div>
@@ -1005,8 +1020,7 @@
         <label for="news-source">Corpus</label>
         <select id="news-source">
           <option value="all">All</option>
-          <option value="seed">Fabricated seed</option>
-          <option value="live">Live ingested</option>
+          <option value="lpu">LPU announcements</option>
         </select>
       </div>
       <div class="filter-group">
@@ -1389,8 +1403,7 @@ document.getElementById("menu-news").addEventListener("click", () => goToNews())
 // server-side so this keeps working as the live corpus grows, and this page
 // never touches the analysis state.
 const CORPUS_LABELS = {
-  seed: "Fabricated seed",
-  live: "Live ingested",
+  lpu: "LPU announcements",
 };
 let newsPage = 1;
 let newsFacetsLoaded = false;
@@ -1411,14 +1424,17 @@ function newsQuery() {
 function renderCorpusCards(summary) {
   const wrap = document.getElementById("corpus-cards");
   wrap.innerHTML = "";
-  ["seed", "live"].forEach(key => {
+  ["lpu"].forEach(key => {
     const s = summary[key];
     if (!s) return;
     const card = document.createElement("div");
     card.className = "corpus-card";
+    const quality = (s.not_atomic || s.unclassified)
+      ? `<br>${s.not_atomic} not atomic &middot; ${s.unclassified} unclassified`
+      : (s.count ? "<br>all atomic &amp; classified" : "");
     const range = s.count
-      ? `${s.start} &rarr; ${s.end}<br>${s.distinct_days} distinct day${s.distinct_days === 1 ? "" : "s"}`
-      : "nothing collected yet";
+      ? `${s.start} &rarr; ${s.end}<br>${s.distinct_days} distinct day${s.distinct_days === 1 ? "" : "s"}${quality}`
+      : "nothing ingested yet";
     // in_scoring comes straight from the backend - it reports the actual
     // current wiring, so a corpus that's collected but unused says so here
     // rather than looking equivalent to one that feeds analysis.
@@ -1466,9 +1482,15 @@ function newsRow(item) {
     ? `<span title="${item.detail.replace(/"/g, "&quot;")}">from: ${item.detail.slice(0, 90)}${item.detail.length > 90 ? "…" : ""}</span>`
     : "";
   const mentions = item.mention_count > 1 ? `<span>&times;${item.mention_count} mentions</span>` : "";
+  const notAtomic = item.decomposition_ok === false
+    ? '<span class="quality-chip" title="Breakdown failed - this is the whole announcement, not an atomic fact">not atomic</span>'
+    : "";
+  const unclassified = item.classification_ok === false
+    ? '<span class="quality-chip" title="Classification failed - the zero scores mean not-scored, not genuinely irrelevant">unclassified</span>'
+    : "";
   row.innerHTML = `
     <div class="news-row-main">
-      <div class="news-row-text"><span class="source-chip ${item.source}">${item.source}</span>${item.text}</div>
+      <div class="news-row-text"><span class="source-chip ${item.source}">${item.source}</span>${notAtomic}${unclassified}${item.text}</div>
       <div class="news-row-sub">
         <span>${item.origin}</span>
         ${detail}

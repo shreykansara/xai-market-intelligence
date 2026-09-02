@@ -1,0 +1,130 @@
+name: LPU ingestion (scheduled)
+
+# Replaces ingestion_service.py's internal asyncio loop. Each tick is a short,
+# independent job, so nothing has to stay up between runs.
+#
+# WHY 30 MINUTES FOR A FINITE CORPUS: the LPU corpus is finite (44,695
+# announcements), so the cadence is NOT about keeping up with a live feed.
+# It serves two other purposes:
+#   1. Steady bounded progress through the backlog. Groq's free tier is
+#      token-bound at ~126 announcements/day, so each run deliberately does a
+#      small chunk rather than trying to finish.
+#   2. Keeping the Supabase free-tier project from pausing - every run writes
+#      to ingestion_runs, which is database activity (see README's
+#      "Operational risks" for why that is likely-but-not-guaranteed enough).
+# Once the backlog is exhausted the job becomes a cheap heartbeat: it finds
+# nothing to process and just records the run.
+on:
+  schedule:
+    - cron: "*/30 * * * *"
+  workflow_dispatch: {}   # manual trigger; also useful to wake a paused project
+
+concurrency:
+  # A slow run must never overlap the next tick - two jobs writing at once
+  # would double-process the same pending announcements.
+  group: lpu-ingestion
+  cancel-in-progress: false
+
+permissions:
+  contents: write   # required by the anti-dormancy commit step below
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25   # below the 30-minute cadence so runs can't pile up
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          pip install "psycopg[binary]"
+
+      - name: Apply database schema (idempotent)
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          sudo apt-get install -y --no-install-recommends postgresql-client
+          psql "$DATABASE_URL" -f db/schema.sql
+
+      - name: Process a bounded chunk of the LPU backlog
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          # The runner has no local Ollama, so Groq is the only option here.
+          LLM_PROVIDER: groq
+        # --limit is small on purpose: Groq's free tier is token-bound at ~126
+        # announcements/day across 48 runs, so ~3 per run is the sustainable
+        # rate. Asking for more just burns the daily budget early and then 429s
+        # for the rest of the day.
+        run: python scripts/ingest_lpu_data.py --limit 3 --quiet
+
+      - name: Sync newly processed facts to Supabase
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python scripts/sync_lpu_to_supabase.py
+
+      - name: Record run status
+        if: always()
+        # Runs even on failure, so a failed ingestion is visible in the database
+        # rather than looking identical to "never ran" - and so the run still
+        # counts as database activity against the inactivity-pause window.
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          python - <<'PY'
+          import os, sys
+          sys.path.insert(0, "src")
+          from marketintel.db import record_ingestion_run, DatabaseUnavailable
+          status = os.environ.get("JOB_STATUS", "unknown")
+          try:
+              record_ingestion_run(
+                  stats={"workflow": "ingest.yml", "job_status": status},
+                  ok=(status == "success"),
+                  source="github-actions",
+                  error=None if status == "success" else f"job status: {status}",
+              )
+              print(f"recorded ingestion run (status={status})")
+          except DatabaseUnavailable as exc:
+              print(f"could not record run status: {exc}")
+          PY
+
+      - name: Keep the schedule alive (anti-dormancy commit)
+        if: always()
+        # GitHub DISABLES scheduled workflows after 60 days with no repository
+        # activity. This job is also what keeps Supabase awake, so if the
+        # schedule dies the database eventually pauses too - two chained
+        # failures from one cause. A periodic commit resets GitHub's clock.
+        #
+        # Committing every 30 minutes would be 17k commits/year, so this only
+        # commits when the heartbeat is older than 20 days - comfortably inside
+        # the 60-day window while staying nearly silent in the history.
+        run: |
+          set -e
+          STAMP_FILE=.github/last-run.txt
+          NOW=$(date -u +%s)
+          if [ -f "$STAMP_FILE" ]; then
+            PREV=$(date -u -d "$(cat "$STAMP_FILE")" +%s 2>/dev/null || echo 0)
+          else
+            PREV=0
+          fi
+          AGE_DAYS=$(( (NOW - PREV) / 86400 ))
+          echo "heartbeat age: ${AGE_DAYS} days"
+          if [ "$AGE_DAYS" -lt 20 ]; then
+            echo "younger than 20 days - no commit needed"
+            exit 0
+          fi
+          date -u +"%Y-%m-%dT%H:%M:%SZ" > "$STAMP_FILE"
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add "$STAMP_FILE"
+          git commit -m "chore: keep scheduled workflow alive [skip ci]"
+          git push

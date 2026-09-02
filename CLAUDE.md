@@ -97,11 +97,39 @@ generation itself.
   blended record), also returning each fact's named entities. Falls back
   to treating the whole text as one fact (no entities) if Ollama is
   unavailable.
+- **Scope now comes from the SOURCE wherever the source determines it**, not
+  from content inference:
+  - **LPU announcements** (`lpu_ingestion.py`) — `scope="LPU"`,
+    `is_lpu=True`, set unconditionally at construction. No inference has ever
+    run on this path; verified across the whole stored corpus (every fact
+    `scope=="LPU"`, and no `scope_source` field exists on any of them because
+    no classifier was ever consulted).
+  - **World wire feeds** (`ingestion.py`'s `SOURCE_FIXED_SCOPE`) — BBC World,
+    Al Jazeera and Google News (WORLD topic) are world-level by construction,
+    so their facts get `scope="World"` directly and the per-class-best-match
+    classifier is SKIPPED for them entirely. This removes a real observed
+    error source: that classifier had tagged an NFL story and a Nigerian
+    kidnapping story as India-level.
+  - **GDELT** — deliberately NOT collapsed to a blanket "World". GDELT
+    publishes structured per-article geography (country/ADM1), which is
+    strictly finer than "World", so source-based simplification does not
+    apply the way it does to RSS. The removed bulk backfill tiered
+    World/India/Punjab off exactly those GKG columns. The surviving LIVE
+    DOC-API path, however, keeps only title/link/published and never captures
+    `sourcecountry`, so it has no structured geography at scoring time and is
+    the ONLY remaining consumer of the content classifier. Capturing
+    `sourcecountry` plus a country→scope map would retire that last
+    dependency — a self-contained follow-up, not done here.
+  `scope_source` records which route produced each tag (`"source"` vs.
+  `"real"`/`"fabricated"`), so a source-assigned scope is distinguishable
+  from an inferred one on inspection.
 - **No manual labeling of real data, anywhere** (`seed_inference.py`) —
   relevance and polarity inferred via similarity-weighted k-NN (k=10);
   geographic scope inferred via per-class-best-match (each of the 7 scope
   classes' single closest match wins) specifically to prevent majority
-  classes (India, Punjab) from winning on population size alone. The
+  classes (India, Punjab) from winning on population size alone — now used
+  only by the GDELT live path, per the entry above; the code stays in place
+  for any future source without structured geography. The
   reference pool itself is now the accumulated REAL corpus, per dimension
   and per scope class, not the fabricated seed corpus — see
   `real_data_inference.py` and "Known gaps" below for the coverage-gated

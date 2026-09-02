@@ -34,10 +34,20 @@ visible in the ingestion log rather than silently changing behavior.
 """
 import json
 import re
+import time
 import urllib.error
 import urllib.request
 
-from .config import OLLAMA_HOST, OLLAMA_MODEL, OLLAMA_TIMEOUT_SECONDS
+from .config import (
+    OLLAMA_HOST,
+    OLLAMA_MAX_ATTEMPTS,
+    OLLAMA_MODEL,
+    OLLAMA_RETRY_BACKOFF_SECONDS,
+    OLLAMA_RETRY_SHRINK_FACTOR,
+    OLLAMA_TIMEOUT_SECONDS,
+    LLM_PROVIDER,
+)
+from .groq_client import GroqError, GroqRateLimited, call_groq
 
 EXTRACTION_PROMPT = """You are extracting atomic, independently-scorable factual claims from a news article or headline.
 
@@ -55,7 +65,20 @@ Text:
 JSON array of {{"text": ..., "entities": [...]}} objects:"""
 
 
-def _call_ollama(text: str) -> str:
+def _call_model(text: str) -> str:
+    """Transport only - the prompt and _parse_facts() are unchanged from the
+    Ollama implementation. Which transport runs is config.LLM_PROVIDER; see
+    that flag for the measured reason bulk and live workloads want different
+    answers, and groq_client.py for the rate-limit handling."""
+    prompt = EXTRACTION_PROMPT.format(text=text)
+    if LLM_PROVIDER == "ollama":
+        return _call_ollama_legacy(text)
+    return call_groq(prompt, temperature=0.2)
+
+
+def _call_ollama_legacy(text: str) -> str:
+    """The previous local-Ollama transport, kept only for reference/offline
+    fallback experiments. Nothing in the runtime path calls this."""
     payload = json.dumps({
         "model": OLLAMA_MODEL,
         "prompt": EXTRACTION_PROMPT.format(text=text),
@@ -117,21 +140,61 @@ def _parse_facts(raw_response: str) -> list[dict] | None:
     return facts or None
 
 
+def extract_facts_with_status(text: str, attempts: int = OLLAMA_MAX_ATTEMPTS) -> tuple[list[dict], bool]:
+    """Returns (facts, ok). `ok` is False ONLY if every attempt failed, in which
+    case facts degrades to [{"text": text, "entities": []}] - the whole input
+    stored unsplit, which is a compound record, not an atomic one. Callers that
+    care about atomicity should record that distinction rather than infer it.
+
+    Retries exist because both observed failure modes are transient:
+      - a TIMEOUT on a long input, which retrying verbatim would just repeat -
+        so each retry shrinks the input (OLLAMA_RETRY_SHRINK_FACTOR), turning
+        an input the model can't finish in time into one it can;
+      - malformed JSON, which is sampling noise and usually succeeds on retry.
+    """
+    attempt_text = text
+    for attempt in range(1, attempts + 1):
+        try:
+            raw_response = _call_model(attempt_text)
+            facts = _parse_facts(raw_response)
+            if facts is not None:
+                return facts, True
+            reason = "unparseable JSON"
+        except GroqRateLimited as exc:
+            # groq_client has already waited out every retry-after it was
+            # given. Degrading here (unsplit single fact) is the documented
+            # graceful path - it keeps ingestion moving instead of stalling
+            # the whole run behind a quota that won't reset for hours.
+            print(f"  [fact_extraction] persistently rate limited ({exc}) - "
+                  "storing the input UNSPLIT (not atomic).")
+            return [{"text": text, "entities": []}], False
+        except GroqError as exc:
+            reason = f"call failed ({exc})"
+        except (urllib.error.URLError, TimeoutError, OSError) as exc:
+            reason = f"call failed ({exc})"
+            # Only a timeout is plausibly caused by input size; shrink so the
+            # next attempt is materially cheaper rather than identical.
+            shrunk = int(len(attempt_text) * OLLAMA_RETRY_SHRINK_FACTOR)
+            if shrunk > 120:
+                cut = attempt_text[:shrunk].rfind(" ")
+                attempt_text = attempt_text[:cut] if cut > shrunk // 2 else attempt_text[:shrunk]
+
+        if attempt < attempts:
+            print(f"  [fact_extraction] attempt {attempt}/{attempts} {reason} - retrying "
+                  f"({len(attempt_text)} chars)")
+            time.sleep(OLLAMA_RETRY_BACKOFF_SECONDS * (2 ** (attempt - 1)))
+
+    print(f"  [fact_extraction] all {attempts} attempts failed - storing the input UNSPLIT (not atomic).")
+    return [{"text": text, "entities": []}], False
+
+
 def extract_facts_detailed(text: str) -> list[dict]:
     """Returns one or more {"text": neutral fact string, "entities": [...]} records
-    extracted from `text`. Falls back to [{"text": text, "entities": []}] if Ollama
-    is unreachable, times out, or its output can't be parsed - callers always get a
-    non-empty list back and don't need a separate failure path."""
-    try:
-        raw_response = _call_ollama(text)
-    except (urllib.error.URLError, TimeoutError, OSError) as exc:
-        print(f"  [fact_extraction] Ollama unreachable ({exc}) - using original text as a single fact.")
-        return [{"text": text, "entities": []}]
-
-    facts = _parse_facts(raw_response)
-    if facts is None:
-        print("  [fact_extraction] could not parse Ollama's response as a JSON array - using original text as a single fact.")
-        return [{"text": text, "entities": []}]
+    extracted from `text`. Retries internally (see extract_facts_with_status) and
+    falls back to [{"text": text, "entities": []}] only if every attempt failed -
+    callers always get a non-empty list back and don't need a separate failure
+    path. Use extract_facts_with_status() when the failure itself matters."""
+    facts, _ok = extract_facts_with_status(text)
     return facts
 
 

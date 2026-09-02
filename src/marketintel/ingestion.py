@@ -201,7 +201,23 @@ def parse_gdelt_date(value: str) -> datetime:
 
 def fetch_gdelt(since: datetime | None) -> list[dict]:
     """GDELT DOC 2.0 API (free, no key) via the open-source `gdeltdoc` package -
-    not GDELT Cloud, which is a separate paid product."""
+    not GDELT Cloud, which is a separate paid product.
+
+    Scope note: GDELT is the one source here that publishes structured
+    geography rather than leaving it to be inferred, which is why it is
+    excluded from SOURCE_FIXED_SCOPE - a blanket "World" would be strictly
+    worse than what GDELT actually knows. The now-removed bulk-backfill path
+    used exactly that, tiering World/India/Punjab off the GKG country and ADM1
+    columns.
+
+    This LIVE path, however, currently keeps only title/link/published from
+    each row and never captures the DOC API's own `sourcecountry` field, so
+    there is no structured geography in hand at scoring time and these facts
+    still fall through to the content classifier. Wiring `sourcecountry` (and
+    a country -> scope mapping) through would remove the last classifier
+    dependency; that is a real, self-contained follow-up, deliberately not
+    done here since it is beyond a scope-tagging change.
+    """
     from gdeltdoc import Filters, GdeltDoc
 
     now = datetime.now(timezone.utc)
@@ -235,6 +251,29 @@ SOURCES = {
     "aljazeera": make_rss_fetcher(RSS_FEEDS["aljazeera"]),
     "google_news_world": make_rss_fetcher(RSS_FEEDS["google_news_world"]),
     "gdelt_world": fetch_gdelt,
+}
+
+# Sources whose scope is a property of the SOURCE, not of the article text, so
+# it is set directly and the content-embedding scope classifier is skipped
+# entirely for them.
+#
+# These three are world/international wire feeds: BBC World, Al Jazeera, and
+# Google News queried on its WORLD topic. Every item they return is
+# world-level by construction, so asking a per-class-best-match embedding
+# classifier "which of the 7 scopes is this?" could only ever introduce error -
+# and demonstrably did: it previously tagged an NFL story and a Nigerian
+# kidnapping story with India-level scope (see this module's docstring and
+# CLAUDE.md's scope-fix entry).
+#
+# gdelt_world is deliberately NOT in this map. Not because GDELT is
+# world-only - the opposite: GDELT publishes structured per-article geography
+# (country and ADM1 codes) that is strictly better than a blanket "World", so
+# collapsing it here would throw away real granularity. See the note on
+# fetch_gdelt() for why the LIVE DOC-API path can't currently use those fields.
+SOURCE_FIXED_SCOPE = {
+    "bbc_world": "World",
+    "aljazeera": "World",
+    "google_news_world": "World",
 }
 
 
@@ -371,10 +410,19 @@ def run_ingestion_once(verbose: bool = True) -> dict:
                     })
                     continue
 
-                scope, _, scope_source = infer_scope_hybrid(
-                    embedding, real_pool_embeddings, real_scope_indices,
-                    seed_embeddings, fabricated_scope_indices, scope_coverage,
-                )
+                # Scope comes from the SOURCE where the source already
+                # determines it (see SOURCE_FIXED_SCOPE), and only falls back to
+                # the content classifier for sources that don't - currently just
+                # gdelt_world. scope_source records which applied, so a
+                # spot-check can tell a source-assigned tag from an inferred one.
+                fixed_scope = SOURCE_FIXED_SCOPE.get(source_id)
+                if fixed_scope is not None:
+                    scope, scope_source = fixed_scope, "source"
+                else:
+                    scope, _, scope_source = infer_scope_hybrid(
+                        embedding, real_pool_embeddings, real_scope_indices,
+                        seed_embeddings, fabricated_scope_indices, scope_coverage,
+                    )
                 pestle_scores = {d: relevance[d] for d in PESTLE_DIMS}
                 porters_scores = {d: relevance[d] for d in PORTERS_DIMS}
 

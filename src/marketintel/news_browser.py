@@ -1,42 +1,49 @@
-"""Read-only browse/inspect layer over EVERY news item the system currently
-holds, across both corpora, so what's actually been collected is visible in
-the UI instead of only inferrable from file sizes on disk.
+"""Read-only browse/inspect layer over every news item the system currently
+holds, so what's actually been collected is visible in the UI instead of only
+inferrable from file sizes on disk.
 
-The two corpora are deliberately NOT merged into one undifferentiated list -
-they have genuinely different provenance:
+There is now exactly ONE corpus: "lpu" - atomic facts decomposed from the real
+LPU announcements in data/lpudata/ (see lpu_ingestion.py), stored in
+data/lpu_facts.json with their parent announcements in
+data/lpu_announcements.json. The fabricated seed corpus and the live-ingested
+news feed were both removed, so nothing else is left to browse.
 
-  - "seed" - the 1000 fabricated articles (data/news.json).
-  - "live" - real facts from ingestion_service.py (data/real_facts.json),
-             decomposed from real articles by Ollama.
+Each item still carries an explicit in_scoring flag rather than that being
+assumed: a corpus that is stored but NOT wired into /api/analyze must never
+look equivalent to one that is.
 
-Both are scored by /api/analyze today (see live_facts.py); each item still
-carries an explicit in_scoring flag so a future corpus that ISN'T wired into
-the serving path can't quietly look equivalent to one that is.
+Two quality flags come straight from ingestion and are surfaced rather than
+hidden, because both are ways a record can be less trustworthy than it looks:
+  - decomposition_ok=False - Ollama timed out or returned unparseable JSON, so
+    this record is the WHOLE announcement stored unsplit, not an atomic fact.
+  - classification_ok=False - the relevance/polarity call failed, so the
+    all-zero scores mean "not scored", not "genuinely no market relevance".
 
 Nothing here computes, mutates, or re-scores anything - it only reads what
-already exists on disk and normalizes the two record shapes into one
-display shape. This module is intentionally free of any dependency on the
-scoring pipeline so browsing can never perturb analysis.
+already exists on disk and normalizes it into one display shape. This module
+is intentionally free of any dependency on the scoring pipeline so browsing
+can never perturb analysis, and it is safe to read a corpus that ingestion is
+still actively writing to (every write is temp-file-then-rename).
 """
 import json
 from pathlib import Path
 
 from .config import (
-    NEWS_PATH,
+    LPU_ANNOUNCEMENTS_PATH,
+    LPU_FACTS_PATH,
     PESTLE_DIMS,
     PESTLE_LABELS,
     PORTERS_DIMS,
     PORTERS_LABELS,
-    REAL_ARTICLES_PATH,
-    REAL_FACTS_PATH,
 )
 
 ALL_DIM_LABELS = {**PESTLE_LABELS, **PORTERS_LABELS}
-SOURCES = ("seed", "live")
+SOURCES = ("lpu",)
 
-# Cache keyed by (path -> mtime) so a browse request is cheap, but a corpus
-# that grew since the last request (live ingestion appending to real_facts.json
-# from its own process) is picked up without restarting the server.
+# Cache keyed by (path -> mtime) so repeat browsing is cheap, while a corpus
+# that grew since the last request (the ingestion run flushing a checkpoint
+# every 25 announcements from its own process) is picked up automatically
+# without restarting the server.
 _cache: dict = {}
 
 
@@ -58,9 +65,9 @@ def _all_scores(item: dict) -> dict:
 
 def _load_json(path: Path) -> list:
     """Any unreadable/corrupt corpus degrades to "nothing from this source"
-    rather than breaking the whole browse page - same posture as
-    data_loader.load_real_facts(), for the same reason (these files are
-    written by other processes that may be mid-write or absent entirely)."""
+    rather than breaking the whole browse page - the same posture
+    data_loader.load_real_facts() takes, for the same reason (this file is
+    written by a separate long-running process)."""
     try:
         if not path.exists() or path.stat().st_size == 0:
             return []
@@ -71,75 +78,62 @@ def _load_json(path: Path) -> list:
         return []
 
 
-def _normalize_seed(article: dict) -> dict:
-    dim, score = _top_dimension(article)
-    return {
-        "id": article["id"],
-        "source": "seed",
-        "origin": "fabricated",
-        "text": article.get("title", ""),
-        "detail": article.get("body", ""),
-        "date": str(article.get("date", ""))[:10],
-        "scope": article.get("scope", ""),
-        "polarity": article.get("polarity", ""),
-        "top_dimension": dim,
-        "top_dimension_label": ALL_DIM_LABELS.get(dim, dim),
-        "top_dimension_score": round(score, 3),
-        "scores": _all_scores(article),
-        "link": None,
-        "mention_count": 1,
-        "in_scoring": True,
-    }
-
-
-def _normalize_fact(fact: dict, source: str, articles_by_id: dict, in_scoring: bool) -> dict:
+def _normalize_lpu_fact(fact: dict, announcements_by_id: dict) -> dict:
     dim, score = _top_dimension(fact)
-    parent = articles_by_id.get(fact.get("parent_article_id"), {})
+    parent = announcements_by_id.get(fact.get("parent_announcement_id"), {})
+    links = parent.get("links") or []
     return {
         "id": fact["id"],
-        "source": source,
-        # The feed an article came from, shown as-is rather than flattened
-        # into a generic "real" label - provenance is the whole point here.
-        "origin": parent.get("source", "unknown"),
+        "source": "lpu",
+        # Who posted the notice - the LPU equivalent of a news outlet, and the
+        # closest thing this corpus has to provenance beyond the file it came from.
+        "origin": (parent.get("uploaded_by") or "LPU").split("*")[0].strip() or "LPU",
         "text": fact.get("fact_text", ""),
         "detail": parent.get("title", ""),
-        "date": str(fact.get("published", ""))[:10],
+        "date": (fact.get("published") or "")[:10],
         "scope": fact.get("scope", ""),
         "polarity": fact.get("polarity", ""),
         "top_dimension": dim,
         "top_dimension_label": ALL_DIM_LABELS.get(dim, dim),
         "top_dimension_score": round(score, 3),
         "scores": _all_scores(fact),
-        "link": parent.get("link") or parent.get("url"),
+        "link": links[0] if links and isinstance(links[0], str) else None,
         "mention_count": int(fact.get("mention_count", 1) or 1),
-        "in_scoring": in_scoring,
+        # Absent on records written before these flags existed - treated as
+        # unknown-but-assumed-ok rather than silently reported as failures.
+        "decomposition_ok": bool(fact.get("decomposition_ok", True)),
+        "classification_ok": bool(fact.get("classification_ok", True)),
+        "is_lpu": bool(fact.get("is_lpu", True)),
+        # The LPU corpus is not yet wired into /api/analyze's scoring path.
+        "in_scoring": False,
     }
 
 
 def load_all_items() -> list[dict]:
-    """Every item from both corpora, normalized to one display shape and
-    sorted newest-first. Cached per (file, mtime) so repeat browsing is cheap
-    while a corpus still being written to is picked up on its next change."""
-    paths = [NEWS_PATH, REAL_FACTS_PATH, REAL_ARTICLES_PATH]
+    """Every stored fact, normalized to one display shape and sorted
+    newest-first. Cached per (file, mtime) so repeat browsing is cheap while an
+    actively-growing corpus is still picked up on its next change."""
+    paths = [LPU_FACTS_PATH, LPU_ANNOUNCEMENTS_PATH]
     stamp = tuple((p.stat().st_mtime_ns if p.exists() else 0) for p in paths)
     if _cache.get("stamp") == stamp:
         return _cache["items"]
 
-    seed = _load_json(NEWS_PATH)
-    live_facts = _load_json(REAL_FACTS_PATH)
-    live_articles = {a["id"]: a for a in _load_json(REAL_ARTICLES_PATH)}
-    items = [_normalize_seed(a) for a in seed]
-    items += [_normalize_fact(f, "live", live_articles, in_scoring=True) for f in live_facts]
+    facts = _load_json(LPU_FACTS_PATH)
+    announcements = {a["id"]: a for a in _load_json(LPU_ANNOUNCEMENTS_PATH)}
+    items = [_normalize_lpu_fact(f, announcements) for f in facts]
 
-    items.sort(key=lambda i: (i["date"], i["id"]), reverse=True)
+    # Undated facts sort last rather than being dropped - the announcement is
+    # real, its date just couldn't be parsed from the source.
+    items.sort(key=lambda i: (i["date"] == "", i["date"], i["id"]), reverse=True)
     _cache["stamp"] = stamp
     _cache["items"] = items
     return items
 
 
 def summarize(items: list[dict]) -> dict:
-    """Per-corpus totals and date coverage - the "what do we actually have"
-    answer, which is the main reason this page exists."""
+    """Per-corpus totals, date coverage and ingestion-quality counts - the
+    "what do we actually have, and how much of it is trustworthy" answer that
+    is the main reason this page exists."""
     summary = {}
     for source in SOURCES:
         subset = [i for i in items if i["source"] == source]
@@ -149,7 +143,9 @@ def summarize(items: list[dict]) -> dict:
             "start": dates[0] if dates else None,
             "end": dates[-1] if dates else None,
             "distinct_days": len(dates),
-            "in_scoring": bool(subset and subset[0]["in_scoring"]),
+            "in_scoring": bool(subset) and subset[0]["in_scoring"],
+            "not_atomic": sum(1 for i in subset if not i["decomposition_ok"]),
+            "unclassified": sum(1 for i in subset if not i["classification_ok"]),
         }
     return summary
 

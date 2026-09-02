@@ -1,4 +1,39 @@
+import os
 from pathlib import Path
+
+
+def _load_env_file(path: Path) -> None:
+    """Minimal .env loader - stdlib only, no python-dotenv dependency (this
+    project uses urllib over requests for the same reason: one fewer thing to
+    install for a few lines of parsing).
+
+    A real environment variable ALWAYS wins over the file, so an export in the
+    shell, a CI secret, or a systemd Environment= line overrides .env rather
+    than being silently clobbered by a stale checked-out value.
+
+    Supports `KEY=value`, `export KEY=value`, `#` comments, blank lines, and
+    optional surrounding single/double quotes. Anything it can't parse is
+    skipped rather than raising - a malformed .env must never stop the app
+    from starting, since most of the system doesn't need a key at all.
+    """
+    try:
+        if not path.is_file():
+            return
+        for raw_line in path.read_text(encoding="utf-8").splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            if line.startswith("export "):
+                line = line[len("export "):].lstrip()
+            key, _, value = line.partition("=")
+            key, value = key.strip(), value.strip()
+            if not key:
+                continue
+            if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
+                value = value[1:-1]
+            os.environ.setdefault(key, value)  # setdefault = real env wins
+    except OSError:
+        return
 
 PESTLE_DIMS = ["political", "economic", "social", "technological", "legal", "environmental"]
 PESTLE_LABELS = {
@@ -42,6 +77,12 @@ EMBEDDING_MODEL_NAME = "all-MiniLM-L6-v2"
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 DATA_DIR = ROOT_DIR / "data"
+
+# Load .env as early as possible: config is imported by everything, so doing it
+# here means any entry point (server.py, ingestion_service.py, the scripts) gets
+# GROQ_API_KEY without each one remembering to load it. .env is gitignored;
+# .env.example is the committed template.
+_load_env_file(ROOT_DIR / ".env")
 NEWS_PATH = DATA_DIR / "news.json"
 NEWS_EMBEDDINGS_PATH = DATA_DIR / "news_embeddings.npy"
 STARTUPS_PATH = DATA_DIR / "startups.json"
@@ -193,6 +234,84 @@ SEED_NEIGHBOR_K = 10
 # that isn't meaningfully close to anything this system models has no
 # business being forced into a geographic scope it has no real bearing on.
 RELEVANCE_GATE_PERCENTILE = 5
+
+# --- LPU announcements corpus (src/marketintel/lpu_ingestion.py) ---
+# The ONLY news corpus in the system: ~16.5k real LPU announcements/notices
+# scraped into data/lpudata/ as several overlapping snapshot files, deduped
+# by their own `id` on load. Every fact derived from them is tagged
+# scope="LPU" and is_lpu=True by construction - these are university
+# announcements, not wire news, so there is no scope inference to do.
+LPU_RAW_DIR = DATA_DIR / "lpudata"
+LPU_ANNOUNCEMENTS_PATH = DATA_DIR / "lpu_announcements.json"
+LPU_FACTS_PATH = DATA_DIR / "lpu_facts.json"
+LPU_FACT_EMBEDDINGS_PATH = DATA_DIR / "lpu_fact_embeddings.npy"
+# Checkpoint for the ingestion run: a full pass is measured in hours (two
+# Ollama calls per announcement), so it must survive interruption and resume
+# from the last flushed announcement rather than starting over.
+LPU_STATE_PATH = DATA_DIR / "lpu_ingestion_state.json"
+LPU_CHECKPOINT_EVERY = 25
+LPU_SCOPE = "LPU"
+# Max characters of (title + body) handed to Ollama for atomic breakdown.
+# Measured directly on this corpus: decomposition costs ~3s at 128 chars, ~5s
+# at 400, ~7s at 700 and ~12s at 2,200 - but the longest bodies (up to 9,013
+# chars) blow past OLLAMA_TIMEOUT_SECONDS entirely, and a timeout is far worse
+# than a truncation because the fallback stores the whole announcement as ONE
+# unsplit fact - the exact compound record this pipeline exists to avoid. Two
+# of the first eight announcements timed out this way and consumed 61% of that
+# run's wall time. LPU notices put the substance in the title and opening
+# lines (the tail is typically block/room lists, signatures and boilerplate),
+# so capping here costs little and buys both speed and reliable atomicity.
+LPU_MAX_DECOMPOSITION_CHARS = 1200
+
+# --- Groq API (src/marketintel/groq_client.py) ---
+# Replaces the local Ollama model as the LLM transport for BOTH fact
+# decomposition and LPU classification. The API key is read from the
+# GROQ_API_KEY environment variable at call time - never stored here, never
+# committed. Only the transport changed: prompts, JSON parsing, grounding and
+# comparative matching are untouched.
+GROQ_BASE_URL = "https://api.groq.com/openai/v1/chat/completions"
+# Which transport the LLM calls actually use: "groq" (hosted API) or "ollama"
+# (local model). Selectable rather than a one-way swap because the right answer
+# genuinely differs by workload, measured not assumed:
+#   - BULK ingestion (44,695 LPU announcements, ~1,590 tokens each): Groq's free
+#     tier caps at 200K tokens/day, making the full run ~343 DAYS versus ~9.4
+#     days on local Ollama. The free tier's token cap binds ~4x harder than its
+#     request cap. Use "ollama" for bulk.
+#   - LIVE ingestion (a handful of articles per 30-minute cycle): nowhere near
+#     any cap, and Groq is far faster per call with no local RAM cost. Use "groq".
+LLM_PROVIDER = "groq"
+# llama-3.1-8b-instant is NOT on Groq's current free tier - verified against
+# their published limits table. These are the general-purpose chat models that
+# are: openai/gpt-oss-20b and -120b, qwen/qwen3.6-27b and 3.8-27b (all 30 RPM /
+# 1K RPD / 8K TPM / 200K TPD), and groq/compound (30 RPM / 250 RPD / 70K TPM).
+GROQ_MODEL = "openai/gpt-oss-20b"
+GROQ_FREE_TIER_RPD = 1000
+GROQ_FREE_TIER_TPD = 200_000
+GROQ_TIMEOUT_SECONDS = 60
+GROQ_MAX_ATTEMPTS = 4
+# Start pausing when this few requests remain in the current window, instead of
+# sprinting into a 429 - a voluntary pause costs less than a rejected request
+# plus its mandated retry-after wait.
+GROQ_RATE_LIMIT_SAFETY_MARGIN = 2
+
+# --- Legacy Ollama settings (no longer the runtime path) ---
+# Kept because the retry/attempt constants below are still used by the shared
+# retry logic, and because removing OLLAMA_* entirely would break the older
+# ingestion.py call sites for no benefit. Nothing in the runtime path starts
+# an Ollama process any more.
+# Every announcement must actually be processed by the model; a silent
+# fallback is not an acceptable outcome at corpus scale. A single call fails
+# for two observed reasons, both transient and both retryable:
+#   1. TIMEOUT on a long input - retrying the same oversized text just times
+#      out again, so each retry also SHRINKS the input (see the shrink factor
+#      below), which reliably converts a timeout into a successful call.
+#   2. Malformed JSON from llama3.2:3b - a plain retry usually succeeds,
+#      since the failure is sampling noise rather than a systematic refusal.
+# Attempts are per call, with exponential backoff between them.
+OLLAMA_MAX_ATTEMPTS = 4
+OLLAMA_RETRY_BACKOFF_SECONDS = 2.0
+# Each retry after a timeout keeps this fraction of the previous input.
+OLLAMA_RETRY_SHRINK_FACTOR = 0.6
 
 # --- Real-data seed inference (src/marketintel/real_data_inference.py) ---
 # The live ingestion path (ingestion.py) migrates its k-NN
