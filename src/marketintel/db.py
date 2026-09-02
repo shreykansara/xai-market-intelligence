@@ -64,6 +64,23 @@ def connect():
         raise DatabaseUnavailable(f"could not connect to the database: {exc}") from exc
     try:
         yield conn
+    except Exception as exc:  # noqa: BLE001 - see below
+        # This is what actually caught the real production bug: a bare
+        # `try/finally` here means an error from USING the connection (e.g.
+        # `cur.execute()` failing because a table doesn't exist - schema.sql
+        # never applied to this Supabase project) propagated straight past
+        # every review-queue endpoint's error handling and out as an
+        # unhandled Starlette 500 with no body at all, instead of the clear
+        # "Database unavailable: ..." message /api/analyze's equivalent
+        # degraded-mode path already gives. Converting every failure that
+        # happens while a connection is in use - not just failing to obtain
+        # one - into the same DatabaseUnavailable the global exception
+        # handler already turns into a clean 503 closes that gap.
+        try:
+            conn.rollback()
+        except Exception:  # noqa: BLE001 - best-effort; the real error is re-raised below regardless
+            pass
+        raise DatabaseUnavailable(f"database operation failed: {exc}") from exc
     finally:
         conn.close()
 
