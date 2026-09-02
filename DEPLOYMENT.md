@@ -1,19 +1,25 @@
 # Deployment walkthrough
 
 Written for someone deploying this for the first time, assuming no prior
-familiarity with Supabase, Render, Vercel, or GitHub Actions secrets. Follow
-the steps **in order** — each one produces a value the next one needs.
+familiarity with Supabase, Render, or Vercel. Follow the steps **in order** —
+each one produces a value the next one needs.
 
-This is a **private deployment**: nothing here asks you to share a public link.
-The goal is that ingestion keeps running remotely so your own machine doesn't
-have to stay on.
+**What this gets you:** a live URL where you can click "Run GDELT ingestion
+now" or upload an LPU JSON file, review and approve what it produces, and have
+the approved facts land directly in a hosted Postgres database (Supabase) -
+never on your laptop, and never needing a later migration, because production
+*is* where the data lives from the first run onward.
 
-**Time required:** roughly 45–60 minutes, mostly waiting for builds.
+This is a **private deployment**: nothing here asks you to share a public
+link, and the last step in Vercel locks the site to your own account.
 
-All four platforms are used on their **free tiers**. Read
-[Operational risks](README.md#operational-risks) in the README before relying on
-this unattended — there are two real failure modes (Supabase pausing, GitHub
-disabling the schedule) that you should understand rather than be surprised by.
+**Time required:** roughly 30–40 minutes, mostly waiting for builds.
+
+All platforms are used on their **free tiers**. Read
+[Operational risks](README.md#operational-risks) in the README before relying
+on this unattended — Supabase can pause after 7 days of no activity, and
+there's currently no automatic keep-alive (see that section for why, and the
+two ways to handle it).
 
 ---
 
@@ -23,23 +29,23 @@ Collect these as you go. **Do not commit any of them.**
 
 | Variable | What it's for | Where to get it | Needed by |
 |---|---|---|---|
-| `DATABASE_URL` | Postgres connection string; where facts, announcements, embeddings and run history are stored | Supabase → Project Settings → Database → Connection string → URI (Step 1.5) | Render, GitHub Actions |
-| `GROQ_API_KEY` | Authenticates LLM calls for fact decomposition and classification | console.groq.com → API Keys → Create API Key (Step 2) | Render, GitHub Actions |
-| `LLM_PROVIDER` | Selects the LLM transport. Must be `groq` on any hosted runner — there is no local Ollama there | Not a secret; type the literal value `groq` | Render, GitHub Actions |
+| `DATABASE_URL` | Postgres connection string; where facts, announcements, embeddings, and the review queue live | Supabase → Connect → **Session pooler** (Step 1.5) | Render |
+| `GROQ_API_KEY` | Authenticates LLM calls for fact decomposition, classification, and summaries | console.groq.com → API Keys (Step 2) | Render |
+| `LLM_PROVIDER` | Selects the LLM transport | Not a secret; literal value `groq` | Render |
 | `PYTHON_VERSION` | Pins Render's Python runtime | Not a secret; literal value `3.11` | Render |
 
-There is no value in this repo for any of these. Every one comes from an
-account you create below.
+Only Render needs secrets for this deployment. (GitHub Actions secrets are
+**optional** - only relevant if you later re-enable the dormant bulk-ingestion
+workflow; see the appendix at the end.)
 
 ---
 
 ## Step 1 — Supabase (the database). Do this first.
 
-The backend and the scheduled job both need the connection string, so this must
-exist before either.
+The backend needs the connection string, so this must exist before Render.
 
-1. Go to **https://supabase.com** and click **Start your project**. Sign in with
-   GitHub (simplest, since you'll need GitHub later anyway).
+1. Go to **https://supabase.com** and click **Start your project**. Sign in
+   with GitHub (simplest, since you may use GitHub later anyway).
 2. On the dashboard click **New project**.
 3. Fill in:
    - **Name**: `market-intelligence` (any name is fine)
@@ -50,26 +56,35 @@ exist before either.
    - **Plan**: Free
 4. Click **Create new project**. Provisioning takes ~2 minutes. Wait until the
    green **Project is healthy** indicator appears.
-5. **Get the connection string.** Click the **Connect** button in the top bar
-   (or Project Settings → Database → Connection string). Choose the **URI** tab.
-   You'll see something like:
-   ```
-   postgresql://postgres.abcdefgh:[YOUR-PASSWORD]@aws-0-us-east-1.pooler.supabase.com:6543/postgres
-   ```
-   Replace `[YOUR-PASSWORD]` with the password from step 3. **Use the pooler
-   (port 6543)** — short-lived connections from GitHub Actions and a
-   cold-starting Render service work better through the pooler than through the
-   direct port 5432.
+
+5. **Get the connection string — use the pooler, not the direct connection.**
+   Click **Connect** in the top bar. You'll see two options:
+   - ❌ **Direct connection** (`db.<ref>.supabase.co`) — do NOT use this one.
+     It's IPv6-only, which fails to resolve (`getaddrinfo failed`) on many
+     home networks and on some hosts. This exact mistake happened during
+     development of this project.
+   - ✅ **Session pooler** — use this. It looks like:
+     ```
+     postgresql://postgres.abcdefgh:[YOUR-PASSWORD]@aws-0-<region>.pooler.supabase.com:5432/postgres
+     ```
+   Replace `[YOUR-PASSWORD]` with the password from step 3.
 
    Save this whole string. This is your **`DATABASE_URL`**.
 
+   ⚠️ Before moving on, sanity-check the string itself: the host must contain
+   `pooler.supabase.com` (not `db.<ref>.supabase.co`), and the port must match
+   what Supabase's Connect panel showed you for that mode.
+
 6. **Create the tables.** In the left sidebar click **SQL Editor** → **New
-   query**. Open `db/schema.sql` from this repo, copy its entire contents, paste
-   into the editor, and click **Run**.
+   query**. Open `db/schema.sql` from this repo, copy its entire contents,
+   paste into the editor, and click **Run**. (This runs inside Supabase's own
+   browser environment, so it works even if your local machine can't reach the
+   database directly.)
 
    ✅ **Working state:** a green *Success. No rows returned* message. Click
-   **Table Editor** in the sidebar — you should now see four tables:
-   `announcements`, `facts`, `ingestion_runs`, `ingestion_exclusions`.
+   **Table Editor** in the sidebar — you should now see six tables:
+   `announcements`, `facts`, `ingestion_runs`, `ingestion_exclusions`,
+   `review_batches`, `review_items`.
 
    ⚠️ If you get `ERROR: extension "vector" is not available`, your project is
    still provisioning — wait a minute and re-run.
@@ -82,77 +97,41 @@ exist before either.
 2. In the left sidebar click **API Keys**.
 3. Click **Create API Key**, give it a name like `market-intelligence`, and
    click **Submit**.
-4. **Copy the key immediately** — it starts with `gsk_` and is shown only once.
+4. **Copy the key immediately** — it starts with `gsk_` and is shown only
+   once.
 
    Save it. This is your **`GROQ_API_KEY`**.
 
 ---
 
-## Step 3 — GitHub Actions (the ingestion schedule)
+## Step 3 — Render (the backend API)
 
-This is what makes ingestion run without your machine.
-
-1. Push this repository to GitHub if it isn't already. It can be **private**.
-2. On the repo page click **Settings** (top row, far right).
-3. In the left sidebar: **Secrets and variables** → **Actions**.
-4. Click **New repository secret**, then add each of these — one at a time:
-
-   | Name | Secret value |
-   |---|---|
-   | `DATABASE_URL` | the connection string from Step 1.5 |
-   | `GROQ_API_KEY` | the key from Step 2 |
-
-   Type the name **exactly** as shown (case-sensitive), paste the value into the
-   *Secret* box, and click **Add secret**.
-
-5. Click the **Actions** tab at the top of the repo. If you see a banner saying
-   *Workflows aren't being run on this forked repository* or asking you to
-   enable workflows, click the green **I understand my workflows, go ahead and
-   enable them** button.
-6. In the left sidebar click **LPU ingestion (scheduled)**, then the **Run
-   workflow** dropdown on the right → **Run workflow**. This triggers it
-   manually so you don't have to wait up to 30 minutes to know whether it works.
-
-   ✅ **Working state:** after ~3–5 minutes the run shows a **green check**.
-   Click into it and confirm the steps *Apply database schema*, *Process a
-   bounded chunk*, *Sync newly processed facts* and *Record run status* all
-   passed.
-
-   ⚠️ If *Apply database schema* fails with a connection error, your
-   `DATABASE_URL` secret is wrong — most often the `[YOUR-PASSWORD]` placeholder
-   was left unreplaced.
-
-7. **Confirm data actually landed.** Back in Supabase → **Table Editor** →
-   `ingestion_runs`. You should see at least one row with `ok = true`. Check the
-   `facts` table too — it should have rows.
-
----
-
-## Step 4 — Render (the backend API)
+This deploys `server.py` — the API the frontend talks to, and the only thing
+that ever writes to Supabase.
 
 1. Go to **https://render.com** and click **Get Started** / sign in **with
    GitHub**.
-2. On the dashboard click **New +** (top right) → **Web Service**.
-3. Under *Connect a repository*, find this repo and click **Connect**. If it
+2. Push this repository to GitHub if it isn't already (it can be **private**).
+3. On the Render dashboard click **New +** (top right) → **Web Service**.
+4. Under *Connect a repository*, find this repo and click **Connect**. If it
    isn't listed, click **Configure account** and grant Render access to it.
-4. Render reads `render.yaml` and pre-fills most fields. Confirm:
+5. Render reads `render.yaml` and pre-fills most fields. Confirm:
    - **Name**: `market-intelligence-api`
    - **Branch**: `main`
    - **Runtime**: Python 3
    - **Build Command**: `pip install -e . && pip install 'psycopg[binary]'`
    - **Start Command**: `uvicorn server:app --host 0.0.0.0 --port $PORT`
    - **Instance Type**: **Free**
-5. Scroll to **Environment Variables** and click **Add Environment Variable**
-   for each row:
+6. Scroll to **Environment Variables** and add each row:
 
    | Key | Value |
    |---|---|
-   | `DATABASE_URL` | connection string from Step 1.5 |
-   | `GROQ_API_KEY` | key from Step 2 |
+   | `DATABASE_URL` | the **pooler** connection string from Step 1.5 |
+   | `GROQ_API_KEY` | the key from Step 2 |
    | `LLM_PROVIDER` | `groq` |
    | `PYTHON_VERSION` | `3.11` |
 
-6. Click **Create Web Service**. The first build takes ~5–10 minutes (it
+7. Click **Create Web Service**. The first build takes ~5–10 minutes (it
    downloads the sentence-transformer model).
 
    ✅ **Working state:** the log ends with `Uvicorn running on http://0.0.0.0:...`
@@ -160,76 +139,108 @@ This is what makes ingestion run without your machine.
    appears just under the service name, like
    `https://market-intelligence-api.onrender.com`.
 
-7. **Test it.** Open `https://<your-render-url>/api/news?page_size=1` in a
-   browser.
+8. **Test the database connection specifically.** Open
+   `https://<your-render-url>/api/review/batches` in a browser.
 
-   ✅ You should get JSON with a `summary` block and a `total` count.
+   ✅ **Working state:** `{"batches": []}` — an empty list, not an error. This
+   confirms Render can actually reach Supabase (the part most likely to be
+   wrong on a first attempt).
 
-   ℹ️ Note: `/api/analyze` currently returns **503 with an explanatory
-   message**. That is expected right now — the scored corpus isn't wired up yet
-   (deferred deliberately). Browsing works; analysis doesn't.
+   ⚠️ If you see `"Database unavailable: ..."`, your `DATABASE_URL` env var on
+   Render is wrong — check it's the pooler string, not the direct one (see
+   Step 1.5), then edit the env var in Render's dashboard and it will
+   redeploy automatically.
+
+9. Also check `https://<your-render-url>/api/news?page_size=1` — should
+   return JSON with a `summary` block. (`/api/analyze` will return a 503 with
+   an explanatory message — expected, unrelated to this deployment: the
+   scored file-based corpus isn't wired up yet.)
 
    ℹ️ On the free tier the service sleeps after ~15 minutes idle. The next
-   request takes ~50 seconds to wake it. This is normal, not a fault.
+   request takes ~50 seconds to wake it. Normal, not a fault.
 
-8. **Copy your Render URL** — Vercel needs it next.
+10. **Copy your Render URL** — Vercel needs it next.
 
 ---
 
-## Step 5 — Vercel (the frontend)
+## Step 4 — Vercel (the frontend)
 
 1. Go to **https://vercel.com** and **Sign Up** / log in **with GitHub**.
 2. Click **Add New...** → **Project**.
 3. Find this repo and click **Import**.
-4. **Before deploying**, you must point the frontend at your Render backend:
-   open `vercel.json` in this repo, replace
+4. **Before deploying**, point the frontend at your Render backend: open
+   `vercel.json` in this repo, replace
    `https://REPLACE-WITH-YOUR-RENDER-URL.onrender.com` with the URL from Step
-   4.8, and commit + push that change. (The frontend calls same-origin `/api/*`
-   paths; this rewrite forwards them to Render.)
+   3.10, and commit + push that change. (The frontend calls same-origin
+   `/api/*` paths; this rewrite forwards them to Render.)
 5. Back on Vercel's import screen, leave **Framework Preset** as *Other*. The
    `vercel.json` already sets the output directory to `web`.
 6. Click **Deploy**. This takes under a minute — there's no build step.
 
-   ✅ **Working state:** a *Congratulations* screen with a screenshot preview.
-   Click **Continue to Dashboard**, then **Visit** to open the site. The landing
-   page should render, and the **"..." menu → Browse news data** page should
-   load rows from your Render backend.
-
-   ⚠️ If the news page shows an error, the first request is probably waking the
-   sleeping Render service — wait ~50 seconds and reload. If it still fails, the
-   rewrite URL in `vercel.json` is wrong.
+   ✅ **Working state:** a *Congratulations* screen. Click **Continue to
+   Dashboard**, then **Visit** to open the site.
 
 7. **Keep it private:** Vercel Project → **Settings** → **Deployment
-   Protection** → enable **Vercel Authentication**. Only your logged-in account
-   can then open it.
+   Protection** → enable **Vercel Authentication**. Only your logged-in
+   account can then open it.
+
+---
+
+## Step 5 — Verify the whole thing, live in production
+
+This is the part that actually matters: confirming a real run, from the
+deployed UI, lands in the hosted database — not a local file.
+
+1. On your Vercel URL, open the **"..." menu → Ingest & review**.
+2. Either click **Run GDELT ingestion now**, or upload a small LPU JSON file
+   (a file with just a handful of records is a good first test).
+3. Wait for a batch to appear under **Batches** with status **Awaiting chunk
+   review**, then click it open.
+
+   ⚠️ If GDELT itself fails (a `GDELT fetch failed` message, not a database
+   error), that's GDELT's own live API being flaky, not a deployment problem —
+   try again, or test with the LPU upload path instead, which doesn't depend
+   on it.
+
+4. Review a few of the atomic facts, select some, click **Approve selected**.
+   The batch should move to **Awaiting final review** shortly after
+   (embeddings + a summary are generated in the background).
+5. Review the summaries, select some, click **Approve selected** again.
+6. **Confirm it's actually in the database, not just the UI.** In Supabase →
+   **Table Editor** → `facts`, you should see the rows you just approved.
+
+   ✅ **This is the real success condition for this deployment**: data you
+   approved through the live URL is sitting in Supabase, with nothing having
+   touched your laptop except the browser.
 
 ---
 
 ## Final checklist
 
-Confirm every line before considering deployment complete:
-
 - [ ] **Supabase** project shows *Project is healthy*
-- [ ] **Supabase** Table Editor lists all four tables: `announcements`, `facts`, `ingestion_runs`, `ingestion_exclusions`
-- [ ] **Supabase** `facts` table contains rows
-- [ ] **Supabase** `ingestion_runs` contains at least one row with `ok = true`
-- [ ] **GitHub** repo has both secrets saved: `DATABASE_URL`, `GROQ_API_KEY`
-- [ ] **GitHub** Actions tab shows a green check for *LPU ingestion (scheduled)*
-- [ ] **GitHub** the schedule is enabled (workflow is not greyed out / disabled)
+- [ ] **Supabase** Table Editor lists all six tables (see Step 1.6)
 - [ ] **Render** service status badge reads **Live**
-- [ ] **Render** all four environment variables are set
-- [ ] **Render** `/api/news?page_size=1` returns JSON in a browser
+- [ ] **Render** all four environment variables are set, using the **pooler** connection string
+- [ ] **Render** `/api/review/batches` returns `{"batches": []}`, not a database error
 - [ ] **Vercel** deployment succeeded and the landing page loads
 - [ ] **Vercel** `vercel.json` contains your real Render URL, committed and pushed
-- [ ] **Vercel** the Browse news data page shows rows fetched from Render
 - [ ] **Vercel** Deployment Protection is enabled (keeps it private)
+- [ ] **End to end**: a batch run through the live "Ingest & review" page, approved twice, and confirmed present in Supabase's `facts` table
 
-### After the checklist passes
+---
 
-Tell me, and I'll do the final verification: wait for a **scheduled** run (not a
-manual one) to fire on its own, then report whether it succeeded, how many facts
-it processed, and whether a fresh query against Supabase shows the new data.
+## Appendix: the bulk ingestion workflow (optional, currently dormant)
 
-Don't skip the wait — a manually-triggered run proves the job works, but only an
-unattended scheduled run proves the *schedule* works, which is the whole point
-of this deployment.
+`.github/workflows/ingest.yml` exists for a different, earlier approach: an
+unattended job that decomposes and classifies LPU announcements straight into
+`facts`/`announcements` with **no approval step**. It's deliberately dormant
+(its `schedule` trigger is commented out) because running it alongside the
+review-gated flow above would mean two different trust models writing to the
+same tables, and it would compete with manual runs for the same daily Groq
+quota.
+
+Nothing here requires it. If you want it later - e.g. to also process the
+large existing LPU backlog unattended, bypassing manual review - add
+`DATABASE_URL` and `GROQ_API_KEY` as **GitHub repository secrets** (Settings →
+Secrets and variables → Actions) and uncomment the `schedule:` block in that
+workflow file.

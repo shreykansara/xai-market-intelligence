@@ -113,3 +113,60 @@ CREATE TABLE IF NOT EXISTS ingestion_exclusions (
     logged_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS ingestion_exclusions_reason_idx ON ingestion_exclusions (reason, logged_at DESC);
+
+-- ---------------------------------------------------------------------------
+-- Human-in-the-loop review queue. NOTHING reaches `facts`/`announcements`
+-- (the tables the app actually scores against) without passing through here
+-- and being explicitly approved twice - once after atomic chunking, once
+-- after embedding+summary generation. This is deliberately separate from the
+-- final tables: a rejected or still-pending item must never be
+-- indistinguishable from a committed one.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS review_batches (
+    id              TEXT PRIMARY KEY,       -- e.g. "gdelt-<timestamp>" or "lpu-<upload filename>-<timestamp>"
+    source          TEXT NOT NULL,          -- 'gdelt' | 'lpu_upload'
+    label           TEXT NOT NULL DEFAULT '',  -- human-readable: run time, or uploaded filename
+    status          TEXT NOT NULL DEFAULT 'processing_chunks',
+    -- Batch-level status is a coarse summary of its items' progress (the real
+    -- per-item state lives on review_items.status below, since one batch can
+    -- have items at different stages after a partial approve/reject):
+    --   processing_chunks -> pending_chunk_review -> (rejected | processing_embeddings)
+    --   processing_embeddings -> pending_embedding_review -> (rejected | approved)
+    -- 'failed' can occur from either processing_* state on an unhandled error.
+    item_count      INTEGER NOT NULL DEFAULT 0,
+    error           TEXT,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS review_items (
+    id                  TEXT PRIMARY KEY,
+    batch_id            TEXT NOT NULL REFERENCES review_batches (id) ON DELETE CASCADE,
+    source_title        TEXT NOT NULL DEFAULT '',
+    source_body         TEXT NOT NULL DEFAULT '',
+    source_published    TIMESTAMPTZ,
+    source_link         TEXT,
+    source_scope        TEXT,               -- 'LPU' for uploads; GDELT items get this at commit time
+    fact_text           TEXT NOT NULL,
+    entities            JSONB NOT NULL DEFAULT '[]'::jsonb,
+    pestle_scores       JSONB,
+    porters_scores      JSONB,
+    polarity            TEXT,
+    summary             TEXT,               -- filled in at the embedding stage, null before that
+    embedding           halfvec(384),       -- filled in at the embedding stage, null before that
+    decomposition_ok    BOOLEAN NOT NULL DEFAULT TRUE,
+    classification_ok   BOOLEAN NOT NULL DEFAULT TRUE,
+    -- Per-item status, independent of the batch: an individual fact can be
+    -- rejected without rejecting the whole batch.
+    --   pending_chunk_review -> (rejected | chunk_approved)
+    --   chunk_approved -> pending_embedding_review (set once summary+embedding
+    --                      are generated - this state is normally brief)
+    --   pending_embedding_review -> (rejected | approved)
+    -- 'approved' rows are also copied into facts/announcements at that point;
+    -- rows here are NEVER deleted, so what was approved/rejected and when
+    -- stays inspectable regardless of what the scored corpus later does.
+    status              TEXT NOT NULL DEFAULT 'pending_chunk_review',
+    rejection_reason    TEXT,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS review_items_batch_idx ON review_items (batch_id, status);

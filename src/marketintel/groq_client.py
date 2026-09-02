@@ -30,6 +30,7 @@ is: no new dependency, and the request shape is a single JSON POST.
 """
 import json
 import os
+import re
 import threading
 import time
 import urllib.error
@@ -116,10 +117,26 @@ def _as_int(raw, fallback):
         return fallback
 
 
+# Matches (number)(unit) pairs. "ms" MUST be tried before the bare "m"/"s"
+# alternatives - Python's regex alternation tries left-to-right at each
+# position, and a naive char-by-char scan (the first version of this function)
+# reads "794ms" as "794" + unit "m" (misread as 794 MINUTES), then leaves a
+# dangling "s" unmatched. Caught only by inspecting REAL response headers, not
+# by testing against invented examples: Groq's x-ratelimit-reset-tokens comes
+# back as "794ms" on a small/cheap call (millisecond-precision resets happen
+# whenever the token window is close to full), which none of the h/m/s-only
+# formats used during initial testing (7.66s, 2m59.56s, 1h2m3s) exercised.
+# Getting this wrong is not cosmetic: it feeds directly into how long the
+# pipeline sleeps before its next call.
+_DURATION_RE = re.compile(r"(\d+\.?\d*)(ms|h|m|s)")
+_DURATION_UNIT_SECONDS = {"h": 3600.0, "m": 60.0, "s": 1.0, "ms": 0.001}
+
+
 def _as_duration(raw, fallback) -> float:
-    """Groq expresses resets as durations like "7.66s", "2m59.56s" or "1h2m3s"
-    rather than plain seconds, so parse the unit suffixes instead of assuming
-    a number (treating "2m59s" as 2 seconds would defeat the whole point)."""
+    """Groq expresses resets as durations like "7.66s", "2m59.56s", "1h2m3s",
+    or "794ms" rather than plain seconds, so parse the unit suffixes instead
+    of assuming a number (treating "2m59s" as 2 seconds would defeat the whole
+    point, and so would treating "794ms" as 794 seconds)."""
     if raw is None:
         return fallback
     text = str(raw).strip()
@@ -127,17 +144,10 @@ def _as_duration(raw, fallback) -> float:
         return float(text)  # already-plain seconds
     except ValueError:
         pass
-    total, number = 0.0, ""
-    for char in text:
-        if char.isdigit() or char == ".":
-            number += char
-        elif char in ("h", "m", "s"):
-            if not number:
-                continue
-            value = float(number)
-            total += value * {"h": 3600.0, "m": 60.0, "s": 1.0}[char]
-            number = ""
-    return total if total > 0 else fallback
+    matches = _DURATION_RE.findall(text)
+    if not matches:
+        return fallback
+    return sum(float(value) * _DURATION_UNIT_SECONDS[unit] for value, unit in matches)
 
 
 rate_limit_state = _RateLimitState()
@@ -161,11 +171,36 @@ def _request(prompt: str, temperature: float, timeout: int):
         # extraction/classification outputs are nested JSON schemas, and low
         # temperature buys schema compliance (not truthfulness).
         "temperature": temperature,
+        # GROQ_MODEL (openai/gpt-oss-20b) is a REASONING model - it spends
+        # tokens on hidden chain-of-thought before ever emitting the answer.
+        # Confirmed directly against the live API: at the default effort
+        # ("medium"), real extraction/classification calls consumed
+        # ~2000-2100 completion tokens each and FOUR of eight real pilot
+        # calls returned a completely empty content string - the reasoning
+        # exhausted the response budget before any answer was written. At
+        # "low", the exact same kind of prompt dropped to under 40 completion
+        # tokens with a correct, non-empty answer every time. This is not a
+        # cost optimization - without it, the JSON-parsing fallback path
+        # (store unsplit, unclassified) would trigger on a large fraction of
+        # real calls, not as a rare failure mode.
+        "reasoning_effort": "low",
     }).encode("utf-8")
     req = urllib.request.Request(
         GROQ_BASE_URL,
         data=payload,
-        headers={"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"},
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}",
+            # REQUIRED, not cosmetic: urllib's default User-Agent
+            # ("Python-urllib/3.x") is blocked outright by Groq's Cloudflare
+            # front end with HTTP 403 / Cloudflare error 1010, before the
+            # request ever reaches Groq's API - confirmed directly (curl and a
+            # browser-like UA both succeed with the identical payload/key;
+            # urllib's default UA fails every time). This is a bot-fingerprint
+            # block, not an auth or rate-limit issue - retrying it changes
+            # nothing without this header.
+            "User-Agent": "Mozilla/5.0 (compatible; market-intelligence-ingestion/1.0)",
+        },
         method="POST",
     )
     return urllib.request.urlopen(req, timeout=timeout)

@@ -1,23 +1,22 @@
-name: LPU ingestion (scheduled)
+name: LPU bulk ingestion (DORMANT - manual trigger only)
 
-# Replaces ingestion_service.py's internal asyncio loop. Each tick is a short,
-# independent job, so nothing has to stay up between runs.
+# DORMANT BY DESIGN as of the human-in-the-loop review pivot: this workflow
+# writes DIRECTLY to facts/announcements with no approval step, bypassing the
+# review_batches/review_items queue that IS the current production path
+# (server.py's /api/review/* endpoints, triggered from the "Ingest & review"
+# page). Running both at once would mean two different mechanisms writing to
+# the same tables under two different trust models, and this one would burn
+# the same shared Groq daily quota the review flow needs. The schedule trigger
+# below is therefore commented out - this workflow will NOT fire on its own.
 #
-# WHY 30 MINUTES FOR A FINITE CORPUS: the LPU corpus is finite (44,695
-# announcements), so the cadence is NOT about keeping up with a live feed.
-# It serves two other purposes:
-#   1. Steady bounded progress through the backlog. Groq's free tier is
-#      token-bound at ~126 announcements/day, so each run deliberately does a
-#      small chunk rather than trying to finish.
-#   2. Keeping the Supabase free-tier project from pausing - every run writes
-#      to ingestion_runs, which is database activity (see README's
-#      "Operational risks" for why that is likely-but-not-guaranteed enough).
-# Once the backlog is exhausted the job becomes a cheap heartbeat: it finds
-# nothing to process and just records the run.
+# It is kept, not deleted, in case the bulk/unattended approach is revisited
+# later for the historical LPU backlog. To re-enable: uncomment the `schedule`
+# block below. Everything else about it (bounded --limit per run, the
+# anti-dormancy commit) is still accurate if you do.
 on:
-  schedule:
-    - cron: "*/30 * * * *"
-  workflow_dispatch: {}   # manual trigger; also useful to wake a paused project
+  # schedule:
+  #   - cron: "*/30 * * * *"
+  workflow_dispatch: {}   # manual trigger only, e.g. to test connectivity or resume bulk mode deliberately
 
 concurrency:
   # A slow run must never overlap the next tick - two jobs writing at once

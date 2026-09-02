@@ -374,7 +374,7 @@
     color: var(--text-secondary);
     margin-top: 6px;
   }
-  #sales-file {
+  #sales-file, #review-lpu-file {
     position: absolute;
     inset: 0;
     width: 100%;
@@ -817,6 +817,174 @@
     font-size: 14px;
   }
 
+  /* ---------- State 5: ingest & review ----------
+     The human-in-the-loop gate: nothing reaches the scored corpus without
+     passing through this page and being approved twice. Reuses the same
+     tokens/type scale as every other page - a review queue isn't a
+     different app, just a different task. */
+  .state-review { padding: 32px; max-width: 1100px; margin: 0 auto; }
+
+  .review-sources {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    margin-bottom: 32px;
+  }
+  .review-source-card {
+    flex: 1 1 320px;
+    background: var(--surface);
+    border: 1px solid var(--divider);
+    padding: 22px;
+  }
+  .review-source-card h3 {
+    margin: 0 0 6px 0;
+    font-size: 15px;
+    font-weight: 600;
+  }
+  .review-source-card p {
+    margin: 0 0 16px 0;
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+  }
+  #run-gdelt-btn {
+    background: var(--accent);
+    color: var(--on-accent);
+    border: none;
+    padding: 12px 22px;
+    font-family: var(--font-body);
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    cursor: pointer;
+  }
+  #run-gdelt-btn:hover:not(:disabled) { background: var(--accent-hover); }
+  #run-gdelt-btn:disabled { opacity: 0.5; cursor: default; }
+  .review-source-card .dropzone { padding: 20px 14px; }
+  #review-status-line {
+    margin-top: 10px;
+    font-size: 12px;
+    font-family: var(--font-mono);
+    color: var(--text-secondary);
+    min-height: 16px;
+  }
+
+  .review-batches-heading {
+    font-size: 13px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    border-bottom: 1px solid var(--divider);
+    padding-bottom: 10px;
+    margin: 0 0 4px 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  #review-refresh-btn {
+    background: transparent;
+    border: 1px solid var(--divider);
+    color: var(--text-secondary);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    padding: 5px 10px;
+    cursor: pointer;
+    text-transform: none;
+    letter-spacing: normal;
+  }
+  #review-refresh-btn:hover { color: var(--accent); border-color: var(--accent); }
+
+  .review-batch {
+    border-bottom: 1px solid var(--divider);
+  }
+  .review-batch-header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 16px 4px;
+    cursor: pointer;
+  }
+  .review-batch-header:hover { background: var(--surface); }
+  .review-batch-label { flex: 1; font-size: 14px; }
+  .review-batch-meta {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+  }
+  .batch-status-chip {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    border: 1px solid;
+    white-space: nowrap;
+  }
+  .batch-status-chip.processing_chunks,
+  .batch-status-chip.processing_embeddings { color: var(--text-secondary); border-color: var(--divider); }
+  .batch-status-chip.pending_chunk_review,
+  .batch-status-chip.pending_embedding_review { color: var(--warning); border-color: var(--warning); }
+  .batch-status-chip.approved { color: var(--positive); border-color: var(--positive); }
+  .batch-status-chip.rejected,
+  .batch-status-chip.failed { color: var(--negative); border-color: var(--negative); }
+
+  .review-batch-body { padding: 0 4px 24px 4px; }
+
+  .review-group { margin-bottom: 22px; }
+  .review-group-heading {
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .review-group-actions { display: flex; gap: 8px; margin-left: auto; }
+  .review-group-actions button {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    padding: 6px 12px;
+    cursor: pointer;
+    border: 1px solid;
+    background: transparent;
+  }
+  .review-approve-btn { color: var(--positive); border-color: var(--positive); }
+  .review-approve-btn:hover { background: rgba(var(--positive-rgb), 0.12); }
+  .review-reject-btn { color: var(--negative); border-color: var(--negative); }
+  .review-reject-btn:hover { background: rgba(var(--negative-rgb), 0.12); }
+  .review-select-all { font-size: 11px; color: var(--text-secondary); cursor: pointer; }
+
+  .review-item {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    padding: 9px 0;
+    border-bottom: 1px solid var(--divider);
+    font-size: 13px;
+  }
+  .review-item input[type="checkbox"] { margin-top: 3px; flex: 0 0 auto; }
+  .review-item-main { flex: 1; min-width: 0; }
+  .review-item-summary {
+    font-size: 12px;
+    color: var(--accent);
+    margin-top: 3px;
+  }
+  .review-item-meta {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-secondary);
+    margin-top: 3px;
+  }
+  .review-item.rejected .review-item-main { color: var(--text-secondary); text-decoration: line-through; }
+  .review-item.approved .review-item-main { color: var(--positive); }
+
   #loading-overlay {
     position: fixed;
     inset: 0;
@@ -856,6 +1024,7 @@
           <button id="menu-home">Home</button>
           <button id="menu-new-analysis">New analysis</button>
           <button id="menu-news">Browse news data</button>
+          <button id="menu-review">Ingest &amp; review</button>
         </div>
       </div>
     </div>
@@ -1050,6 +1219,43 @@
       <span id="news-position" class="pager-position"></span>
       <button id="news-next">Next &#9654;</button>
     </div>
+  </section>
+
+  <!-- ============ PAGE 5: INGEST & REVIEW ============ -->
+  <section id="state-review" class="state-review hidden">
+    <div class="eyebrow">Human-in-the-loop</div>
+    <h2 class="page-heading">Ingest &amp; review</h2>
+    <p class="page-subhead">
+      Nothing reaches the scored corpus without passing through here and being approved twice -
+      once after atomic chunking, once after embeddings and summaries are generated.
+    </p>
+
+    <div class="review-sources">
+      <div class="review-source-card">
+        <h3>Real-time GDELT</h3>
+        <p>Fetches recent world news from GDELT's live feed right now, then breaks it into atomic facts for your review. No historical backfill, no scheduling - one run, on demand.</p>
+        <button id="run-gdelt-btn">Run GDELT ingestion now</button>
+      </div>
+      <div class="review-source-card">
+        <h3>Upload LPU announcements</h3>
+        <p>Upload a JSON file of LPU announcements you've scraped yourself - same {date, title, body, links, id} shape as the existing corpus.</p>
+        <div class="dropzone" id="review-dropzone">
+          <input type="file" id="review-lpu-file" accept=".json">
+          <div class="dropzone-icon">
+            <svg viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="1.6"><polyline points="16,22 16,6"/><polyline points="9,13 16,6 23,13"/><path d="M6,24 L6,27 L26,27 L26,24"/></svg>
+          </div>
+          <div class="dropzone-label">Drop a .json file, or click to browse</div>
+          <div class="dropzone-sub" id="review-dropzone-filename"></div>
+        </div>
+      </div>
+    </div>
+    <div id="review-status-line"></div>
+
+    <div class="review-batches-heading">
+      <span>Batches</span>
+      <button id="review-refresh-btn">Refresh</button>
+    </div>
+    <div id="review-batches-list"></div>
   </section>
 
   <div id="loading-overlay" class="hidden">
@@ -1295,6 +1501,7 @@ function showResults(data) {
   }
 
   document.getElementById("state-news").classList.add("hidden");
+  document.getElementById("state-review").classList.add("hidden");
   document.getElementById("state-upload").classList.add("hidden");
   document.getElementById("state-analysis").classList.remove("hidden");
   document.getElementById("reset-link").classList.remove("hidden");
@@ -1308,6 +1515,7 @@ function goToLanding() {
   document.getElementById("state-upload").classList.add("hidden");
   document.getElementById("state-analysis").classList.add("hidden");
   document.getElementById("state-news").classList.add("hidden");
+  document.getElementById("state-review").classList.add("hidden");
   document.getElementById("state-landing").classList.remove("hidden");
   document.getElementById("reset-link").classList.add("hidden");
   window.scrollTo({ top: 0 });
@@ -1317,6 +1525,7 @@ function goToUpload() {
   document.getElementById("state-landing").classList.add("hidden");
   document.getElementById("state-analysis").classList.add("hidden");
   document.getElementById("state-news").classList.add("hidden");
+  document.getElementById("state-review").classList.add("hidden");
   document.getElementById("state-upload").classList.remove("hidden");
   window.scrollTo({ top: 0 });
   document.getElementById("cvp").focus();
@@ -1396,6 +1605,7 @@ document.addEventListener("click", () => menuDropdown.classList.add("hidden"));
 document.getElementById("menu-home").addEventListener("click", goToLanding);
 document.getElementById("menu-new-analysis").addEventListener("click", resetToUpload);
 document.getElementById("menu-news").addEventListener("click", () => goToNews());
+document.getElementById("menu-review").addEventListener("click", () => goToReview());
 
 // ---------- News data browser (page 4) ----------
 // Read-only view over /api/news - every stored item across the fabricated
@@ -1546,6 +1756,7 @@ function goToNews() {
   document.getElementById("state-landing").classList.add("hidden");
   document.getElementById("state-upload").classList.add("hidden");
   document.getElementById("state-analysis").classList.add("hidden");
+  document.getElementById("state-review").classList.add("hidden");
   document.getElementById("state-news").classList.remove("hidden");
   window.scrollTo({ top: 0 });
   loadNews();
@@ -1731,6 +1942,279 @@ document.getElementById("run-btn").addEventListener("click", async () => {
   } finally {
     btn.disabled = false;
     document.getElementById("loading-overlay").classList.add("hidden");
+  }
+});
+
+// ---------- Ingest & review (page 5) ----------
+// The human-in-the-loop gate: GDELT live fetch or an uploaded LPU JSON file
+// creates a "batch"; batches move through pending_chunk_review ->
+// (approve) -> pending_embedding_review -> (approve) -> committed to the
+// scored corpus, or get rejected at either stage. Every action here is a
+// direct call to /api/review/* - this page has no state of its own beyond
+// which batches are currently expanded in the UI.
+const STATUS_LABELS = {
+  processing_chunks: "Chunking…", processing_embeddings: "Generating embeddings…",
+  pending_chunk_review: "Awaiting chunk review", pending_embedding_review: "Awaiting final review",
+  approved: "Approved", rejected: "Rejected", failed: "Failed",
+};
+const expandedBatches = new Set();
+
+function goToReview() {
+  document.getElementById("state-landing").classList.add("hidden");
+  document.getElementById("state-upload").classList.add("hidden");
+  document.getElementById("state-analysis").classList.add("hidden");
+  document.getElementById("state-news").classList.add("hidden");
+  document.getElementById("state-review").classList.remove("hidden");
+  window.scrollTo({ top: 0 });
+  loadReviewBatches();
+}
+
+function setReviewStatus(text, isError) {
+  const el = document.getElementById("review-status-line");
+  el.textContent = text;
+  el.style.color = isError ? "var(--negative)" : "var(--text-secondary)";
+}
+
+async function loadReviewBatches() {
+  const list = document.getElementById("review-batches-list");
+  try {
+    const res = await fetch("/api/review/batches");
+    if (res.status === 503) {
+      const body = await res.json().catch(() => ({}));
+      list.innerHTML = `<p class="news-empty">${body.detail || "Review queue unavailable (DATABASE_URL not configured)."}</p>`;
+      return;
+    }
+    if (!res.ok) throw new Error(`Request failed (${res.status})`);
+    const data = await res.json();
+    list.innerHTML = "";
+    if (data.batches.length === 0) {
+      list.innerHTML = '<p class="news-empty">No batches yet - run GDELT ingestion or upload an LPU file above.</p>';
+      return;
+    }
+    for (const batch of data.batches) {
+      list.appendChild(renderBatch(batch));
+      if (expandedBatches.has(batch.id)) loadBatchItems(batch.id);
+    }
+  } catch (err) {
+    list.innerHTML = `<p class="news-empty">${err.message || "Could not load batches."}</p>`;
+  }
+}
+
+function renderBatch(batch) {
+  const wrap = document.createElement("div");
+  wrap.className = "review-batch";
+  wrap.id = `batch-${batch.id}`;
+  const header = document.createElement("div");
+  header.className = "review-batch-header";
+  header.innerHTML = `
+    <span class="batch-status-chip ${batch.status}">${STATUS_LABELS[batch.status] || batch.status}</span>
+    <span class="review-batch-label">${batch.label} <span class="review-item-meta">(${batch.source})</span></span>
+    <span class="review-batch-meta">${batch.item_count} item${batch.item_count === 1 ? "" : "s"} &middot; ${new Date(batch.created_at).toLocaleString()}</span>
+  `;
+  const body = document.createElement("div");
+  body.className = "review-batch-body hidden";
+  body.id = `batch-body-${batch.id}`;
+  if (batch.error) {
+    body.innerHTML = `<p class="news-empty">Error: ${batch.error}</p>`;
+  }
+  header.addEventListener("click", () => {
+    const nowHidden = body.classList.toggle("hidden");
+    if (nowHidden) { expandedBatches.delete(batch.id); }
+    else { expandedBatches.add(batch.id); loadBatchItems(batch.id); }
+  });
+  wrap.appendChild(header);
+  wrap.appendChild(body);
+  return wrap;
+}
+
+async function loadBatchItems(batchId) {
+  const body = document.getElementById(`batch-body-${batchId}`);
+  if (!body) return;
+  try {
+    const res = await fetch(`/api/review/batches/${batchId}/items`);
+    if (!res.ok) throw new Error(`Request failed (${res.status})`);
+    const data = await res.json();
+    body.innerHTML = "";
+    const groups = {
+      pending_chunk_review: [], chunk_approved: [], pending_embedding_review: [],
+      approved: [], rejected: [],
+    };
+    for (const item of data.items) (groups[item.status] || (groups[item.status] = [])).push(item);
+
+    if (groups.pending_chunk_review.length) {
+      body.appendChild(renderReviewGroup(
+        batchId, "Atomic facts awaiting chunk approval", groups.pending_chunk_review,
+        "approve_chunks", "reject", false,
+      ));
+    }
+    if (groups.chunk_approved.length) {
+      body.appendChild(renderPlainGroup("Approved - generating embeddings & summaries…", groups.chunk_approved, false));
+    }
+    if (groups.pending_embedding_review.length) {
+      body.appendChild(renderReviewGroup(
+        batchId, "Facts with embeddings + summaries - final approval", groups.pending_embedding_review,
+        "approve_final", "reject", true,
+      ));
+    }
+    if (groups.approved.length) {
+      body.appendChild(renderPlainGroup(`In the scored corpus (${groups.approved.length})`, groups.approved, false, "approved"));
+    }
+    if (groups.rejected.length) {
+      body.appendChild(renderPlainGroup(`Rejected (${groups.rejected.length})`, groups.rejected, true, "rejected"));
+    }
+    if (data.items.length === 0) {
+      body.innerHTML = '<p class="news-empty">No items in this batch.</p>';
+    }
+  } catch (err) {
+    body.innerHTML = `<p class="news-empty">${err.message || "Could not load items."}</p>`;
+  }
+}
+
+function reviewItemRow(item, showSummary) {
+  const row = document.createElement("div");
+  row.className = "review-item";
+  const dims = item.pestle_scores && item.porters_scores ? { ...item.pestle_scores, ...item.porters_scores } : null;
+  const top = dims ? Object.entries(dims).sort((a, b) => b[1] - a[1])[0] : null;
+  row.innerHTML = `
+    <input type="checkbox" data-item-id="${item.id}">
+    <div class="review-item-main">
+      <div>${item.fact_text}</div>
+      ${showSummary && item.summary ? `<div class="review-item-summary">${item.summary}</div>` : ""}
+      <div class="review-item-meta">
+        ${item.source_scope || "?"} &middot; ${item.polarity || "?"}${top ? ` &middot; top: ${top[0]} ${top[1].toFixed(2)}` : ""}
+        ${item.decomposition_ok === false ? ' &middot; <span style="color:var(--warning)">not atomic</span>' : ""}
+      </div>
+    </div>
+  `;
+  return row;
+}
+
+function renderPlainGroup(heading, items, struckThrough, statusClass) {
+  const wrap = document.createElement("div");
+  wrap.className = "review-group";
+  wrap.innerHTML = `<div class="review-group-heading">${heading}</div>`;
+  items.forEach(item => {
+    const row = document.createElement("div");
+    row.className = `review-item${statusClass ? " " + statusClass : ""}`;
+    row.innerHTML = `<div class="review-item-main">${item.fact_text}</div>`;
+    wrap.appendChild(row);
+  });
+  return wrap;
+}
+
+function renderReviewGroup(batchId, heading, items, approveAction, rejectAction, showSummary) {
+  const wrap = document.createElement("div");
+  wrap.className = "review-group";
+  const headingEl = document.createElement("div");
+  headingEl.className = "review-group-heading";
+  headingEl.innerHTML = `
+    <span>${heading} (${items.length})</span>
+    <span class="review-select-all" data-select-all>Select all</span>
+    <span class="review-group-actions">
+      <button class="review-approve-btn" data-approve>Approve selected</button>
+      <button class="review-reject-btn" data-reject>Reject selected</button>
+    </span>
+  `;
+  wrap.appendChild(headingEl);
+  items.forEach(item => wrap.appendChild(reviewItemRow(item, showSummary)));
+
+  const checkboxes = () => Array.from(wrap.querySelectorAll('input[type="checkbox"]'));
+  headingEl.querySelector("[data-select-all]").addEventListener("click", () => {
+    const boxes = checkboxes();
+    const allChecked = boxes.every(b => b.checked);
+    boxes.forEach(b => { b.checked = !allChecked; });
+  });
+  headingEl.querySelector("[data-approve]").addEventListener("click", () =>
+    submitReviewAction(batchId, approveAction, checkboxes().filter(b => b.checked).map(b => b.dataset.itemId))
+  );
+  headingEl.querySelector("[data-reject]").addEventListener("click", () =>
+    submitReviewAction(batchId, rejectAction, checkboxes().filter(b => b.checked).map(b => b.dataset.itemId))
+  );
+  return wrap;
+}
+
+async function submitReviewAction(batchId, action, itemIds) {
+  if (itemIds.length === 0) {
+    setReviewStatus("Select at least one item first.", true);
+    return;
+  }
+  const endpoint = action === "reject" ? "/api/review/items/reject" : `/api/review/items/${action}`;
+  const payload = action === "reject" ? { item_ids: itemIds, reason: "rejected in review UI" } : { item_ids: itemIds };
+  try {
+    const res = await fetch(endpoint, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.detail || `Request failed (${res.status})`);
+    }
+    setReviewStatus(`${itemIds.length} item(s) submitted.`, false);
+    // A short delay before reloading: approve_chunks/approve_final kick off
+    // background work (embedding, or the final DB write) that hasn't
+    // necessarily finished the instant this response returns.
+    setTimeout(() => { loadBatchItems(batchId); loadReviewBatches(); }, 800);
+  } catch (err) {
+    setReviewStatus(err.message || "Action failed.", true);
+  }
+}
+
+document.getElementById("review-refresh-btn").addEventListener("click", loadReviewBatches);
+
+document.getElementById("run-gdelt-btn").addEventListener("click", async () => {
+  const btn = document.getElementById("run-gdelt-btn");
+  btn.disabled = true;
+  setReviewStatus("Fetching from GDELT and starting chunking…", false);
+  try {
+    const res = await fetch("/api/review/gdelt/start", { method: "POST" });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.detail || `Request failed (${res.status})`);
+    }
+    const data = await res.json();
+    setReviewStatus(`Batch started: ${data.raw_item_count} article(s) fetched, chunking in the background.`, false);
+    loadReviewBatches();
+  } catch (err) {
+    setReviewStatus(err.message || "GDELT run failed.", true);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+// Same drag-and-drop pattern as the sales-upload dropzone: a styled div
+// wrapping a visually-hidden file input, feeding one shared "change" handler
+// for both click-to-browse and drop.
+const reviewDropzone = document.getElementById("review-dropzone");
+const reviewLpuFileInput = document.getElementById("review-lpu-file");
+["dragenter", "dragover"].forEach(evt =>
+  reviewDropzone.addEventListener(evt, (e) => { e.preventDefault(); reviewDropzone.classList.add("dragover"); })
+);
+["dragleave", "drop"].forEach(evt =>
+  reviewDropzone.addEventListener(evt, (e) => { e.preventDefault(); reviewDropzone.classList.remove("dragover"); })
+);
+reviewDropzone.addEventListener("drop", (e) => {
+  const file = e.dataTransfer.files[0];
+  if (!file) return;
+  reviewLpuFileInput.files = e.dataTransfer.files;
+  reviewLpuFileInput.dispatchEvent(new Event("change"));
+});
+reviewLpuFileInput.addEventListener("change", async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  document.getElementById("review-dropzone-filename").textContent = file.name;
+  setReviewStatus(`Uploading ${file.name}…`, false);
+  try {
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await fetch("/api/review/lpu/upload", { method: "POST", body: formData });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.detail || `Upload failed (${res.status})`);
+    }
+    const data = await res.json();
+    setReviewStatus(`Batch started: ${data.raw_item_count} record(s) parsed, chunking in the background.`, false);
+    loadReviewBatches();
+  } catch (err) {
+    setReviewStatus(err.message || "Upload failed.", true);
   }
 });
 </script>

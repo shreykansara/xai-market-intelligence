@@ -3,25 +3,33 @@ data/lpudata/, replacing the removed fabricated seed corpus and live-ingested
 feed entirely.
 
 Pipeline, per announcement:
-    load + dedupe -> normalize date -> ATOMIC BREAKDOWN (fact_extraction.py)
-    -> classify each fact (lpu_classification.py) -> tag scope=LPU
-    -> embed each fact -> atomic write
+    load + dedupe -> normalize date -> pre-filter (grounding.py)
+    -> BUNDLED atomic breakdown + classification (fact_pipeline.py, ONE Groq
+       call) -> post-decomposition grounding check per fact (grounding.py)
+    -> tag scope=LPU -> embed each grounded fact -> atomic write
 
-Two properties this guarantees, both explicitly required:
+Three properties this guarantees, all explicitly required:
 
 1. **Every stored record is atomic.** A compound announcement ("the exam is on
    the 2nd AND the fee deadline moves to the 5th") is broken into separate
-   independently-scorable facts by the SAME fact_extraction.extract_facts_detailed()
-   the live news pipeline used - reused, not reimplemented, so there is exactly
-   one decomposition implementation in the codebase. The stored unit is the
-   fact, never the raw announcement; announcements are kept only as provenance
-   containers (which facts came out of them), the same split real_articles.json
-   / real_facts.json used before.
+   independently-scorable facts by fact_pipeline.extract_and_classify_with_status()
+   - the SAME decomposition logic the live news pipeline's extraction used,
+   now bundled with classification into one call rather than two (see that
+   module's docstring for why). The stored unit is the fact, never the raw
+   announcement; announcements are kept only as provenance containers.
 
 2. **Every stored record is tagged as LPU.** scope="LPU", source="lpu" and
    is_lpu=True are set by construction, not inferred - these are university
    announcements by definition, so there is no scope classification to get
    wrong here (unlike wire news, where scope had to be inferred per item).
+
+3. **Every stored record has been through the SAME grounding safeguard the
+   rest of the system uses.** This was a real, previously-unresolved gap:
+   the LPU path had NO grounding check at all, while the live ingestion path
+   (ingestion.py) always did. is_likely_non_content() (pre-filter, before any
+   Groq call) and is_grounded() (post-decomposition, rejects a fact whose
+   number isn't traceable to the source announcement) are both reused
+   UNCHANGED from grounding.py - not reimplemented, not skipped for this path.
 
 The raw data arrives as five separate scrape files. They are NOT snapshots of
 one another: they cover disjoint date ranges (2011-2026 between them) with
@@ -31,14 +39,13 @@ Records are therefore deduped by CONTENT (see _content_key), which yields
 44,695 unique announcements - deduping on `id` instead would have discarded
 roughly 36k of them.
 
-Cost note: this makes two Ollama calls per announcement (one breakdown, one
-batched classification of all that announcement's facts) on a CPU-only local
-model, so the full corpus is a multi-day unattended run. It is checkpointed to
-LPU_STATE_PATH every LPU_CHECKPOINT_EVERY announcements and resumes from the
-last flush - an interruption costs at most that window, never the whole run.
-Use `limit` to build a smaller corpus now and extend it later; a resumed run
-picks up exactly where it stopped, so the corpus grows monotonically rather
-than needing one uninterrupted pass.
+Cost note: this makes ONE Groq call per announcement now (previously two - see
+fact_pipeline.py). It is checkpointed to LPU_STATE_PATH every
+LPU_CHECKPOINT_EVERY announcements and resumes from the last flush - an
+interruption costs at most that window, never the whole run. Use `limit` to
+build a smaller corpus now and extend it later; a resumed run picks up exactly
+where it stopped, so the corpus grows monotonically rather than needing one
+uninterrupted pass.
 """
 import hashlib
 import json
@@ -55,15 +62,17 @@ from .config import (
     LPU_FACT_EMBEDDINGS_PATH,
     LPU_FACTS_PATH,
     LPU_MAX_DECOMPOSITION_CHARS,
+    LPU_NONCONTENT_LOG_PATH,
     LPU_RAW_DIR,
     LPU_SCOPE,
     LPU_STATE_PATH,
+    LPU_UNGROUNDED_LOG_PATH,
     GROQ_MODEL,
 )
 from .embeddings import embed_text
-from .fact_extraction import extract_facts_with_status
+from .fact_pipeline import extract_and_classify_with_status
+from .grounding import is_grounded, is_likely_non_content
 from .groq_client import API_KEY_ENV_VAR, GroqError, GroqRateLimited, api_key_present, call_groq, rate_limit_state
-from .lpu_classification import classify_facts
 
 
 def _normalize_date(raw: str | None) -> str | None:
@@ -223,79 +232,130 @@ def preflight_llm() -> tuple[bool, str]:
     return True, f"Groq reachable, model {GROQ_MODEL!r} responding (budget: {budget})"
 
 
+def _process_announcement(announcement: dict, now: datetime | None = None) -> tuple[list[dict], list, dict]:
+    """The full per-announcement pipeline, shared by the main ingestion loop
+    and repair_failed_records so there is exactly one place this sequence is
+    implemented: pre-filter -> bundled decomposition+classification -> per-fact
+    grounding check -> embed.
+
+    Returns (fact_records, embeddings, stats_delta). Each fact_record carries
+    fact_text/entities/pestle_scores/porters_scores/polarity/decomposition_ok/
+    classification_ok - callers attach id/parent_announcement_id/scope/source/
+    is_lpu/mention_count themselves, since the two callers assign ids
+    differently (a sequential counter vs. preserving/suffixing a stale id)."""
+    now = now or datetime.now(timezone.utc)
+    text = _announcement_text(announcement)
+    stats = {
+        "noncontent_skipped": 0, "decomposition_failed": 0, "compound": 0,
+        "rejected_by_grounding": 0, "classified_ok": 0, "classification_failed": 0,
+    }
+
+    is_junk, junk_reason = is_likely_non_content(announcement["title"])
+    if is_junk:
+        stats["noncontent_skipped"] = 1
+        with open(LPU_NONCONTENT_LOG_PATH, "a", encoding="utf-8") as f:
+            f.write(json.dumps({
+                "announcement_id": announcement["id"], "title": announcement["title"],
+                "reason": junk_reason, "logged_at": now.isoformat(),
+            }) + "\n")
+        return [], [], stats
+
+    extracted, ok = extract_and_classify_with_status(text)
+    if not ok:
+        stats["decomposition_failed"] = 1
+    if len(extracted) > 1:
+        stats["compound"] = 1
+
+    # Ground against the FULL, uncapped announcement text - the model may have
+    # been given a truncated version (LPU_MAX_DECOMPOSITION_CHARS caps the
+    # input), but the true source of truth for whether a number is real is the
+    # whole notice, not what was sent to the model.
+    full_source = f"{announcement['title']}\n\n{announcement['body']}"
+
+    records, record_embeddings = [], []
+    for fact in extracted:
+        grounded, ungrounded_numbers = is_grounded(fact["text"], full_source)
+        if not grounded:
+            stats["rejected_by_grounding"] += 1
+            with open(LPU_UNGROUNDED_LOG_PATH, "a", encoding="utf-8") as f:
+                f.write(json.dumps({
+                    "announcement_id": announcement["id"], "fact_text": fact["text"],
+                    "entities": fact.get("entities", []), "ungrounded_numbers": ungrounded_numbers,
+                    "logged_at": now.isoformat(),
+                }) + "\n")
+            continue
+        records.append({
+            "fact_text": fact["text"],
+            "entities": fact.get("entities", []),
+            "pestle_scores": fact["pestle_scores"],
+            "porters_scores": fact["porters_scores"],
+            "polarity": fact["polarity"],
+            # Bundled call: decomposition and classification succeed or fail
+            # TOGETHER, since one call now does both jobs.
+            "decomposition_ok": ok,
+            "classification_ok": ok,
+        })
+        record_embeddings.append(embed_text(fact["text"]))
+        if ok:
+            stats["classified_ok"] += 1
+        else:
+            stats["classification_failed"] += 1
+
+    return records, record_embeddings, stats
+
+
 def repair_failed_records(verbose: bool = True) -> dict:
     """Re-processes every ALREADY-STORED fact whose decomposition or
     classification failed, in place, so a completed corpus can be brought to
     "every record genuinely processed by the model" without redoing the whole
     run.
 
-    Two distinct repairs:
-      - decomposition_ok=False: the stored record is a whole announcement, not
-        an atomic fact. Its parent is re-decomposed and the single bad record
-        is REPLACED by the resulting atomic facts (so the fact count changes,
-        and embeddings are rebuilt for them).
-      - classification_ok=False: the text is fine, only its scores are missing,
-        so it is re-classified in place with no change to fact identity.
+    With the bundled call (fact_pipeline.py), decomposition_ok and
+    classification_ok fail TOGETHER (one call does both jobs), so there is
+    only one repair path now, not two: any record with either flag False gets
+    its parent re-processed through the SAME bundled call + grounding check
+    the main run uses, and the stale record is REPLACED by the resulting
+    (possibly multiple, possibly zero if none pass grounding) atomic facts.
+    Records from a run predating this change may still have the flags
+    disagree (the old two-call path could fail one without the other) - this
+    repairs those too, since "either flag False" is the trigger.
     """
     announcements, facts, embeddings_array, processed = _load_existing()
     if not facts:
-        return {"repaired_decomposition": 0, "repaired_classification": 0, "still_failing": 0}
+        return {"repaired": 0, "still_failing": 0, "rejected_by_grounding": 0}
 
     embeddings = [row for row in embeddings_array]
     by_id = {a["id"]: a for a in announcements}
-    stats = {"repaired_decomposition": 0, "repaired_classification": 0, "still_failing": 0}
+    stats = {"repaired": 0, "still_failing": 0, "rejected_by_grounding": 0}
 
-    # --- 1. Re-decompose records that were stored unsplit -------------------
-    bad_indices = [i for i, f in enumerate(facts) if not f.get("decomposition_ok", True)]
+    bad_indices = [
+        i for i, f in enumerate(facts)
+        if not f.get("decomposition_ok", True) or not f.get("classification_ok", True)
+    ]
     if verbose and bad_indices:
-        print(f"Re-decomposing {len(bad_indices)} non-atomic record(s)...")
-    # Walk backwards so replacing one record with several doesn't shift the
-    # indices of the ones still to process.
+        print(f"Re-processing {len(bad_indices)} failed record(s)...")
+    # Walk backwards so replacing one record with several (or zero) doesn't
+    # shift the indices of the ones still to process.
     for position in sorted(bad_indices, reverse=True):
         stale = facts[position]
         announcement = by_id.get(stale["parent_announcement_id"])
         if announcement is None:
             stats["still_failing"] += 1
             continue
-        text = _announcement_text(announcement)
-        extracted, ok = extract_facts_with_status(text)
-        if not ok:
-            stats["still_failing"] += 1
-            continue
-        classifications = classify_facts([f["text"] for f in extracted])
-        replacements, new_embeddings = [], []
-        for extracted_fact, classification in zip(extracted, classifications):
-            replacements.append({
-                **stale,
-                "fact_text": extracted_fact["text"],
-                "entities": extracted_fact.get("entities", []),
-                "pestle_scores": classification["pestle_scores"],
-                "porters_scores": classification["porters_scores"],
-                "polarity": classification["polarity"],
-                "classification_ok": classification["classification_ok"],
-                "decomposition_ok": True,
-            })
-            new_embeddings.append(embed_text(extracted_fact["text"]))
-        facts[position:position + 1] = replacements
-        embeddings[position:position + 1] = new_embeddings
-        stats["repaired_decomposition"] += 1
 
-    # --- 2. Re-classify records whose text is fine but scores are missing ---
-    unclassified = [i for i, f in enumerate(facts) if not f.get("classification_ok", True)]
-    if verbose and unclassified:
-        print(f"Re-classifying {len(unclassified)} unclassified record(s)...")
-    for position in unclassified:
-        result = classify_facts([facts[position]["fact_text"]])[0]
-        if not result["classification_ok"]:
+        replacements, new_embeddings, delta = _process_announcement(announcement)
+        stats["rejected_by_grounding"] += delta["rejected_by_grounding"]
+        if not replacements:
+            # Nothing survived (total failure, or every fact was ungrounded) -
+            # leave the stale record in place rather than deleting it silently.
             stats["still_failing"] += 1
             continue
-        facts[position].update({
-            "pestle_scores": result["pestle_scores"],
-            "porters_scores": result["porters_scores"],
-            "polarity": result["polarity"],
-            "classification_ok": True,
-        })
-        stats["repaired_classification"] += 1
+
+        final_records = [{**stale, **r, "id": stale["id"] if i == 0 else f"{stale['id']}_{i}"}
+                          for i, r in enumerate(replacements)]
+        facts[position:position + 1] = final_records
+        embeddings[position:position + 1] = new_embeddings
+        stats["repaired"] += 1
 
     _flush(announcements, facts, embeddings, processed)
     stats["total_facts_in_store"] = len(facts)
@@ -334,73 +394,61 @@ def run_lpu_ingestion(limit: int | None = None, resume: bool = True, verbose: bo
     stats = {
         "announcements_seen": len(pending),
         "announcements_undated": 0,
+        "announcements_skipped_noncontent": 0,
         "facts_added": 0,
         "facts_classified_ok": 0,
         "facts_classification_failed": 0,
+        "facts_rejected_by_grounding": 0,
         "compound_announcements": 0,
-        # Announcements whose breakdown fell back to "store it unsplit" - the
-        # atomicity guarantee's own failure count, surfaced rather than hidden.
+        # Announcements whose bundled call fell back to "store it unsplit,
+        # unclassified" - the atomicity+classification guarantee's own
+        # failure count, surfaced rather than hidden.
         "decomposition_fallbacks": 0,
     }
     fact_counter = len(facts)
+    now = datetime.now(timezone.utc)
 
     for index, announcement in enumerate(pending, start=1):
-        text = _announcement_text(announcement)
         if announcement["published"] is None:
             stats["announcements_undated"] += 1
 
-        # 1. ATOMIC BREAKDOWN - reuses the live pipeline's decomposition verbatim,
-        # now with retries. The status flag is reported by the extractor itself
-        # rather than inferred from the output's shape: the earlier heuristic
-        # (does the single returned fact equal the input verbatim?) also flagged
-        # genuinely-single-claim notices whose neutral rewrite happened to match
-        # their input, so it over-reported failures.
-        extracted, decomposition_ok = extract_facts_with_status(text)
-        decomposition_failed = not decomposition_ok
-        if decomposition_failed:
-            stats["decomposition_fallbacks"] += 1
-        if len(extracted) > 1:
-            stats["compound_announcements"] += 1
-
-        # 2. Classify all of this announcement's facts in one call.
-        classifications = classify_facts([f["text"] for f in extracted])
+        # Pre-filter -> bundled atomic breakdown + classification -> per-fact
+        # grounding check -> embed. See _process_announcement's docstring;
+        # this is the one place the sequence is implemented, shared with
+        # repair_failed_records.
+        records, record_embeddings, delta = _process_announcement(announcement, now)
+        stats["announcements_skipped_noncontent"] += delta["noncontent_skipped"]
+        stats["decomposition_fallbacks"] += delta["decomposition_failed"]
+        stats["compound_announcements"] += delta["compound"]
+        stats["facts_rejected_by_grounding"] += delta["rejected_by_grounding"]
+        stats["facts_classified_ok"] += delta["classified_ok"]
+        stats["facts_classification_failed"] += delta["classification_failed"]
 
         announcement_fact_ids = []
-        for extracted_fact, classification in zip(extracted, classifications):
+        for record, embedding in zip(records, record_embeddings):
             fact_counter += 1
             fact_id = f"lpu_fact_{fact_counter:06d}"
             announcement_fact_ids.append(fact_id)
             facts.append({
                 "id": fact_id,
                 "parent_announcement_id": announcement["id"],
-                "fact_text": extracted_fact["text"],
-                "entities": extracted_fact.get("entities", []),
                 "published": announcement["published"],
                 # Tagged by construction, never inferred - these ARE LPU records.
                 "scope": LPU_SCOPE,
                 "source": "lpu",
                 "is_lpu": True,
-                "pestle_scores": classification["pestle_scores"],
-                "porters_scores": classification["porters_scores"],
-                "polarity": classification["polarity"],
-                "classification_ok": classification["classification_ok"],
-                # False = this record is NOT guaranteed atomic (see above).
-                "decomposition_ok": not decomposition_failed,
                 "mention_count": 1,
+                **record,
             })
-            embeddings.append(embed_text(extracted_fact["text"]))
+            embeddings.append(embedding)
             stats["facts_added"] += 1
-            if classification["classification_ok"]:
-                stats["facts_classified_ok"] += 1
-            else:
-                stats["facts_classification_failed"] += 1
 
         announcements.append({**announcement, "fact_ids": announcement_fact_ids})
         processed.add(announcement["id"])
 
         if verbose and index % 5 == 0:
             print(f"  [{index}/{len(pending)}] {stats['facts_added']} facts so far "
-                  f"(latest: {len(extracted)} from one announcement)")
+                  f"(latest: {len(records)} from one announcement)")
 
         if index % LPU_CHECKPOINT_EVERY == 0:
             _flush(announcements, facts, embeddings, processed)

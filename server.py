@@ -26,8 +26,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent / "src"))
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile  # noqa: E402
-from fastapi.responses import FileResponse  # noqa: E402
+from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, UploadFile  # noqa: E402
+from fastapi.responses import FileResponse, JSONResponse  # noqa: E402
 from fastapi.staticfiles import StaticFiles  # noqa: E402
 from pydantic import BaseModel  # noqa: E402
 
@@ -43,10 +43,26 @@ from marketintel.config import (  # noqa: E402
     SUBCLUSTERS_PATH,
 )
 from marketintel.data_loader import load_cvp_mean, load_interaction_matrix, load_news, load_real_facts, load_subclusters  # noqa: E402
+from marketintel.db import (  # noqa: E402
+    DatabaseUnavailable,
+    get_review_batch,
+    is_configured as is_db_configured,
+    list_review_batches,
+    list_review_items,
+    mark_items_chunk_approved,
+    promote_review_items_to_corpus,
+    reject_review_items,
+)
 from marketintel.embeddings import embed_text, get_model  # noqa: E402
 from marketintel.live_facts import assign_fact_subclusters, build_combined_corpus, compute_subcluster_centroids  # noqa: E402
 from marketintel.news_browser import facet_values, filter_items, load_all_items, summarize  # noqa: E402
 from marketintel.real_data_inference import assess_dimension_coverage  # noqa: E402
+from marketintel.review_pipeline import (  # noqa: E402
+    run_chunk_stage,
+    run_embedding_stage,
+    start_gdelt_batch,
+    start_lpu_upload_batch,
+)
 from marketintel.sales_upload import (  # noqa: E402
     derive_sales_profile,
     guess_columns,
@@ -411,6 +427,130 @@ def browse_news(
         "summary": summarize(items),
         "facets": facet_values(items),
     }
+
+
+# ============================================================================
+# Review queue: the human-in-the-loop gate for real news (GDELT live +
+# manually-uploaded LPU JSON). See review_pipeline.py's docstring for the full
+# two-stage approve flow. Every endpoint here talks to Supabase (db.py) - none
+# of it touches the local file-based corpora above, and a missing/unreachable
+# DATABASE_URL degrades to a clear 503 rather than a 500, matching this file's
+# existing standalone-robustness posture.
+# ============================================================================
+class ReviewItemIds(BaseModel):
+    item_ids: list[str]
+
+
+class RejectItems(BaseModel):
+    item_ids: list[str]
+    reason: str = ""
+
+
+def _db_or_503():
+    """Fast, clear message for the "no DATABASE_URL at all" case. A configured
+    but UNREACHABLE database (wrong host, network down, project paused) is
+    caught separately by the global DatabaseUnavailable handler below, since
+    that failure only surfaces once a real connection is attempted inside
+    db.py - checking the env var alone can't detect it."""
+    if not is_db_configured():
+        raise HTTPException(
+            status_code=503,
+            detail="DATABASE_URL is not set - the review queue needs Supabase configured (see .env.example).",
+        )
+
+
+@app.exception_handler(DatabaseUnavailable)
+def _handle_db_unavailable(request, exc: DatabaseUnavailable):
+    # Any review-queue endpoint that reaches an actual db.py call and fails
+    # there (wrong host, DNS failure, paused Supabase project, etc.) degrades
+    # to a clear 503 with the real reason, rather than an unhandled 500 -
+    # matching this file's existing standalone-robustness posture for the
+    # local-file corpora above.
+    return JSONResponse(status_code=503, content={"detail": f"Database unavailable: {exc}"})
+
+
+@app.post("/api/review/gdelt/start")
+def start_gdelt(background_tasks: BackgroundTasks, hours_back: int | None = None):
+    """Triggers one real-time GDELT fetch. Returns immediately with the new
+    batch's id in status=processing_chunks; chunking (decomposition +
+    classification + grounding, one Groq call per article) runs in the
+    background because it can take real wall-clock time - the frontend polls
+    GET /api/review/batches/{id} for status."""
+    _db_or_503()
+    try:
+        batch_id, raw_items = start_gdelt_batch(hours_back)
+    except DatabaseUnavailable:
+        raise  # let the global handler report this as a DB problem, not a GDELT one
+    except Exception as exc:  # noqa: BLE001 - surfaced to the caller, not swallowed
+        raise HTTPException(status_code=502, detail=f"GDELT fetch failed: {exc}")
+    background_tasks.add_task(run_chunk_stage, batch_id, "gdelt", raw_items)
+    return {"batch_id": batch_id, "raw_item_count": len(raw_items), "status": "processing_chunks"}
+
+
+@app.post("/api/review/lpu/upload")
+async def upload_lpu_json(background_tasks: BackgroundTasks, file: UploadFile = File(...)):
+    """Accepts a JSON file in the same {date, title, body, links, id} shape as
+    data/lpudata/ - manually scraped LPU announcements you're adding yourself.
+    Parses and validates synchronously (fast, no LLM calls involved yet);
+    chunking runs in the background like the GDELT path."""
+    _db_or_503()
+    raw_bytes = await file.read()
+    try:
+        batch_id, raw_items = start_lpu_upload_batch(file.filename or "upload.json", raw_bytes)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    background_tasks.add_task(run_chunk_stage, batch_id, "lpu_upload", raw_items)
+    return {"batch_id": batch_id, "raw_item_count": len(raw_items), "status": "processing_chunks"}
+
+
+@app.get("/api/review/batches")
+def get_review_batches(status: str | None = None):
+    _db_or_503()
+    return {"batches": list_review_batches(status)}
+
+
+@app.get("/api/review/batches/{batch_id}")
+def get_review_batch_detail(batch_id: str):
+    _db_or_503()
+    batch = get_review_batch(batch_id)
+    if batch is None:
+        raise HTTPException(status_code=404, detail="Unknown batch_id.")
+    return batch
+
+
+@app.get("/api/review/batches/{batch_id}/items")
+def get_review_batch_items(batch_id: str, status: str | None = None):
+    _db_or_503()
+    return {"items": list_review_items(batch_id, status)}
+
+
+@app.post("/api/review/items/approve_chunks")
+def approve_chunks(req: ReviewItemIds, background_tasks: BackgroundTasks):
+    """First approval: the reviewed atomic facts move to chunk_approved, then
+    embedding+summary generation runs in the background (a Groq call for the
+    summaries plus a local embedding per item) - see run_embedding_stage."""
+    _db_or_503()
+    approved = mark_items_chunk_approved(req.item_ids)
+    if approved:
+        background_tasks.add_task(run_embedding_stage, req.item_ids)
+    return {"approved_for_embedding": approved}
+
+
+@app.post("/api/review/items/approve_final")
+def approve_final(req: ReviewItemIds):
+    """Second, final approval: copies these review_items into the real
+    facts/announcements tables - the only place in this whole endpoint group
+    that touches the scored corpus."""
+    _db_or_503()
+    promoted = promote_review_items_to_corpus(req.item_ids)
+    return {"promoted_to_corpus": promoted}
+
+
+@app.post("/api/review/items/reject")
+def reject_items(req: RejectItems):
+    _db_or_503()
+    rejected = reject_review_items(req.item_ids, req.reason)
+    return {"rejected": rejected}
 
 
 @app.get("/")

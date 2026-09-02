@@ -468,8 +468,22 @@ startup-order dependency, no tracebacks in any process log.
 |---|---|---|
 | `server.py` (API + analysis) | Render, one free Web Service | Free tier spins down when idle; expect cold-start latency on the first request |
 | `web/index.html` + assets | Vercel (static) | No build step; it is a single self-contained file |
-| Postgres + pgvector | Supabase (free) | All *growing* data: facts, announcements, embeddings, ingestion runs |
-| Ingestion schedule | GitHub Actions (`.github/workflows/ingest.yml`) | 30-minute cron; replaces the old persistent service |
+| Postgres + pgvector | Supabase (free) | All *growing* data: facts, announcements, embeddings, ingestion runs, and the review queue |
+
+**Ingestion is triggered from the production app itself, not a schedule.**
+The "Ingest & review" page (topbar "..." menu) is the live entry point: a
+"Run GDELT ingestion now" button for real-time world news, and a JSON upload
+for manually-scraped LPU announcements. Both feed the same human-in-the-loop
+queue (`review_batches`/`review_items`) - chunk, approve, embed+summarize,
+approve again - before anything reaches the scored `facts`/`announcements`
+tables. See `src/marketintel/review_pipeline.py`.
+
+A separate bulk/scheduled path exists (`.github/workflows/ingest.yml`,
+`scripts/ingest_lpu_data.py` + `scripts/sync_lpu_to_supabase.py`) but is
+**deliberately dormant** (its cron trigger is commented out): it writes
+straight to the scored tables with no approval step, which would both bypass
+the review queue and compete with it for the same daily Groq quota. It's kept
+for a possible later return to unattended bulk processing, not deleted.
 
 **What lives in the database vs. what ships as files.** Anything that grows at
 runtime is in Postgres (facts + `halfvec(384)` embeddings, announcements,
@@ -495,32 +509,19 @@ is manual.** A paused project must be resumed from the Supabase dashboard
 before anything works; the API simply fails until someone clicks resume.
 Restoration is possible within a 1-year window.
 
-The 30-minute ingestion job is *intended* to prevent this, since Supabase
-measures **database activity** ("a few user requests to the database each day
-over the previous week"), and every run writes a row to `ingestion_runs` even
-when ingestion itself fails. **But this is not contractually guaranteed:**
-Supabase's documentation does not explicitly state that automated/scheduled
-writes count the same as application traffic — it never distinguishes the two.
-A whole ecosystem of third-party "keep-alive" tools exists precisely because
-operators do not trust this to be reliable. Treat scheduled writes as *very
-likely* sufficient, not *certainly* sufficient.
+**There is currently no automatic keep-alive.** The bulk ingestion workflow
+that used to write to the database every 30 minutes is now deliberately
+dormant (see "Deployment topology" above) - ingestion is triggered manually,
+from the "Ingest & review" page, so database activity now tracks actual usage
+of the app rather than a schedule. If nobody visits the app or runs an
+ingestion for 7+ days, Supabase's pause condition can trigger. Two ways to
+handle this, neither implemented yet: visit the app (or `POST
+/api/review/gdelt/start`) periodically yourself, or re-enable the dormant
+GitHub Actions cron purely as a heartbeat (uncomment its `schedule` trigger -
+even a run that finds nothing to do still writes to the database).
 
-**2. The keep-alive mechanism has its own inactivity failure mode.** GitHub
-disables scheduled workflows in a repository after **60 days without commit
-activity**, and scheduled runs are best-effort — they can be delayed or dropped
-under load. So the component protecting Supabase from pausing can itself stop
-silently. Two chained free tiers, each with independent inactivity behaviour,
-is the actual risk here — not either one alone.
-
-**Concretely: if ingestion stops running for an extended period — which has
-already happened across session boundaries in this project — the Supabase
-project may pause and require a manual unpause from the dashboard before the
-system works again.** Check `ingestion_runs` (surfaced by `server.py`'s health
-reporting) to see when ingestion last actually succeeded rather than assuming
-the cron is running.
-
-**3. Render free-tier spin-down.** The API sleeps when idle, so the first
-request after a quiet period pays a cold start.
+**2. Render free-tier spin-down.** The API sleeps when idle, so the first
+request after a quiet period pays a cold start (~50s).
 
 ### Hosting requirements
 

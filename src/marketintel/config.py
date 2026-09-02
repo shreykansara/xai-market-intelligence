@@ -245,9 +245,10 @@ LPU_RAW_DIR = DATA_DIR / "lpudata"
 LPU_ANNOUNCEMENTS_PATH = DATA_DIR / "lpu_announcements.json"
 LPU_FACTS_PATH = DATA_DIR / "lpu_facts.json"
 LPU_FACT_EMBEDDINGS_PATH = DATA_DIR / "lpu_fact_embeddings.npy"
-# Checkpoint for the ingestion run: a full pass is measured in hours (two
-# Ollama calls per announcement), so it must survive interruption and resume
-# from the last flushed announcement rather than starting over.
+# Checkpoint for the ingestion run: a full pass is measured in hours even with
+# a single bundled decomposition+classification call per announcement (see
+# fact_pipeline.py), so it must survive interruption and resume from the last
+# flushed announcement rather than starting over.
 LPU_STATE_PATH = DATA_DIR / "lpu_ingestion_state.json"
 LPU_CHECKPOINT_EVERY = 25
 LPU_SCOPE = "LPU"
@@ -262,6 +263,15 @@ LPU_SCOPE = "LPU"
 # lines (the tail is typically block/room lists, signatures and boilerplate),
 # so capping here costs little and buys both speed and reliable atomicity.
 LPU_MAX_DECOMPOSITION_CHARS = 1200
+# Grounding safeguards (src/marketintel/grounding.py), reused UNCHANGED from
+# the live ingestion path - it did not previously run on the LPU path at all,
+# which was a real, unresolved gap (LPU used a different, unverified
+# mechanism than the rest of the system). NONCONTENT logs announcements
+# skipped before any Groq call (empty/junk title); UNGROUNDED logs facts
+# rejected after decomposition for stating a number not traceable to the
+# source announcement text.
+LPU_NONCONTENT_LOG_PATH = DATA_DIR / "lpu_ingestion_noncontent.jsonl"
+LPU_UNGROUNDED_LOG_PATH = DATA_DIR / "lpu_ingestion_ungrounded.jsonl"
 
 # --- Groq API (src/marketintel/groq_client.py) ---
 # Replaces the local Ollama model as the LLM transport for BOTH fact

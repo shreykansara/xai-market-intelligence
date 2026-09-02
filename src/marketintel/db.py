@@ -229,6 +229,213 @@ def latest_ingestion_run() -> dict | None:
         return dict(zip([c.name for c in cur.description], row))
 
 
+# ---------------------------------------------------------------------------
+# Review queue - the human-in-the-loop gate between raw ingestion and the
+# scored corpus. Nothing in `facts`/`announcements` was written without
+# passing through here and being approved at both stages (see db/schema.sql's
+# review_batches/review_items comment for the full lifecycle).
+# ---------------------------------------------------------------------------
+def create_review_batch(batch_id: str, source: str, label: str) -> None:
+    with connect() as conn, conn.cursor() as cur:
+        cur.execute(
+            "INSERT INTO review_batches (id, source, label, status) VALUES (%s, %s, %s, 'processing_chunks')",
+            (batch_id, source, label),
+        )
+        conn.commit()
+
+
+def update_batch_status(batch_id: str, status: str, error: str | None = None, item_count: int | None = None) -> None:
+    with connect() as conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            UPDATE review_batches
+            SET status = %s, error = %s, updated_at = now(),
+                item_count = COALESCE(%s, item_count)
+            WHERE id = %s
+            """,
+            (status, error, item_count, batch_id),
+        )
+        conn.commit()
+
+
+def insert_review_items(cur, items: list[dict]) -> None:
+    """Stage-1 insert: chunked facts awaiting the first approval. No embedding,
+    no summary yet - those are added by update_review_item_embedding() once the
+    batch clears chunk review."""
+    for item in items:
+        cur.execute(
+            """
+            INSERT INTO review_items (id, batch_id, source_title, source_body, source_published,
+                                      source_link, source_scope, fact_text, entities,
+                                      pestle_scores, porters_scores, polarity,
+                                      decomposition_ok, classification_ok, status)
+            VALUES (%(id)s, %(batch_id)s, %(source_title)s, %(source_body)s, %(source_published)s,
+                    %(source_link)s, %(source_scope)s, %(fact_text)s, %(entities)s,
+                    %(pestle_scores)s, %(porters_scores)s, %(polarity)s,
+                    %(decomposition_ok)s, %(classification_ok)s, 'pending_chunk_review')
+            """,
+            {
+                "id": item["id"], "batch_id": item["batch_id"],
+                "source_title": item.get("source_title", ""), "source_body": item.get("source_body", ""),
+                "source_published": item.get("source_published"), "source_link": item.get("source_link"),
+                "source_scope": item.get("source_scope"),
+                "fact_text": item["fact_text"], "entities": json.dumps(item.get("entities") or []),
+                "pestle_scores": json.dumps(item.get("pestle_scores") or {}),
+                "porters_scores": json.dumps(item.get("porters_scores") or {}),
+                "polarity": item.get("polarity"),
+                "decomposition_ok": bool(item.get("decomposition_ok", True)),
+                "classification_ok": bool(item.get("classification_ok", True)),
+            },
+        )
+
+
+def list_review_batches(status: str | None = None) -> list[dict]:
+    with connect() as conn, conn.cursor() as cur:
+        if status:
+            cur.execute(
+                "SELECT * FROM review_batches WHERE status = %s ORDER BY created_at DESC", (status,)
+            )
+        else:
+            cur.execute("SELECT * FROM review_batches ORDER BY created_at DESC LIMIT 100")
+        cols = [c.name for c in cur.description]
+        return [dict(zip(cols, row)) for row in cur.fetchall()]
+
+
+def get_review_batch(batch_id: str) -> dict | None:
+    with connect() as conn, conn.cursor() as cur:
+        cur.execute("SELECT * FROM review_batches WHERE id = %s", (batch_id,))
+        row = cur.fetchone()
+        return dict(zip([c.name for c in cur.description], row)) if row else None
+
+
+def list_review_items(batch_id: str, status: str | None = None) -> list[dict]:
+    with connect() as conn, conn.cursor() as cur:
+        if status:
+            cur.execute(
+                "SELECT id, batch_id, source_title, source_body, source_published, source_link, "
+                "source_scope, fact_text, entities, pestle_scores, porters_scores, polarity, "
+                "summary, decomposition_ok, classification_ok, status, rejection_reason, created_at "
+                "FROM review_items WHERE batch_id = %s AND status = %s ORDER BY created_at",
+                (batch_id, status),
+            )
+        else:
+            cur.execute(
+                "SELECT id, batch_id, source_title, source_body, source_published, source_link, "
+                "source_scope, fact_text, entities, pestle_scores, porters_scores, polarity, "
+                "summary, decomposition_ok, classification_ok, status, rejection_reason, created_at "
+                "FROM review_items WHERE batch_id = %s ORDER BY created_at",
+                (batch_id,),
+            )
+        cols = [c.name for c in cur.description]
+        return [dict(zip(cols, row)) for row in cur.fetchall()]
+
+
+def mark_items_chunk_approved(item_ids: list[str]) -> int:
+    """First approval: moves items from pending_chunk_review to
+    chunk_approved. Only items still actually pending are touched, so
+    re-clicking approve on an already-processed batch is a harmless no-op
+    rather than silently re-approving something already rejected."""
+    if not item_ids:
+        return 0
+    with connect() as conn, conn.cursor() as cur:
+        cur.execute(
+            "UPDATE review_items SET status = 'chunk_approved' "
+            "WHERE id = ANY(%s) AND status = 'pending_chunk_review'",
+            (item_ids,),
+        )
+        n = cur.rowcount
+        conn.commit()
+        return n
+
+
+def reject_review_items(item_ids: list[str], reason: str) -> int:
+    """Rejects items still in a pending state - deliberately excludes already-
+    'approved' items (those are in the scored corpus; un-approving them isn't
+    what this endpoint is for) so a stray call can't silently retract a
+    committed fact."""
+    if not item_ids:
+        return 0
+    with connect() as conn, conn.cursor() as cur:
+        cur.execute(
+            "UPDATE review_items SET status = 'rejected', rejection_reason = %s "
+            "WHERE id = ANY(%s) AND status IN ('pending_chunk_review', 'chunk_approved', 'pending_embedding_review')",
+            (reason, item_ids),
+        )
+        n = cur.rowcount
+        conn.commit()
+        return n
+
+
+def update_review_item_embedding(item_id: str, summary: str, embedding) -> None:
+    with connect() as conn, conn.cursor() as cur:
+        cur.execute(
+            "UPDATE review_items SET summary = %s, embedding = %s::halfvec, status = 'pending_embedding_review' "
+            "WHERE id = %s",
+            (summary, _vector_literal(embedding), item_id),
+        )
+        conn.commit()
+
+
+def promote_review_items_to_corpus(item_ids: list[str]) -> int:
+    """Final approval: copies approved review_items into the real facts /
+    announcements tables the app scores against, and marks them 'approved' in
+    the review queue (kept as an audit trail, not deleted)."""
+    if not item_ids:
+        return 0
+    with connect() as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT id, batch_id, source_title, source_body, source_published, source_link, "
+            "source_scope, fact_text, entities, pestle_scores, porters_scores, polarity, "
+            "decomposition_ok, classification_ok "
+            "FROM review_items WHERE id = ANY(%s) AND status = 'pending_embedding_review'",
+            (item_ids,),
+        )
+        cols = [c.name for c in cur.description]
+        rows = [dict(zip(cols, r)) for r in cur.fetchall()]
+
+        promoted = 0
+        for row in rows:
+            announcement_id = f"review_{row['batch_id']}"
+            upsert_announcement(cur, {
+                "id": announcement_id, "source": row["source_scope"] or "review",
+                "content_key": None, "source_file": None, "source_row_id": None,
+                "title": row["source_title"], "body": row["source_body"],
+                "uploaded_by": None, "link": row["source_link"], "links": [],
+                "published": row["source_published"], "raw_date": None,
+            })
+            cur.execute(
+                "SELECT embedding FROM review_items WHERE id = %s", (row["id"],)
+            )
+            embedding_row = cur.fetchone()
+            cur.execute(
+                """
+                INSERT INTO facts (id, announcement_id, fact_text, entities, published, scope, source,
+                                   pestle_scores, porters_scores, polarity, mention_count,
+                                   decomposition_ok, classification_ok, embedding)
+                VALUES (%(id)s, %(announcement_id)s, %(fact_text)s, %(entities)s, %(published)s,
+                        %(scope)s, %(source)s, %(pestle_scores)s, %(porters_scores)s, %(polarity)s, 1,
+                        %(decomposition_ok)s, %(classification_ok)s, %(embedding)s)
+                ON CONFLICT (id) DO NOTHING
+                """,
+                {
+                    "id": f"fact_{row['id']}", "announcement_id": announcement_id,
+                    "fact_text": row["fact_text"], "entities": json.dumps(row["entities"]),
+                    "published": row["source_published"], "scope": row["source_scope"] or "unknown",
+                    "source": row["source_scope"] or "review",
+                    "pestle_scores": json.dumps(row["pestle_scores"] or {}),
+                    "porters_scores": json.dumps(row["porters_scores"] or {}),
+                    "polarity": row["polarity"] or "negative",
+                    "decomposition_ok": row["decomposition_ok"], "classification_ok": row["classification_ok"],
+                    "embedding": embedding_row[0],
+                },
+            )
+            promoted += cur.rowcount
+
+        cur.execute("UPDATE review_items SET status = 'approved' WHERE id = ANY(%s)", (item_ids,))
+        conn.commit()
+        return promoted
+
+
 def corpus_counts() -> dict:
     """Row counts + on-disk size, so capacity against the free tier's 500 MB
     can be checked from the live database rather than estimated."""
