@@ -7,7 +7,7 @@
     {
       "comment": "The frontend calls same-origin /api/* paths. Vercel serves only static files, so proxy those to the Render service. Replace the host below with your real Render URL during deployment (DEPLOYMENT.md step 4).",
       "source": "/api/:path*",
-      "destination": "https://REPLACE-WITH-YOUR-RENDER-URL.onrender.com/api/:path*"
+      "destination": "https://market-intelligence-api-bt6w.onrender.com/api/:path*"
     }
   ]
 }
