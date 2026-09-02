@@ -20,7 +20,8 @@ each score.
    0-1 soft scores for all 6 PESTLE dimensions and all 5 Porter's forces
    (an article can score high on more than one at once), plus a polarity
    (positive/negative). Article text is embedded with the local
-   `all-MiniLM-L6-v2` sentence-transformer model.
+   `all-MiniLM-L6-v2` model via `fastembed` (ONNX Runtime, not PyTorch - see
+   "Hosting requirements" below for why).
 2. **Fabricated startup dataset** (`data/startups.json`) — 50 LPU-based
    startups (grew from an original 20 — see "Current scope" below) spanning
    fintech, edtech, agritech, D2C hardware, SaaS, healthtech, cleantech,
@@ -308,7 +309,7 @@ web/
                                     bundled asset) - no CDN dependency
 src/marketintel/
   config.py                        Dimension names, scopes, file paths, constants
-  embeddings.py                    sentence-transformers wrapper
+  embeddings.py                    fastembed (ONNX Runtime) wrapper - see "Hosting requirements"
   data_loader.py                   Loads generated news/startup/subcluster/real-fact data + W
   analysis.py                      Gate/sub-cluster contribution scoring + roll-up + drill-down data
   seed_inference.py                Relevance/polarity via pooled k-NN vote, a relevance-gate
@@ -391,7 +392,7 @@ pip install -e .
 ## Generate the fabricated data
 
 The `data/` folder is gitignored — generate it locally before first run
-(this also downloads the `all-MiniLM-L6-v2` model on first use, ~90MB):
+(this also downloads the `all-MiniLM-L6-v2` ONNX model on first use, ~90MB):
 
 ```bash
 python scripts/generate_news.py                  # must run first
@@ -540,9 +541,16 @@ constraint was ever recorded in this repo, so there is nothing to retract —
 this simply documents the current, lighter requirement.)
 
 **Still required regardless of provider:** `all-MiniLM-L6-v2` runs locally for
-embeddings via `sentence-transformers`. It is small (~90 MB) and CPU-only, but
-it is a real local dependency — switching to Groq removes the *generative*
-model from the host, not the embedding model.
+embeddings, via **`fastembed`** (ONNX Runtime) — not `sentence-transformers`
+(PyTorch). This was a real, measured constraint, not a preference: with
+`sentence-transformers`, a plain FastAPI process running one real embedding
+call sat at **~500 MB RSS**, against Render free tier's **512 MB hard limit**
+— a ~2% margin that would OOM-kill the service under real concurrent load.
+Measured again with `fastembed` in its place (same model, same weights, same
+384-dim output, via ONNX Runtime instead of PyTorch — no `torch` dependency at
+all): **~252 MB RSS**, a ~51% margin. Switching to Groq removes the
+*generative* model from the host; this swap is what makes the *embedding*
+model safe to keep running there too.
 
 ```bash
 export GROQ_API_KEY=...       # read from the environment, never stored in the repo

@@ -119,7 +119,13 @@ that ever writes to Supabase.
    - **Name**: `market-intelligence-api`
    - **Branch**: `main`
    - **Runtime**: Python 3
-   - **Build Command**: `pip install -e . && pip install 'psycopg[binary]'`
+   - **Build Command**: `pip install -e .` (single command - `psycopg[binary]`
+     is a normal dependency in `pyproject.toml`, not a second, separately
+     appended install; that second command is exactly what produced a
+     `Invalid requirement: 'psycopg[binary]poetry'` failure during this
+     project's own deploy, most likely Render's dashboard mangling a
+     manually-quoted second `pip install`. If your Build Command field shows
+     anything longer than `pip install -e .`, replace it with just that.)
    - **Start Command**: `uvicorn server:app --host 0.0.0.0 --port $PORT`
    - **Instance Type**: **Free**
 6. Scroll to **Environment Variables** and add each row:
@@ -132,7 +138,15 @@ that ever writes to Supabase.
    | `PYTHON_VERSION` | `3.11` |
 
 7. Click **Create Web Service**. The first build takes ~5–10 minutes (it
-   downloads the sentence-transformer model).
+   downloads the embedding model, ~90 MB, via `fastembed`).
+
+   ℹ️ **On the memory question**: this app was measured, not assumed, to fit
+   the free tier's 512 MB limit - a real embedding call sits at ~252 MB RSS
+   (~51% headroom), using `fastembed`/ONNX Runtime rather than
+   `sentence-transformers`/PyTorch, which alone would have used ~500 MB
+   (~2% headroom - too tight to trust). See CLAUDE.md's "Known gaps" for the
+   full measurement. If you ever add a heavier dependency later, re-check
+   this rather than assuming it still fits.
 
    ✅ **Working state:** the log ends with `Uvicorn running on http://0.0.0.0:...`
    and the status badge at the top turns green and reads **Live**. Your URL

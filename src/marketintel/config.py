@@ -73,7 +73,10 @@ SCOPE_WEIGHTS = {
     "World": 250,
 }
 
-EMBEDDING_MODEL_NAME = "all-MiniLM-L6-v2"
+# Fully-qualified for fastembed (embeddings.py) - fastembed's model registry
+# indexes by the HuggingFace repo id, unlike sentence-transformers' short-name
+# resolution. Same model, same 384-dim output either way.
+EMBEDDING_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 DATA_DIR = ROOT_DIR / "data"

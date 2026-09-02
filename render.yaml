@@ -7,7 +7,13 @@ services:
     plan: free            # free tier spins down when idle; first request cold-starts
     region: oregon
     branch: main
-    buildCommand: "pip install -e . && pip install 'psycopg[binary]'"
+    # Single install command, on purpose: psycopg[binary] now lives in
+    # pyproject.toml's own dependency list, not a second, separately-quoted
+    # pip invocation appended here - that second invocation is what produced
+    # a real deploy failure (Invalid requirement: 'psycopg[binary]poetry'),
+    # most likely from Render's dashboard/YAML field mangling a manually
+    # quoted bracket-extras string. One command removes the whole class of bug.
+    buildCommand: "pip install -e ."
     # Render supplies $PORT; binding to it is required or the service is marked unhealthy.
     startCommand: "uvicorn server:app --host 0.0.0.0 --port $PORT"
     healthCheckPath: /

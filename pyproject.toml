@@ -7,7 +7,11 @@ name = "market-intelligence"
 version = "0.1.0"
 requires-python = ">=3.10"
 dependencies = [
-    "sentence-transformers",
+    # fastembed, not sentence-transformers - see embeddings.py's docstring.
+    # sentence-transformers pulls in torch, which alone pushed this process to
+    # ~500MB RSS against Render's free-tier 512MB limit; fastembed runs the
+    # identical model via onnxruntime with no torch dependency at all.
+    "fastembed",
     "fastapi",
     "uvicorn",
     "numpy",
@@ -17,6 +21,13 @@ dependencies = [
     "gdeltdoc",
     "openpyxl",
     "python-multipart",
+    # Supabase (Postgres + pgvector) driver - was previously appended as a
+    # SEPARATE `pip install 'psycopg[binary]'` in Render's build command,
+    # which is exactly the fragile, manually-quoted step that produced the
+    # `Invalid requirement: 'psycopg[binary]poetry'` deploy failure. Declaring
+    # it here means `pip install -e .` alone pulls everything - one install
+    # command, nothing left for a dashboard field to mangle.
+    "psycopg[binary]",
 ]
 
 [tool.hatch.build.targets.wheel]

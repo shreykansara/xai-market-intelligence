@@ -422,7 +422,7 @@ def main():
         json.dump(articles, f, indent=2)
     print(f"Wrote {NEWS_PATH}")
 
-    print("Embedding article text (title + body) with sentence-transformers...")
+    print("Embedding article text (title + body) with fastembed...")
     texts = [f"{a['title']}. {a['body']}" for a in articles]
     embeddings = embed_texts(texts)
     import numpy as np

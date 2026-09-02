@@ -231,6 +231,47 @@ The original Streamlit version (`app.py`) was fully replaced by this
 page and no longer exists in the repo.
 
 ## Known gaps / in progress
+- **Fixed a real Render deploy failure and a real, measured near-OOM risk in
+  the same change: swapped `sentence-transformers` (PyTorch) for `fastembed`
+  (ONNX Runtime) as the local embedding backend.** Two independent problems,
+  one root cause:
+  1. **Deploy failure**: Render's build logged
+     `ERROR: Invalid requirement: 'psycopg[binary]poetry'` - `render.yaml`'s
+     build command was two separately-quoted `pip install` invocations
+     (`pip install -e . && pip install 'psycopg[binary]'`), and something in
+     Render's dashboard/YAML field handling mangled the second one. Fixed by
+     moving `psycopg[binary]` into `pyproject.toml`'s own dependency list, so
+     `pip install -e .` is the ONLY install command anywhere - nothing left
+     for a field to concatenate incorrectly.
+  2. **Memory risk, measured not assumed**: with `sentence-transformers`
+     installed, a plain FastAPI process (this app's actual import chain)
+     making one real embedding call sat at **~500 MB RSS** - against Render
+     free tier's **512 MB hard limit**, a ~2% margin. `torch` alone accounts
+     for ~495 MB on disk and is what pushes runtime RSS that high; this was
+     never sized against the target host until asked directly whether Render
+     could actually hold it. Fixed by switching to `fastembed`: confirmed via
+     `pip install` output that it pulls `onnxruntime`, never `torch`, and
+     re-measured the exact same import chain + embedding call at **~252 MB
+     RSS** - a ~51% margin. Verified end-to-end through the real
+     `embeddings.py` module (not just raw `fastembed`), with the network-only
+     model download worked around locally via this environment's known
+     Norton AV SSL interception (curled the model tarball directly from its
+     GCS mirror, extracted it, and injected it into `fastembed.TextEmbedding`
+     via `specific_model_path` - Render's own build environment won't hit
+     this interception at all): output is `(384,)`, L2-normalized exactly
+     (`norm=1.000000`), and semantically correct (two paraphrased sentences
+     about umbrellas in Punjab scored 0.91 cosine similarity; an unrelated
+     stock-market sentence scored 0.11 against the same anchor) - same model
+     weights, same architecture, ONNX Runtime instead of PyTorch, not a
+     different or degraded model.
+  `config.EMBEDDING_MODEL_NAME` changed from the short name `"all-MiniLM-L6-v2"`
+  to the fully-qualified `"sentence-transformers/all-MiniLM-L6-v2"` - fastembed
+  indexes its model registry by HuggingFace repo id, unlike
+  `sentence-transformers`' short-name resolution. `embeddings.py`'s public
+  interface (`get_model`/`embed_text`/`embed_texts`) is unchanged, so nothing
+  else in the codebase needed to change - confirmed by grep, only
+  `embeddings.py` itself referenced `sentence_transformers`/`torch` anywhere
+  in `src/`, `scripts/`, or the top-level entry points.
 - **The historical GDELT bulk backfill was REMOVED entirely (code, data, and
   docs), by decision, not by failure to build it.** What was deleted:
   `gdelt_bulk.py`, `gdelt_backfill.py`, `scripts/run_gdelt_backfill.py`, the
