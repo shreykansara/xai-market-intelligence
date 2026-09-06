@@ -300,7 +300,7 @@ How can I help you navigate your market environment today?`);
             const lx = centerX + Math.cos(angle) * (radius + 18);
             const ly = centerY + Math.sin(angle) * (radius + 18);
             ctx.font = '10px Inter';
-            ctx.fillStyle = '#06B6D4';
+            ctx.fillStyle = '#00FF66';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.fillText(labels[i], lx, ly);
@@ -318,9 +318,9 @@ How can I help you navigate your market environment today?`);
             else ctx.lineTo(x, y);
         }
         ctx.closePath();
-        ctx.fillStyle = 'rgba(6, 182, 212, 0.35)';
+        ctx.fillStyle = 'rgba(0, 255, 102, 0.28)';
         ctx.fill();
-        ctx.strokeStyle = '#06B6D4';
+        ctx.strokeStyle = '#00FF66';
         ctx.lineWidth = 2;
         ctx.stroke();
     }
@@ -368,7 +368,7 @@ How can I help you navigate your market environment today?`);
             const lx = centerX + Math.cos(angle) * (radius + 18);
             const ly = centerY + Math.sin(angle) * (radius + 18);
             ctx.font = '10px Inter';
-            ctx.fillStyle = '#8B5CF6';
+            ctx.fillStyle = '#00E5FF';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.fillText(labels[i], lx, ly);
@@ -386,9 +386,9 @@ How can I help you navigate your market environment today?`);
             else ctx.lineTo(x, y);
         }
         ctx.closePath();
-        ctx.fillStyle = 'rgba(139, 92, 246, 0.35)';
+        ctx.fillStyle = 'rgba(0, 229, 255, 0.28)';
         ctx.fill();
-        ctx.strokeStyle = '#8B5CF6';
+        ctx.strokeStyle = '#00E5FF';
         ctx.lineWidth = 2;
         ctx.stroke();
     }
@@ -417,11 +417,11 @@ How can I help you navigate your market environment today?`);
             return;
         }
 
-        const borderColors = ['#00f2fe', '#10b981', '#a855f7'];
+        const borderColors = ['#00FF66', '#00E5FF', '#10B981'];
         const badgeColors = [
-            'background: rgba(0, 242, 254, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3);',
-            'background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(52, 211, 153, 0.3);',
-            'background: rgba(168, 85, 247, 0.15); color: #c084fc; border: 1px solid rgba(192, 132, 252, 0.3);'
+            'background: rgba(0, 255, 102, 0.12); color: #00FF66; border: 1px solid rgba(0, 255, 102, 0.3);',
+            'background: rgba(0, 229, 255, 0.12); color: #00E5FF; border: 1px solid rgba(0, 229, 255, 0.3);',
+            'background: rgba(16, 185, 129, 0.12); color: #34d399; border: 1px solid rgba(52, 211, 153, 0.3);'
         ];
 
         cvpMatchesList.innerHTML = matches.map((m, idx) => `
@@ -437,11 +437,11 @@ How can I help you navigate your market environment today?`);
 
     function renderSidebarNeighbors(matches) {
         if (!matches || matches.length === 0) return;
-        const borderColors = ['#00f2fe', '#10b981', '#a855f7'];
+        const borderColors = ['#00FF66', '#00E5FF', '#10B981'];
         const badgeColors = [
-            'background: rgba(0, 242, 254, 0.15); color: #38bdf8; border: 1px solid rgba(56, 189, 248, 0.3);',
-            'background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(52, 211, 153, 0.3);',
-            'background: rgba(168, 85, 247, 0.15); color: #c084fc; border: 1px solid rgba(192, 132, 252, 0.3);'
+            'background: rgba(0, 255, 102, 0.12); color: #00FF66; border: 1px solid rgba(0, 255, 102, 0.3);',
+            'background: rgba(0, 229, 255, 0.12); color: #00E5FF; border: 1px solid rgba(0, 229, 255, 0.3);',
+            'background: rgba(16, 185, 129, 0.12); color: #34d399; border: 1px solid rgba(52, 211, 153, 0.3);'
         ];
 
         sidebarNeighborsList.innerHTML = matches.map((m, idx) => `
