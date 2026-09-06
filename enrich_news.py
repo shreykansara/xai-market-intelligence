@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """
-GDELT Local Ollama News Enrichment & Embedding Script
-------------------------------------------------------
-Enriches filtered GDELT CSV records into a standard target format with an 11-dimensional strategic embedding vector:
+GDELT Local Ollama News Enrichment & Embedding Script (CSV Version)
+--------------------------------------------------------------------
+Enriches filtered GDELT CSV records into a standard CSV dataset with TWO separate embeddings:
   1. id
   2. date (YYYY-MM-DD)
   3. headline
-  4. embedding (11-dimensional float vector representing PESTLE + Porter's 5 Forces)
+  4. contextual_embedding (dense vector representing full news article content via Ollama or local 384-D vector fallback)
+  5. strategic_embedding (11-dimensional vector for PESTLE + Porter's 5 Forces scores)
      - Dim 0: Political (PESTLE)
      - Dim 1: Economic (PESTLE)
      - Dim 2: Social (PESTLE)
@@ -18,11 +19,10 @@ Enriches filtered GDELT CSV records into a standard target format with an 11-dim
      - Dim 8: Bargaining Power of Suppliers (Porter)
      - Dim 9: Threat of Substitutes (Porter)
      - Dim 10: Competitive Rivalry (Porter)
-  5. source_link
-  6. location_affected (strictly one of: "LPU", "Kapurthala", "Punjab", "India", "World")
+  6. source_link
+  7. location_affected (strictly one of: "LPU", "Kapurthala", "Punjab", "India", "World")
 
-Uses local Ollama LLM endpoints for structured extraction, classification, and 11-D strategic scoring.
-Zero external pip dependencies (uses Python standard library).
+Output format: CSV file (default: enriched_news_202601.csv).
 """
 
 import argparse
@@ -31,6 +31,7 @@ import hashlib
 import html.parser
 import json
 import logging
+import math
 import os
 import re
 import sys
@@ -164,8 +165,73 @@ def call_ollama_generate(prompt: str, model: str = "llama3.2") -> str:
             res_json = json.loads(resp.read().decode("utf-8"))
             return res_json.get("response", "").strip()
     except Exception as e:
-        logger.warning(f"Ollama generate request failed: {e}")
+        logger.debug(f"Ollama generate request failed: {e}")
         return ""
+
+
+def compute_local_text_embedding(text: str, dim: int = 384) -> list:
+    """
+    Computes a deterministic 384-dimensional dense text embedding vector
+    using character/word n-gram feature hashing and L2 normalization when an Ollama
+    embedding model is not loaded.
+    """
+    if not text:
+        return [0.0] * dim
+
+    vec = [0.0] * dim
+    words = re.findall(r"\w+", text.lower())
+    if not words:
+        return [0.0] * dim
+
+    features = words + [f"{words[i]}_{words[i+1]}" for i in range(len(words)-1)]
+    for feat in features:
+        h = int(hashlib.md5(feat.encode("utf-8")).hexdigest(), 16)
+        idx = h % dim
+        val = 1.0 if (h & 1) else -1.0
+        vec[idx] += val
+
+    norm = math.sqrt(sum(v * v for v in vec))
+    if norm > 0:
+        vec = [round(v / norm, 4) for v in vec]
+    return vec
+
+
+def call_ollama_embedding(text: str, model: str = "nomic-embed-text") -> list:
+    """Calls Ollama embeddings API endpoint with automatic local feature vector fallback."""
+    if model:
+        url = f"{OLLAMA_BASE_URL}/api/embed"
+        payload = {
+            "model": model,
+            "input": text[:2000]
+        }
+        data = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
+
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                res_json = json.loads(resp.read().decode("utf-8"))
+                embeddings = res_json.get("embeddings", [])
+                if embeddings and isinstance(embeddings[0], list):
+                    return embeddings[0]
+        except Exception:
+            try:
+                url_legacy = f"{OLLAMA_BASE_URL}/api/embeddings"
+                payload_legacy = {"model": model, "prompt": text[:2000]}
+                req_legacy = urllib.request.Request(
+                    url_legacy,
+                    data=json.dumps(payload_legacy).encode("utf-8"),
+                    headers={"Content-Type": "application/json"}
+                )
+                with urllib.request.urlopen(req_legacy, timeout=30) as resp2:
+                    res_json2 = json.loads(resp2.read().decode("utf-8"))
+                    emb = res_json2.get("embedding", [])
+                    if emb:
+                        return emb
+            except Exception:
+                pass
+
+    # Fallback to local 384-dimensional dense text feature vector
+    return compute_local_text_embedding(text)
 
 
 def deterministic_fallback_location(full_text: str) -> str:
@@ -227,8 +293,8 @@ def compute_fallback_pestle_and_porter(text: str) -> tuple:
     return pestle_scores, porter_scores
 
 
-def process_record(row: list, llm_model: str) -> dict:
-    """Processes a single GDELT CSV record into enriched target schema with 11-D embedding vector."""
+def process_record(row: list, llm_model: str, embed_model: str) -> dict:
+    """Processes a single GDELT CSV record into enriched target schema with TWO separate embeddings."""
     event_id = row[0] if len(row) > 0 else ""
     raw_date = row[1] if len(row) > 1 else ""
     actor1_name = row[6] if len(row) > 6 else ""
@@ -322,9 +388,11 @@ Respond ONLY with valid JSON in this exact structure:
             except Exception:
                 pass
 
-    # Step 3: Construct Single 11-Dimensional Strategic Embedding Vector
-    # Vector layout: [Political, Economic, Social, Technological, Legal, Environmental,
-    #                 Threat_New_Entrants, Power_Buyers, Power_Suppliers, Threat_Substitutes, Competitive_Rivalry]
+    # Step 3A: Generate Contextual Dense Vector Embedding (Full Article Content)
+    contextual_text = f"Headline: {headline}\nLocation: {location_affected}\nSummary: {summary}\nContent: {combined_content[:1000]}"
+    contextual_embedding = call_ollama_embedding(contextual_text, model=embed_model)
+
+    # Step 3B: Construct 11-Dimensional Strategic Vector Embedding
     strategic_11d_embedding = [
         float(pestle_analysis.get("political", 0.0)),
         float(pestle_analysis.get("economic", 0.0)),
@@ -343,15 +411,47 @@ Respond ONLY with valid JSON in this exact structure:
         "id": record_id,
         "date": formatted_date,
         "headline": headline,
-        "embedding": strategic_11d_embedding,
+        "contextual_embedding": contextual_embedding,
+        "strategic_embedding": strategic_11d_embedding,
         "source_link": source_url,
         "location_affected": location_affected,
     }
 
 
+def save_csv_output(output_path: Path, records: list):
+    """Saves enriched records to CSV format with JSON-encoded embedding lists."""
+    temp_file = output_path.with_suffix(".csv.tmp")
+    try:
+        with open(temp_file, "w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow([
+                "id",
+                "date",
+                "headline",
+                "contextual_embedding",
+                "strategic_embedding",
+                "source_link",
+                "location_affected"
+            ])
+            for r in records:
+                writer.writerow([
+                    r["id"],
+                    r["date"],
+                    r["headline"],
+                    json.dumps(r["contextual_embedding"]),
+                    json.dumps(r["strategic_embedding"]),
+                    r["source_link"],
+                    r["location_affected"]
+                ])
+        temp_file.replace(output_path)
+        logger.info(f"Updated CSV output checkpoint: {len(records)} records in '{output_path}'")
+    except Exception as e:
+        logger.error(f"Error saving output CSV: {e}")
+
+
 def main():
     parser = argparse.ArgumentParser(
-        description="Enrich GDELT CSV news records using local Ollama LLM into standard format with 11-D strategic embedding vector."
+        description="Enrich GDELT CSV news records into CSV dataset with contextual and 11-D strategic embeddings."
     )
     parser.add_argument(
         "--input",
@@ -362,14 +462,20 @@ def main():
     parser.add_argument(
         "--output",
         type=str,
-        default="enriched_news_202601.json",
-        help="Output JSON file path.",
+        default="enriched_news_202601.csv",
+        help="Output CSV file path (default: enriched_news_202601.csv).",
     )
     parser.add_argument(
         "--llm-model",
         type=str,
         default="llama3.2",
         help="Ollama model for structured classification (default: llama3.2). Pass '' to skip LLM.",
+    )
+    parser.add_argument(
+        "--embed-model",
+        type=str,
+        default="nomic-embed-text",
+        help="Ollama model for contextual embeddings (default: nomic-embed-text). Pass '' to skip.",
     )
     parser.add_argument(
         "--workers",
@@ -395,17 +501,38 @@ def main():
     enriched_records = []
     seen_ids = set()
 
-    # Load existing output checkpoint if available
+    # Load existing CSV checkpoint if available
     if output_path.exists():
         try:
             with open(output_path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                if isinstance(data, list):
-                    enriched_records = data
-                    seen_ids = {r["id"] for r in enriched_records if "id" in r}
+                reader = csv.DictReader(f)
+                for r in reader:
+                    record_id = r.get("id")
+                    if record_id:
+                        seen_ids.add(record_id)
+                        c_emb = []
+                        s_emb = []
+                        try:
+                            c_emb = json.loads(r.get("contextual_embedding", "[]"))
+                        except Exception:
+                            pass
+                        try:
+                            s_emb = json.loads(r.get("strategic_embedding", "[]"))
+                        except Exception:
+                            pass
+
+                        enriched_records.append({
+                            "id": record_id,
+                            "date": r.get("date", ""),
+                            "headline": r.get("headline", ""),
+                            "contextual_embedding": c_emb,
+                            "strategic_embedding": s_emb,
+                            "source_link": r.get("source_link", ""),
+                            "location_affected": r.get("location_affected", ""),
+                        })
             logger.info(f"Loaded existing checkpoint: {len(enriched_records)} records from '{output_path}'")
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Failed to load checkpoint CSV: {e}")
 
     # Read input CSV
     rows_to_process = []
@@ -426,21 +553,14 @@ def main():
         rows_to_process = rows_to_process[:args.limit]
 
     logger.info(f"Starting news enrichment for {len(rows_to_process)} records using Ollama...")
-    logger.info(f"LLM Model: '{args.llm_model}' | Workers: {args.workers}")
+    logger.info(f"LLM Model: '{args.llm_model}' | Embed Model: '{args.embed_model}' | Workers: {args.workers}")
 
     processed_count = 0
-
-    def save_checkpoint():
-        temp_file = output_path.with_suffix(".json.tmp")
-        with open(temp_file, "w", encoding="utf-8") as f:
-            json.dump(enriched_records, f, ensure_ascii=False, indent=2)
-        temp_file.replace(output_path)
-        logger.info(f"Updated output checkpoint: {len(enriched_records)} records in '{output_path}'")
 
     try:
         with ThreadPoolExecutor(max_workers=args.workers) as executor:
             future_to_row = {
-                executor.submit(process_record, row, args.llm_model): row
+                executor.submit(process_record, row, args.llm_model, args.embed_model): row
                 for row in rows_to_process
             }
 
@@ -454,14 +574,14 @@ def main():
 
                     if processed_count % 10 == 0:
                         logger.info(f"Progress: {processed_count}/{len(rows_to_process)} records processed.")
-                        save_checkpoint()
+                        save_csv_output(output_path, enriched_records)
                 except Exception as e:
                     logger.warning(f"Error processing record: {e}")
 
     except KeyboardInterrupt:
         logger.info("Enrichment interrupted by user (Ctrl+C). Saving progress before exit...")
     finally:
-        save_checkpoint()
+        save_csv_output(output_path, enriched_records)
         logger.info(f"Enrichment completed! Total enriched news records saved: {len(enriched_records)}")
 
 

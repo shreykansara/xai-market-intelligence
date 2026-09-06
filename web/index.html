@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Explainable Market Intelligence System</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="dark-theme">
+
+    <!-- APP WRAPPER -->
+    <div class="app-wrapper">
+
+        <!-- =============================================================== -->
+        <!-- STEP 1: CVP INPUT & DUAL RADAR ANALYSIS SCREEN                   -->
+        <!-- =============================================================== -->
+        <div class="screen-view active" id="view-step1-cvp">
+            <div class="step1-container">
+                <!-- Hero Branding -->
+                <header class="hero-header">
+                    <div class="hero-logo">
+                        <i class="fa-solid fa-brain-circuit"></i>
+                    </div>
+                    <h1>Explainable Market Intelligence Engine</h1>
+                    <p class="hero-subtitle">Enter your Customer Value Proposition (CVP) to compute your 384-D vector placement, identify nearest benchmark companies, and generate your dual PESTLE & Porter risk radar charts.</p>
+                </header>
+
+                <!-- CVP Input Form Card -->
+                <div class="card glass-card cvp-input-card">
+                    <div class="card-header">
+                        <i class="fa-solid fa-pen-nib"></i>
+                        <span>Step 1: Enter Your Customer Value Proposition (CVP)</span>
+                    </div>
+                    <form id="form-cvp-input">
+                        <div class="form-group">
+                            <label for="input-cvp-text">Customer Value Proposition Statement:</label>
+                            <textarea id="input-cvp-text" placeholder="For [target customer] who [statement of need], the [product name] is a [product category] that [statement of key benefit]." rows="3" required></textarea>
+                        </div>
+
+                        <!-- CVP Template Helper Box -->
+                        <div class="cvp-template-helper">
+                            <i class="fa-solid fa-circle-info"></i>
+                            <span>Standard Format Reference: <em>For <strong>[target customer]</strong> who <strong>[statement of need]</strong>, the <strong>[product name]</strong> is a <strong>[product category]</strong> that <strong>[statement of key benefit]</strong>.</em></span>
+                        </div>
+
+                        <div class="form-actions">
+                            <button type="submit" class="btn-primary-lg" id="btn-analyze-cvp">
+                                <i class="fa-solid fa-wand-magic-sparkles"></i> Analyze CVP & Generate Dual Radar Charts
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Step 1 Results Panel (Hidden until CVP analyzed) -->
+                <div class="step1-results-panel hidden" id="step1-results-panel">
+                    
+                    <!-- Dual Radar Charts Grid -->
+                    <div class="dual-radar-grid">
+                        <!-- Chart 1: PESTLE Analysis -->
+                        <div class="card glass-card radar-card">
+                            <div class="card-header">
+                                <i class="fa-solid fa-chart-pie color-pestle"></i>
+                                <span>PESTLE Macro-Environment Analysis</span>
+                            </div>
+                            <div class="canvas-wrapper">
+                                <canvas id="canvas-pestle" width="300" height="300"></canvas>
+                            </div>
+                            <ul class="radar-legend-list" id="legend-pestle-list">
+                                <li><span class="dot p1"></span> Political: <strong id="val-p0">0.00</strong></li>
+                                <li><span class="dot p2"></span> Economic: <strong id="val-p1">0.00</strong></li>
+                                <li><span class="dot p3"></span> Social: <strong id="val-p2">0.00</strong></li>
+                                <li><span class="dot p4"></span> Tech: <strong id="val-p3">0.00</strong></li>
+                                <li><span class="dot p5"></span> Legal: <strong id="val-p4">0.00</strong></li>
+                                <li><span class="dot p6"></span> Enviro: <strong id="val-p5">0.00</strong></li>
+                            </ul>
+                        </div>
+
+                        <!-- Chart 2: Porter's 5 Forces Analysis -->
+                        <div class="card glass-card radar-card">
+                            <div class="card-header">
+                                <i class="fa-solid fa-shield-halved color-porter"></i>
+                                <span>Porter's 5 Forces Industry Analysis</span>
+                            </div>
+                            <div class="canvas-wrapper">
+                                <canvas id="canvas-porter" width="300" height="300"></canvas>
+                            </div>
+                            <ul class="radar-legend-list" id="legend-porter-list">
+                                <li><span class="dot f1"></span> New Entrants: <strong id="val-p6">0.00</strong></li>
+                                <li><span class="dot f2"></span> Buyer Power: <strong id="val-p7">0.00</strong></li>
+                                <li><span class="dot f3"></span> Supplier Power: <strong id="val-p8">0.00</strong></li>
+                                <li><span class="dot f4"></span> Substitutes: <strong id="val-p9">0.00</strong></li>
+                                <li><span class="dot f5"></span> Rivalry: <strong id="val-p10">0.00</strong></li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <!-- Nearest CVP 384-D Vector Benchmark Companies -->
+                    <div class="card glass-card benchmark-results-card">
+                        <div class="card-header">
+                            <i class="fa-solid fa-chart-scatter"></i>
+                            <span>Nearest CVP 384-D Vector Embedding Matches (500 Company Database)</span>
+                        </div>
+                        <div class="cvp-matches-list" id="cvp-matches-list">
+                            <!-- Populated dynamically -->
+                        </div>
+                    </div>
+
+                    <!-- Next Step CTA -->
+                    <div class="cta-banner">
+                        <div class="cta-text">
+                            <h3>Vector Placement & Strategic Risk Analysis Complete!</h3>
+                            <p>Proceed to your personalized AI Market Chatbot to ask questions strictly tailored to your CVP and strategic factors.</p>
+                        </div>
+                        <button type="button" class="btn-cta-lg" id="btn-proceed-to-chatbot">
+                            <span>Proceed to Personalized AI Market Chatbot</span>
+                            <i class="fa-solid fa-arrow-right"></i>
+                        </button>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
+        <!-- =============================================================== -->
+        <!-- STEP 2: PERSONALIZED MARKET INTELLIGENCE CHATBOT SCREEN         -->
+        <!-- =============================================================== -->
+        <div class="screen-view hidden" id="view-step2-chatbot">
+            <div class="app-container">
+                <!-- Chatbot Sidebar -->
+                <aside class="sidebar">
+                    <div class="brand-header">
+                        <div class="logo-icon">
+                            <i class="fa-solid fa-brain-circuit"></i>
+                        </div>
+                        <div class="brand-text">
+                            <h2>Market Intelligence</h2>
+                            <span class="badge">Personalized AI</span>
+                        </div>
+                    </div>
+
+                    <!-- Active CVP Card -->
+                    <div class="active-cvp-card">
+                        <div class="card-header">
+                            <i class="fa-solid fa-bullseye"></i>
+                            <span>Active CVP Context</span>
+                        </div>
+                        <p id="sidebar-active-cvp">Loading CVP...</p>
+                        <button class="btn-link-sm" id="btn-change-cvp" type="button">
+                            <i class="fa-solid fa-rotate-left"></i> Change / Re-analyze CVP
+                        </button>
+                    </div>
+
+                    <!-- Sidebar Radar 1: PESTLE Macro-Environment Card -->
+                    <div class="sidebar-radar-card">
+                        <div class="card-header">
+                            <i class="fa-solid fa-chart-pie color-pestle"></i>
+                            <span>PESTLE Macro Risks</span>
+                        </div>
+                        <div class="sidebar-canvas-wrapper">
+                            <canvas id="sidebar-canvas-pestle" width="260" height="260"></canvas>
+                        </div>
+                        <ul class="sidebar-radar-legend" id="sidebar-legend-pestle">
+                            <li><span class="dot p1"></span> Pol: <strong id="sidebar-val-p0">0.00</strong></li>
+                            <li><span class="dot p2"></span> Eco: <strong id="sidebar-val-p1">0.00</strong></li>
+                            <li><span class="dot p3"></span> Soc: <strong id="sidebar-val-p2">0.00</strong></li>
+                            <li><span class="dot p4"></span> Tech: <strong id="sidebar-val-p3">0.00</strong></li>
+                            <li><span class="dot p5"></span> Leg: <strong id="sidebar-val-p4">0.00</strong></li>
+                            <li><span class="dot p6"></span> Env: <strong id="sidebar-val-p5">0.00</strong></li>
+                        </ul>
+                    </div>
+
+                    <!-- Sidebar Radar 2: Porter's 5 Forces Card -->
+                    <div class="sidebar-radar-card">
+                        <div class="card-header">
+                            <i class="fa-solid fa-shield-halved color-porter"></i>
+                            <span>Porter's 5 Forces</span>
+                        </div>
+                        <div class="sidebar-canvas-wrapper">
+                            <canvas id="sidebar-canvas-porter" width="260" height="260"></canvas>
+                        </div>
+                        <ul class="sidebar-radar-legend" id="sidebar-legend-porter">
+                            <li><span class="dot f1"></span> Entrants: <strong id="sidebar-val-p6">0.00</strong></li>
+                            <li><span class="dot f2"></span> Buyer: <strong id="sidebar-val-p7">0.00</strong></li>
+                            <li><span class="dot f3"></span> Supplier: <strong id="sidebar-val-p8">0.00</strong></li>
+                            <li><span class="dot f4"></span> Substitutes: <strong id="sidebar-val-p9">0.00</strong></li>
+                            <li><span class="dot f5"></span> Rivalry: <strong id="sidebar-val-p10">0.00</strong></li>
+                        </ul>
+                    </div>
+
+                    <!-- Nearest CVP Matches Sidebar -->
+                    <div class="vector-placement-card">
+                        <div class="card-header">
+                            <i class="fa-solid fa-chart-scatter"></i>
+                            <span>Nearest Benchmark Peers</span>
+                        </div>
+                        <div class="card-body" id="sidebar-neighbors-list">
+                            <!-- Populated dynamically -->
+                        </div>
+                    </div>
+
+                    <div class="sidebar-footer">
+                        <p>Personalized Vector Engine (500 Companies)</p>
+                    </div>
+                </aside>
+
+                <!-- Chatbot Main Workspace -->
+                <main class="main-content">
+                    <!-- Top Navigation Bar -->
+                    <header class="top-bar">
+                        <div class="header-title">
+                            <h1>Personalized Market Intelligence Chatbot</h1>
+                            <p>Answering queries strictly tailored to your Customer Value Proposition & Strategic Factors.</p>
+                        </div>
+                    </header>
+
+                    <!-- Quick Suggestions -->
+                    <div class="quick-prompts-bar">
+                        <span class="label"><i class="fa-solid fa-lightbulb"></i> Tailored Prompts:</span>
+                        <div class="prompts-scroll" id="prompts-container">
+                            <button class="prompt-chip" type="button">What are the top PESTLE risks for my business?</button>
+                            <button class="prompt-chip" type="button">How does Buyer Power affect my business model?</button>
+                            <button class="prompt-chip" type="button">How do my nearest benchmark peers handle competition?</button>
+                            <button class="prompt-chip" type="button">What strategies can mitigate my Threat of Substitutes?</button>
+                        </div>
+                    </div>
+
+                    <!-- Chat Message Area -->
+                    <section class="chat-section">
+                        <div class="chat-messages" id="chat-messages">
+                            <!-- Pre-seeded welcome message -->
+                        </div>
+
+                        <!-- Chat Input Bar -->
+                        <div class="chat-input-area">
+                            <form id="chat-form">
+                                <div class="input-wrapper">
+                                    <textarea id="user-input" placeholder="Ask a personalized question about your CVP, PESTLE forces, or market risks..." rows="1" required></textarea>
+                                    <button type="submit" id="btn-send" title="Send Message">
+                                        <i class="fa-solid fa-paper-plane"></i>
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </section>
+                </main>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- API Key Settings Modal -->
+    <div class="modal-overlay" id="modal-settings">
+        <div class="modal-box">
+            <div class="modal-header">
+                <h3><i class="fa-solid fa-key"></i> Groq API Key Setup</h3>
+                <button class="btn-close" id="btn-close-settings" type="button">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p>Provide your <strong>Groq API Key</strong> for ultra-fast cloud LPU inference (~300+ tokens/sec using Llama 3.3 70B). If left blank, the chatbot defaults to local Ollama or rule reasoning.</p>
+                <div class="form-group">
+                    <label for="input-groq-key">Groq API Key:</label>
+                    <input type="password" id="input-groq-key" placeholder="gsk_..." autocomplete="off">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-primary" id="btn-save-key" type="button">Save Key</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
