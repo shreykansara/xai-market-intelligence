@@ -100,18 +100,22 @@ body {
     align-items: center;
     gap: 12px;
 }
-.hero-logo {
-    width: 56px;
-    height: 56px;
-    border-radius: var(--radius-md);
-    background: var(--primary-gradient);
+.hero-logo-wrapper {
+    width: 64px;
+    height: 64px;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 28px;
-    color: #050505;
-    box-shadow: 0 0 25px rgba(0, 255, 102, 0.4);
-    margin-bottom: 6px;
+    filter: drop-shadow(0 0 16px rgba(0, 255, 102, 0.45));
+    margin-bottom: 4px;
+}
+.hero-svg {
+    width: 64px;
+    height: 64px;
+    transition: transform 0.4s ease;
+}
+.hero-logo-wrapper:hover .hero-svg {
+    transform: rotate(45deg);
 }
 .hero-header h1 {
     font-family: var(--font-heading);
@@ -444,16 +448,17 @@ body {
     gap: 12px;
     padding-bottom: 4px;
 }
-.logo-icon {
+.logo-icon-wrapper {
     width: 36px;
     height: 36px;
-    border-radius: var(--radius-md);
-    background: var(--primary-gradient);
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 16px;
-    color: #050505;
+    filter: drop-shadow(0 0 10px rgba(0, 255, 102, 0.4));
+}
+.logo-icon-wrapper svg {
+    width: 36px;
+    height: 36px;
 }
 .brand-text h2 {
     font-family: var(--font-heading);

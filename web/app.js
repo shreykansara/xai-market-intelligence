@@ -187,7 +187,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const topPeer = activeNearestCvps[0] ? activeNearestCvps[0].company : 'Industry Leaders';
         const topSimilarity = activeNearestCvps[0] ? activeNearestCvps[0].similarity_pct : 85;
 
-        appendSystemMessage(`PERSONALIZED INTELLIGENCE CHATBOT ACTIVE
+        appendSystemMessage(`OMNISCOPE AI MARKET INTELLIGENCE ACTIVE
 
 Your Customer Value Proposition has been mapped into our 384-Dimensional Vector Space:
 - Active CVP: "${escapeHtml(activeCvpText)}"

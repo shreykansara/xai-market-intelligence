@@ -75,6 +75,10 @@ class ChatbotHTTPRequestHandler(BaseHTTPRequestHandler):
                 content_type = "application/json"
             elif file_path.suffix == ".png":
                 content_type = "image/png"
+            elif file_path.suffix == ".svg":
+                content_type = "image/svg+xml"
+            elif file_path.suffix == ".ico":
+                content_type = "image/x-icon"
             elif file_path.suffix == ".jpg" or file_path.suffix == ".jpeg":
                 content_type = "image/jpeg"
 
