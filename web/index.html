@@ -22,10 +22,81 @@
     <div class="app-wrapper">
 
         <!-- =============================================================== -->
-        <!-- STEP 1: CVP INPUT & DUAL RADAR ANALYSIS SCREEN                   -->
+        <!-- SCREEN 0: HOMEPAGE MODE SELECTION HUB                            -->
         <!-- =============================================================== -->
-        <div class="screen-view active" id="view-step1-cvp">
+        <div class="screen-view active" id="view-mode-selection">
             <div class="step1-container">
+                <!-- Hero Branding -->
+                <header class="hero-header">
+                    <div class="hero-logo-wrapper">
+                        <svg class="omniscope-logo-svg hero-svg" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <circle cx="50" cy="50" r="44" stroke="#00FF66" stroke-width="3" stroke-dasharray="6 4" opacity="0.4"/>
+                            <circle cx="50" cy="50" r="34" stroke="#00FF66" stroke-width="4"/>
+                            <circle cx="50" cy="50" r="22" stroke="#00E5FF" stroke-width="3"/>
+                            <circle cx="50" cy="50" r="6" fill="#00FF66"/>
+                            <line x1="50" y1="6" x2="50" y2="94" stroke="#00FF66" stroke-width="2" opacity="0.5"/>
+                            <line x1="6" y1="50" x2="94" y2="50" stroke="#00FF66" stroke-width="2" opacity="0.5"/>
+                            <circle cx="74" cy="50" r="4" fill="#00E5FF"/>
+                            <circle cx="50" cy="26" r="4" fill="#00FF66"/>
+                            <circle cx="34" cy="66" r="4" fill="#10B981"/>
+                        </svg>
+                    </div>
+                    <h1>Omniscope <span>AI</span></h1>
+                    <p class="hero-subtitle">Explainable Market Intelligence & Vector Placement Engine. Choose your strategic intelligence engine to calculate PESTLE macro-risks & Porter's 5 Forces dynamics.</p>
+                </header>
+
+                <!-- Mode Selection Cards Grid -->
+                <div class="mode-selection-grid">
+                    <!-- Option A: CVP Engine Card -->
+                    <div class="card mode-card" id="card-cvp-mode">
+                        <div class="mode-card-badge"><i class="fa-solid fa-bullseye"></i> Option A</div>
+                        <div class="mode-card-icon">
+                            <i class="fa-solid fa-bullseye"></i>
+                        </div>
+                        <h3>Customer Value Proposition Engine</h3>
+                        <p>Map your business CVP statement into 384-dimensional vector space. Discover nearest benchmark peers and evaluate strategic PESTLE macro-environment and Porter's 5 Forces risk profiles.</p>
+                        <ul class="mode-features">
+                            <li><i class="fa-solid fa-check"></i> Standard CVP Template Alignment</li>
+                            <li><i class="fa-solid fa-check"></i> 384-D Vector Embedding Search</li>
+                            <li><i class="fa-solid fa-check"></i> Nearest 500-Company Benchmarking</li>
+                        </ul>
+                        <button type="button" class="btn-primary-lg" id="btn-select-cvp-mode">
+                            Launch CVP Engine <i class="fa-solid fa-arrow-right"></i>
+                        </button>
+                    </div>
+
+                    <!-- Option B: Revenue Event Engine Card -->
+                    <div class="card mode-card" id="card-revenue-mode">
+                        <div class="mode-card-badge badge-cyan"><i class="fa-solid fa-chart-line"></i> Option B</div>
+                        <div class="mode-card-icon icon-cyan">
+                            <i class="fa-solid fa-chart-line"></i>
+                        </div>
+                        <h3>Revenue & Event Correlation Engine</h3>
+                        <p>Analyze lagging revenue indicators by associating historical sales dips or spikes with key business events, market shocks, regulatory shifts, or competitive actions.</p>
+                        <ul class="mode-features">
+                            <li><i class="fa-solid fa-check"></i> Historical Revenue Time-Series Log</li>
+                            <li><i class="fa-solid fa-check"></i> Event-Shock Correlation Mapping</li>
+                            <li><i class="fa-solid fa-check"></i> Empirical PESTLE & Porter Vectors</li>
+                        </ul>
+                        <button type="button" class="btn-primary-lg btn-cyan" id="btn-select-revenue-mode">
+                            Launch Revenue Engine <i class="fa-solid fa-arrow-right"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- =============================================================== -->
+        <!-- STEP 1-A: CVP INPUT & DUAL RADAR ANALYSIS SCREEN                 -->
+        <!-- =============================================================== -->
+        <div class="screen-view hidden" id="view-step1-cvp">
+            <div class="step1-container">
+                <!-- Header with Back Button -->
+                <div class="step-nav-bar">
+                    <button class="btn-link-sm btn-back-hub" id="btn-back-hub-cvp" type="button">
+                        <i class="fa-solid fa-arrow-left"></i> Switch Intelligence Mode
+                    </button>
+                </div>
                 <!-- Hero Branding -->
                 <header class="hero-header">
                     <div class="hero-logo-wrapper">
@@ -132,6 +203,146 @@
                             <p>Proceed to your personalized AI Market Chatbot to ask questions strictly tailored to your CVP and strategic factors.</p>
                         </div>
                         <button type="button" class="btn-cta-lg" id="btn-proceed-to-chatbot">
+                            <span>Proceed to Omniscope AI Chatbot</span>
+                            <i class="fa-solid fa-arrow-right"></i>
+                        </button>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
+        <!-- =============================================================== -->
+        <!-- STEP 1-B: REVENUE & EVENT HISTORY ANALYSIS SCREEN                -->
+        <!-- =============================================================== -->
+        <div class="screen-view hidden" id="view-step1-revenue">
+            <div class="step1-container">
+                <!-- Header with Back Button -->
+                <div class="step-nav-bar">
+                    <button class="btn-link-sm btn-back-hub" id="btn-back-hub-revenue" type="button">
+                        <i class="fa-solid fa-arrow-left"></i> Switch Intelligence Mode
+                    </button>
+                </div>
+
+                <div class="section-title-box">
+                    <h2><i class="fa-solid fa-chart-line color-cyan"></i> Revenue History & Temporal Cluster Matching Engine</h2>
+                    <p>Upload your historical sales/revenue time series file. Our intelligence engine detects sales dips & rises and automatically correlates them against macro market event clusters to filter verified relevant context.</p>
+                </div>
+
+                <!-- Preset Action Bar -->
+                <div class="presets-bar">
+                    <span class="presets-label"><i class="fa-solid fa-bolt"></i> Sample Datasets:</span>
+                    <button class="btn-preset-chip" id="btn-preset-csv-retail" type="button"><i class="fa-solid fa-file-csv"></i> Load Retail Apparel Sales CSV Sample</button>
+                    <button class="btn-preset-chip" id="btn-preset-csv-tech" type="button"><i class="fa-solid fa-file-csv"></i> Load B2B SaaS MRR CSV Sample</button>
+                </div>
+
+                <!-- Drag and Drop Upload Card -->
+                <div class="card cvp-input-card">
+                    <div class="card-header">
+                        <i class="fa-solid fa-cloud-arrow-up"></i>
+                        <span>Step 1: Upload Sales Time-Series File (Drag & Drop or Click to Browse)</span>
+                    </div>
+
+                    <div class="dropzone-box" id="revenue-dropzone">
+                        <i class="fa-solid fa-cloud-arrow-up dropzone-icon"></i>
+                        <h3>Drag & Drop Revenue / Sales Time-Series File Here</h3>
+                        <p>Or <span class="browse-link">click to browse local files</span> from your device</p>
+                        <span class="dropzone-subtext">Supported formats: <strong>.csv, .json, .txt</strong> (Columns: <code>Date/Period, Revenue_Value, Change_%</code>)</span>
+                        <input type="file" id="input-file-revenue" accept=".csv,.json,.txt" style="display:none;" />
+                    </div>
+
+                    <!-- Selected File Info & Submit Bar -->
+                    <div class="file-status-bar hidden" id="file-status-bar">
+                        <div class="file-info-chip">
+                            <i class="fa-solid fa-file-circle-check"></i>
+                            <span id="file-name-label">sales_data.csv</span>
+                            <span class="file-size-tag" id="file-count-tag">4 quarters loaded</span>
+                        </div>
+                        <button type="button" class="btn-link-sm" id="btn-clear-file"><i class="fa-solid fa-xmark"></i> Remove File</button>
+                    </div>
+
+                    <div class="form-actions" style="margin-top: 16px;">
+                        <button type="button" class="btn-primary-lg btn-cyan" id="btn-analyze-revenue">
+                            <i class="fa-solid fa-wand-magic-sparkles"></i> Match Revenue Fluctuation & Filter Relevant Market Clusters
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Revenue Results Panel (Hidden until analyzed) -->
+                <div class="step1-results-panel hidden" id="revenue-results-panel">
+                    
+                    <!-- Temporal Cluster Correlation & Relevance Matrix Card -->
+                    <div class="card correlation-matrix-card">
+                        <div class="card-header">
+                            <i class="fa-solid fa-network-wired color-cyan"></i>
+                            <span>Temporal Cluster Correlation & Storage Relevance Matrix</span>
+                        </div>
+                        <div class="card-body">
+                            <p class="matrix-intro-text">Our temporal matching engine cross-referenced your revenue fluctuation dates against macro market clusters. Clusters co-occurring with sales dips/spikes are <strong>Verified & Stored</strong>; uncorrelated clusters are <strong>Discarded Noise</strong>.</p>
+                            <div class="correlation-matrix-list" id="correlation-matrix-list">
+                                <!-- Populated dynamically -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Dual Radar Charts Grid -->
+                    <div class="dual-radar-grid" style="margin-top: 24px;">
+                        <!-- Chart 1: PESTLE Analysis -->
+                        <div class="card radar-card">
+                            <div class="card-header">
+                                <i class="fa-solid fa-chart-pie color-pestle"></i>
+                                <span>Empirical PESTLE Analysis (Verified Clusters Only)</span>
+                            </div>
+                            <div class="canvas-wrapper">
+                                <canvas id="canvas-revenue-pestle" width="300" height="300"></canvas>
+                            </div>
+                            <ul class="radar-legend-list" id="legend-revenue-pestle">
+                                <li><span class="dot p1"></span> Political: <strong id="val-rev-p0">0.00</strong></li>
+                                <li><span class="dot p2"></span> Economic: <strong id="val-rev-p1">0.00</strong></li>
+                                <li><span class="dot p3"></span> Social: <strong id="val-rev-p2">0.00</strong></li>
+                                <li><span class="dot p4"></span> Tech: <strong id="val-rev-p3">0.00</strong></li>
+                                <li><span class="dot p5"></span> Legal: <strong id="val-rev-p4">0.00</strong></li>
+                                <li><span class="dot p6"></span> Enviro: <strong id="val-rev-p5">0.00</strong></li>
+                            </ul>
+                        </div>
+
+                        <!-- Chart 2: Porter's 5 Forces Analysis -->
+                        <div class="card radar-card">
+                            <div class="card-header">
+                                <i class="fa-solid fa-shield-halved color-porter"></i>
+                                <span>Porter's 5 Forces (Verified Clusters Only)</span>
+                            </div>
+                            <div class="canvas-wrapper">
+                                <canvas id="canvas-revenue-porter" width="300" height="300"></canvas>
+                            </div>
+                            <ul class="radar-legend-list" id="legend-revenue-porter">
+                                <li><span class="dot f1"></span> Entrants: <strong id="val-rev-p6">0.00</strong></li>
+                                <li><span class="dot f2"></span> Buyer: <strong id="val-rev-p7">0.00</strong></li>
+                                <li><span class="dot f3"></span> Supplier: <strong id="val-rev-p8">0.00</strong></li>
+                                <li><span class="dot f4"></span> Substitutes: <strong id="val-rev-p9">0.00</strong></li>
+                                <li><span class="dot f5"></span> Rivalry: <strong id="val-rev-p10">0.00</strong></li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <!-- Benchmark Peers Grid -->
+                    <div class="card" style="margin-top: 24px;">
+                        <div class="card-header">
+                            <i class="fa-solid fa-chart-scatter"></i>
+                            <span>Nearest Vector Benchmark Peers (Based on Stored Clusters)</span>
+                        </div>
+                        <div class="card-body" id="revenue-peers-list">
+                            <!-- Populated dynamically -->
+                        </div>
+                    </div>
+
+                    <!-- Transition CTA Card -->
+                    <div class="cta-banner">
+                        <div class="cta-text">
+                            <h3>Empirical Revenue Analysis Complete!</h3>
+                            <p>Proceed to your personalized Omniscope AI Chatbot pre-seeded with your revenue events and PESTLE/Porter risk dynamics.</p>
+                        </div>
+                        <button class="btn-cta-lg btn-cyan" id="btn-proceed-revenue-chatbot" type="button">
                             <span>Proceed to Omniscope AI Chatbot</span>
                             <i class="fa-solid fa-arrow-right"></i>
                         </button>
@@ -283,7 +494,7 @@
                 <button class="btn-close" id="btn-close-settings" type="button">&times;</button>
             </div>
             <div class="modal-body">
-                <p>Provide your <strong>Groq API Key</strong> for ultra-fast cloud LPU inference (~300+ tokens/sec using Llama 3.3 70B). If left blank, the chatbot defaults to local Ollama or rule reasoning.</p>
+                <p>Provide your <strong>Groq API Key</strong> for ultra-fast cloud LPU inference (~300+ tokens/sec using active flagship models like GPT-OSS 120B & Llama 3.1 8B Instant). If left blank, the chatbot defaults to local Ollama or rule reasoning.</p>
                 <div class="form-group">
                     <label for="input-groq-key">Groq API Key:</label>
                     <input type="password" id="input-groq-key" placeholder="gsk_..." autocomplete="off">

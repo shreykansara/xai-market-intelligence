@@ -13,7 +13,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 # Import engine
-from chatbot_engine import ChatbotEngine, BusinessEvaluator, VectorPlacementEngine, COMPANIES_JSON_PATH
+from chatbot_engine import ChatbotEngine, BusinessEvaluator, VectorPlacementEngine, TemporalClusterMatcher, COMPANIES_JSON_PATH
 
 BASE_DIR = Path(__file__).parent.resolve()
 WEB_DIR = BASE_DIR / "web"
@@ -137,6 +137,58 @@ class ChatbotHTTPRequestHandler(BaseHTTPRequestHandler):
                 "cvp_statement": cvp_text,
                 "pestle_vector": pestle_vector,
                 "porter_vector": porter_vector,
+                "user_11d_vector": user_11d,
+                "nearest_cvps": nearest_cvps,
+                "nearest_neighbors": nearest_neighbors
+            })
+
+        elif path == "/api/evaluate_revenue_events":
+            events = payload.get("events", [])
+            if not isinstance(events, list) or len(events) == 0:
+                return self._send_error("events list parameter is required.")
+
+            result = BusinessEvaluator.evaluate_revenue_events(events)
+
+            combined_event_text = " ".join([f"{e.get('event_title', '')} {e.get('event_description', '')} {e.get('category_tag', '')}" for e in events])
+            user_11d = result["11d_vector"]
+            user_384d = VectorPlacementEngine.compute_384d_text_embedding(combined_event_text)
+
+            nearest_neighbors = VectorPlacementEngine.find_nearest_neighbors(user_11d, user_384d, engine.kb.companies, top_k=3)
+            nearest_cvps = VectorPlacementEngine.find_nearest_cvps(combined_event_text, engine.kb.companies, top_k=3)
+
+            return self._send_json({
+                "events": events,
+                "pestle_vector": result["pestle_vector"],
+                "porter_vector": result["porter_vector"],
+                "user_11d_vector": user_11d,
+                "event_impacts": result["event_impacts"],
+                "nearest_cvps": nearest_cvps,
+                "nearest_neighbors": nearest_neighbors
+            })
+
+        elif path == "/api/match_revenue_clusters":
+            revenue_series = payload.get("revenue_series", [])
+            if not isinstance(revenue_series, list) or len(revenue_series) == 0:
+                return self._send_error("revenue_series array parameter is required.")
+
+            result = TemporalClusterMatcher.process_time_series(revenue_series)
+
+            stored_titles = " ".join([c["title"] + " " + c["description"] for c in result["stored_clusters"]])
+            if not stored_titles:
+                stored_titles = "Revenue Market Intelligence Analysis"
+
+            user_11d = result["11d_vector"]
+            user_384d = VectorPlacementEngine.compute_384d_text_embedding(stored_titles)
+
+            nearest_neighbors = VectorPlacementEngine.find_nearest_neighbors(user_11d, user_384d, engine.kb.companies, top_k=3)
+            nearest_cvps = VectorPlacementEngine.find_nearest_cvps(stored_titles, engine.kb.companies, top_k=3)
+
+            return self._send_json({
+                "analyzed_series": result["analyzed_series"],
+                "matched_clusters": result["matched_clusters"],
+                "stored_clusters": result["stored_clusters"],
+                "pestle_vector": result["pestle_vector"],
+                "porter_vector": result["porter_vector"],
                 "user_11d_vector": user_11d,
                 "nearest_cvps": nearest_cvps,
                 "nearest_neighbors": nearest_neighbors

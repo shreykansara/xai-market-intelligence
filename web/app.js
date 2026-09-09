@@ -88,22 +88,353 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // Navigation: Change CVP / Back to Step 1
-    if (btnChangeCvp) btnChangeCvp.addEventListener('click', showStep1View);
-    if (btnBackToStep1) btnBackToStep1.addEventListener('click', showStep1View);
+    // Dual-Mode State
+    let activeIntelligenceMode = 'cvp'; // 'cvp' or 'revenue'
+    let activeRevenueEvents = [];
+    let activeRevenueEventImpacts = [];
+
+    // Screen Views
+    const viewModeSelection = document.getElementById('view-mode-selection');
+    const viewStep1Cvp = document.getElementById('view-step1-cvp');
+    const viewStep1Revenue = document.getElementById('view-step1-revenue');
+
+    // Navigation Buttons
+    const btnSelectCvpMode = document.getElementById('btn-select-cvp-mode');
+    const btnSelectRevenueMode = document.getElementById('btn-select-revenue-mode');
+    const btnBackHubCvp = document.getElementById('btn-back-hub-cvp');
+    const btnBackHubRevenue = document.getElementById('btn-back-hub-revenue');
+
+    // Revenue Controls
+    const formRevenueInput = document.getElementById('form-revenue-input');
+    const revenueTableBody = document.getElementById('revenue-table-body');
+    const btnAddEventRow = document.getElementById('btn-add-event-row');
+    const btnPresetRetail = document.getElementById('btn-preset-retail');
+    const btnPresetTech = document.getElementById('btn-preset-tech');
+    const revenueResultsPanel = document.getElementById('revenue-results-panel');
+    const canvasRevenuePestle = document.getElementById('canvas-revenue-pestle');
+    const canvasRevenuePorter = document.getElementById('canvas-revenue-porter');
+    const revenueImpactsList = document.getElementById('revenue-impacts-list');
+    const revenuePeersList = document.getElementById('revenue-peers-list');
+    const btnProceedRevenueChatbot = document.getElementById('btn-proceed-revenue-chatbot');
+
+    // Screen Switching Handler
+    function switchScreen(targetView) {
+        [viewModeSelection, viewStep1Cvp, viewStep1Revenue, viewStep2].forEach(view => {
+            if (view) {
+                view.classList.remove('active');
+                view.classList.add('hidden');
+            }
+        });
+        if (targetView) {
+            targetView.classList.remove('hidden');
+            targetView.classList.add('active');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+    }
+
+    if (btnSelectCvpMode) {
+        btnSelectCvpMode.addEventListener('click', () => {
+            activeIntelligenceMode = 'cvp';
+            switchScreen(viewStep1Cvp);
+        });
+    }
+    if (btnSelectRevenueMode) {
+        btnSelectRevenueMode.addEventListener('click', () => {
+            activeIntelligenceMode = 'revenue';
+            switchScreen(viewStep1Revenue);
+            if (revenueTableBody && revenueTableBody.children.length === 0) {
+                loadRetailPreset();
+            }
+        });
+    }
+    if (btnBackHubCvp) {
+        btnBackHubCvp.addEventListener('click', () => switchScreen(viewModeSelection));
+    }
+    if (btnBackHubRevenue) {
+        btnBackHubRevenue.addEventListener('click', () => switchScreen(viewModeSelection));
+    }
 
     function showStep1View() {
         conversationHistory = [];
-        viewStep2.classList.add('hidden');
-        viewStep1.classList.remove('hidden');
-        step1ResultsPanel.classList.add('hidden');
-        window.scrollTo({ top: 0, behavior: 'smooth' });
+        if (activeIntelligenceMode === 'revenue') {
+            switchScreen(viewStep1Revenue);
+        } else {
+            switchScreen(viewStep1Cvp);
+        }
     }
 
     function showStep2View() {
-        viewStep1.classList.add('hidden');
-        viewStep2.classList.remove('hidden');
-        window.scrollTo({ top: 0, behavior: 'smooth' });
+        switchScreen(viewStep2);
+    }
+
+    // Drag & Drop Controls
+    const revenueDropzone = document.getElementById('revenue-dropzone');
+    const inputFileRevenue = document.getElementById('input-file-revenue');
+    const fileStatusBar = document.getElementById('file-status-bar');
+    const fileNameLabel = document.getElementById('file-name-label');
+    const fileCountTag = document.getElementById('file-count-tag');
+    const btnClearFile = document.getElementById('btn-clear-file');
+    const btnAnalyzeRevenue = document.getElementById('btn-analyze-revenue');
+    const correlationMatrixList = document.getElementById('correlation-matrix-list');
+
+    const btnPresetCsvRetail = document.getElementById('btn-preset-csv-retail');
+    const btnPresetCsvTech = document.getElementById('btn-preset-csv-tech');
+
+    let parsedRevenueSeries = [];
+
+    // Drag & Drop Event Listeners
+    if (revenueDropzone && inputFileRevenue) {
+        revenueDropzone.addEventListener('click', () => inputFileRevenue.click());
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            revenueDropzone.addEventListener(eventName, (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                revenueDropzone.classList.add('drag-over');
+            });
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            revenueDropzone.addEventListener(eventName, (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                revenueDropzone.classList.remove('drag-over');
+            });
+        });
+
+        revenueDropzone.addEventListener('drop', (e) => {
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleUploadedFile(files[0]);
+            }
+        });
+
+        inputFileRevenue.addEventListener('change', (e) => {
+            if (inputFileRevenue.files.length > 0) {
+                handleUploadedFile(inputFileRevenue.files[0]);
+            }
+        });
+    }
+
+    if (btnClearFile) {
+        btnClearFile.addEventListener('click', () => {
+            parsedRevenueSeries = [];
+            if (inputFileRevenue) inputFileRevenue.value = '';
+            if (fileStatusBar) fileStatusBar.classList.add('hidden');
+        });
+    }
+
+    function handleUploadedFile(file) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const content = e.target.result;
+            parseAndSetRevenueSeries(content, file.name);
+        };
+        reader.readAsText(file);
+    }
+
+    function parseAndSetRevenueSeries(content, filename = 'sales_data.csv') {
+        const lines = content.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
+        const series = [];
+
+        if (filename.endsWith('.json')) {
+            try {
+                const jsonObj = JSON.parse(content);
+                const arr = Array.isArray(jsonObj) ? jsonObj : (jsonObj.data || jsonObj.revenue_series || []);
+                arr.forEach(item => {
+                    series.push({
+                        period: item.period || item.date || item.quarter || 'Q1',
+                        revenue: floatVal(item.revenue || item.sales || item.value || 0),
+                        change_pct: floatVal(item.change_pct || item.change || 0)
+                    });
+                });
+            } catch (err) {
+                alert('Invalid JSON file format.');
+                return;
+            }
+        } else {
+            let headerFound = false;
+            lines.forEach(line => {
+                const parts = line.split(',').map(p => p.trim().replace(/^["']|["']$/g, ''));
+                if (parts.length >= 2) {
+                    const first = parts[0].toLowerCase();
+                    if (!headerFound && (first.includes('date') || first.includes('period') || first.includes('quarter'))) {
+                        headerFound = true;
+                        return;
+                    }
+                    const period = parts[0];
+                    const val = floatVal(parts[1]);
+                    const chg = parts.length >= 3 ? floatVal(parts[2]) : 0.0;
+                    series.push({ period, revenue: val, change_pct: chg });
+                }
+            });
+        }
+
+        if (series.length === 0) {
+            alert('No valid revenue rows detected in file.');
+            return;
+        }
+
+        parsedRevenueSeries = series;
+        if (fileNameLabel) fileNameLabel.textContent = filename;
+        if (fileCountTag) fileCountTag.textContent = `${series.length} periods loaded`;
+        if (fileStatusBar) fileStatusBar.classList.remove('hidden');
+    }
+
+    function floatVal(val) {
+        if (typeof val === 'number') return val;
+        const cleaned = strVal(val).replace('%', '').replace('$', '').replace(/,/g, '').trim();
+        const parsed = parseFloat(cleaned);
+        return isNaN(parsed) ? 0.0 : parsed;
+    }
+
+    function strVal(v) { return v === null || v === undefined ? '' : String(v); }
+
+    // Sample Presets
+    if (btnPresetCsvRetail) {
+        btnPresetCsvRetail.addEventListener('click', () => {
+            const sampleCsv = `Period,Revenue_USD,Change_Pct,Notes
+2025-Q1,120000,-18.5,Import Duty Increase & Customs Congestion
+2025-Q2,105000,-12.5,Port Freight Bottleneck & Logistics Delay
+2025-Q3,128000,+21.9,DTC Mobile App Launch & Checkout Optimization
+2025-Q4,130000,+1.5,Standard Holiday Season Sales`;
+            parseAndSetRevenueSeries(sampleCsv, 'retail_apparel_sales_2025.csv');
+        });
+    }
+
+    if (btnPresetCsvTech) {
+        btnPresetCsvTech.addEventListener('click', () => {
+            const sampleCsv = `Period,MRR_USD,Change_Pct,Notes
+2025-Q1,450000,-25.0,Competitor Freemium & Enterprise Price Cut
+2025-Q2,382500,-15.0,Corporate IT Spending Freeze
+2025-Q3,497250,+30.0,AI Automation Launch & SOC2 Compliance Certification
+2025-Q4,499000,+0.3,Standard Mid-Market Renewals`;
+            parseAndSetRevenueSeries(sampleCsv, 'saas_mrr_history_2025.csv');
+        });
+    }
+
+    // Submit File & Analyze
+    if (btnAnalyzeRevenue) {
+        btnAnalyzeRevenue.addEventListener('click', async () => {
+            if (parsedRevenueSeries.length === 0) {
+                alert('Please drag & drop or select a sales CSV file first, or click a Sample Dataset.');
+                return;
+            }
+
+            btnAnalyzeRevenue.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Matching Revenue Timestamps & Filtering Clusters...`;
+            btnAnalyzeRevenue.disabled = true;
+
+            try {
+                const response = await fetch('/api/match_revenue_clusters', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ revenue_series: parsedRevenueSeries, groq_api_key: groqApiKey })
+                });
+
+                const data = await response.json();
+                btnAnalyzeRevenue.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles"></i> Match Revenue Fluctuation & Filter Relevant Market Clusters`;
+                btnAnalyzeRevenue.disabled = false;
+
+                if (data.error) {
+                    alert(`Error: ${data.error}`);
+                    return;
+                }
+
+                activePestleVector = data.pestle_vector || [0.3, 0.3, 0.3, 0.3, 0.3, 0.3];
+                activePorterVector = data.porter_vector || [0.3, 0.3, 0.3, 0.3, 0.3];
+                activeUser11DVector = data.user_11d_vector || [...activePestleVector, ...activePorterVector];
+                activeNearestCvps = data.nearest_cvps || [];
+                activeMatchedClusters = data.matched_clusters || [];
+                activeStoredClusters = data.stored_clusters || [];
+
+                // Render Correlation Matrix
+                renderCorrelationMatrix(activeMatchedClusters);
+
+                // Render Radar Canvases
+                drawPestleCanvas(canvasRevenuePestle, activePestleVector);
+                drawPorterCanvas(canvasRevenuePorter, activePorterVector);
+                updateLegendValues('val-rev-p', activeUser11DVector);
+
+                // Render Benchmark Peers
+                renderRevenuePeers(activeNearestCvps);
+
+                // Show Results
+                revenueResultsPanel.classList.remove('hidden');
+                revenueResultsPanel.scrollIntoView({ behavior: 'smooth' });
+
+            } catch (err) {
+                btnAnalyzeRevenue.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles"></i> Match Revenue Fluctuation & Filter Relevant Market Clusters`;
+                btnAnalyzeRevenue.disabled = false;
+                alert(`Connection error: ${err.message}`);
+            }
+        });
+    }
+
+    function renderCorrelationMatrix(clusters) {
+        if (!correlationMatrixList) return;
+        if (!clusters || clusters.length === 0) {
+            correlationMatrixList.innerHTML = '<p class="text-dim">No market clusters matched.</p>';
+            return;
+        }
+
+        correlationMatrixList.innerHTML = clusters.map(c => {
+            const isVerified = c.stored;
+            const cardClass = isVerified ? 'status-verified' : 'status-discarded';
+            const badgeHtml = isVerified 
+                ? `<span class="badge-verified"><i class="fa-solid fa-circle-check"></i> VERIFIED RELEVANT (STORED)</span>`
+                : `<span class="badge-discarded"><i class="fa-solid fa-circle-xmark"></i> UNCORRELATED NOISE (DISCARDED)</span>`;
+
+            return `
+                <div class="cluster-card ${cardClass}">
+                    <div class="cluster-header">
+                        <div class="cluster-title-group">
+                            <h4>${escapeHtml(c.title)}</h4>
+                            <div class="cluster-meta">
+                                <span><i class="fa-solid fa-calendar-days"></i> Timeframe: ${escapeHtml(c.period)}</span>
+                                <span><i class="fa-solid fa-tag"></i> Category: ${escapeHtml(c.category)}</span>
+                                <span><i class="fa-solid fa-chart-line"></i> Sales Impact: ${escapeHtml(c.sales_impact)}</span>
+                            </div>
+                        </div>
+                        ${badgeHtml}
+                    </div>
+                    <div class="cluster-desc">${escapeHtml(c.description)}</div>
+                    <div class="cluster-rationale"><strong>Filter Rationale:</strong> ${escapeHtml(c.rationale)}</div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    if (btnProceedRevenueChatbot) {
+        btnProceedRevenueChatbot.addEventListener('click', () => {
+            const topPeer = activeNearestCvps[0] ? activeNearestCvps[0].company : 'Benchmark Leaders';
+            sidebarActiveCvp.innerHTML = `<strong>Revenue Mode Active</strong><br/><span style="font-size:12px; color:var(--text-muted);">${activeStoredClusters.length} Verified Stored Clusters</span>`;
+
+            renderSidebarNeighbors(activeNearestCvps);
+            drawPestleRadarChart(activePestleVector);
+            drawPorterRadarChart(activePorterVector);
+            updatePestleLegendValues(activePestleVector);
+            updatePorterLegendValues(activePorterVector);
+
+            chatMessages.innerHTML = '';
+            conversationHistory = [];
+
+            const clusterSummaries = activeStoredClusters.map(c => `[${c.period}] ${c.title} (${c.category}): ${c.sales_impact}`).join('\n');
+
+            appendSystemMessage(`OMNISCOPE REVENUE & TEMPORAL CLUSTER CHATBOT ACTIVE
+
+Evaluated sales time series against macro market clusters:
+- Verified & Stored Clusters: ${activeStoredClusters.length}
+- Primary Benchmark Peer: ${escapeHtml(topPeer)}
+
+Verified Market Shocks:
+${escapeHtml(clusterSummaries || 'None (no sales dips/spikes co-occurred)')}
+
+I am configured to answer market intelligence queries strictly informed by your verified sales dips/rises and co-occurring market event clusters.
+
+How can I help you analyze your verified market shocks today?`);
+
+            switchScreen(viewStep2);
+        });
     }
 
     // ===================================================================
@@ -518,6 +849,54 @@ How can I help you navigate your market environment today?`);
             .replace(/\n/g, '<br>');
 
         return `<p>${formatted}</p>`;
+    }
+
+    function renderRevenueImpacts(impacts) {
+        if (!revenueImpactsList) return;
+        if (!impacts || impacts.length === 0) {
+            revenueImpactsList.innerHTML = '<p class="text-dim">No event impacts available.</p>';
+            return;
+        }
+
+        revenueImpactsList.innerHTML = impacts.map(item => {
+            const isDip = item.impact.includes('-');
+            const pillClass = isDip ? 'pill-dip' : 'pill-spike';
+            return `
+                <div class="impact-card-item">
+                    <div>
+                        <div class="ev-title">${escapeHtml(item.event)}</div>
+                        <div class="ev-factor"><i class="fa-solid fa-tag"></i> Strategic Factor: ${escapeHtml(item.primary_factor)}</div>
+                    </div>
+                    <span class="${pillClass}">${escapeHtml(item.impact)}</span>
+                </div>
+            `;
+        }).join('');
+    }
+
+    function renderRevenuePeers(matches) {
+        if (!revenuePeersList) return;
+        if (!matches || matches.length === 0) {
+            revenuePeersList.innerHTML = '<p class="text-dim">No benchmark matches found.</p>';
+            return;
+        }
+
+        const borderColors = ['#00E5FF', '#00FF66', '#10B981'];
+        revenuePeersList.innerHTML = matches.map((m, idx) => `
+            <div class="cvp-match-card" style="border-left: 4px solid ${borderColors[idx % 3]};">
+                <div class="cvp-match-header">
+                    <span><strong style="color: #fff; font-size: 14px;">${escapeHtml(m.company)}</strong> <span class="cvp-match-sector-tag"><i class="fa-solid fa-building"></i> ${escapeHtml(m.sector)}</span></span>
+                    <span class="cvp-match-badge" style="background: rgba(0, 229, 255, 0.12); color: #00E5FF; border: 1px solid rgba(0, 229, 255, 0.3);">${m.similarity_pct}% Vector Similarity</span>
+                </div>
+                <p class="cvp-match-cvp">"${escapeHtml(m.cvp)}"</p>
+            </div>
+        `).join('');
+    }
+
+    function updateLegendValues(prefix, vec) {
+        for (let i = 0; i < vec.length; i++) {
+            const el = document.getElementById(`${prefix}${i}`);
+            if (el) el.textContent = (vec[i] || 0.35).toFixed(2);
+        }
     }
 
     function escapeHtml(str) {

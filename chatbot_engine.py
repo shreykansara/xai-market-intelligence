@@ -73,36 +73,61 @@ class VectorPlacementEngine:
     and find Nearest-Neighbor benchmark companies.
     """
     
-    # Keyword weight vectors for 11 dimensions
-    DIMENSION_KEYWORDS = {
-        0: ["policy", "government", "regulation", "tariff", "trade", "tax", "subsidy", "political", "election", "sanctions"],
-        1: ["inflation", "cost", "interest rate", "revenue", "price", "budget", "economic", "market", "spending", "loan"],
-        2: ["consumer", "lifestyle", "social", "demographic", "trend", "brand", "community", "culture", "habit", "people"],
-        3: ["technology", "ai", "cloud", "software", "automation", "digital", "chip", "gpu", "app", "algorithm", "tech"],
-        4: ["legal", "compliance", "law", "patent", "copyright", "lawsuit", "privacy", "gdpr", "ftc", "sec", "contract"],
-        5: ["environmental", "climate", "carbon", "sustainability", "emissions", "recycling", "green", "energy", "waste"],
-        6: ["entrant", "startup", "barrier", "capital cost", "scale", "setup", "entry", "new player", "moat"],
-        7: ["buyer", "customer", "loyalty", "churn", "pricing power", "switching cost", "discount", "shopper", "user"],
-        8: ["supplier", "vendor", "raw material", "fabrication", "mining", "component", "sourcing", "factory", "supply chain"],
-        9: ["substitute", "alternative", "replacement", "at-home", "competing solution", "other option"],
-        10: ["rivalry", "competitor", "competition", "market share", "price war", "rival", "race", "dominant player"]
+    STRATEGIC_CONCEPT_ANCHORS = {
+        0: ["tariff", "sanction", "sanctions", "government", "policy", "trade war", "regulation", "state subsidy", "geopolitical", "ministry", "legislation", "bipartisan", "election", "diplomatic", "embargo", "parliament", "congress", "executive order", "state department", "customs duty"],
+        1: ["inflation", "interest rate", "gdp", "recession", "central bank", "currency", "devaluation", "spending freeze", "capital cost", "monetary policy", "debt market", "fiscal", "purchasing power", "stock market", "financial crisis", "revenue dip", "price hike"],
+        2: ["demographic", "lifestyle", "public health", "labor union", "workforce", "consumer trend", "brand perception", "boycott", "employment", "cultural", "societal", "community welfare", "household spending", "public sentiment"],
+        3: ["ai", "artificial intelligence", "software", "automation", "semiconductor", "chip", "cloud", "cybersecurity", "r&d", "patent", "digital", "algorithm", "platform", "machine learning", "hardware", "microcontroller", "it infrastructure"],
+        4: ["lawsuit", "court", "antitrust", "gdpr", "privacy", "compliance", "ftc", "sec", "litigation", "verdict", "patent infringement", "contract dispute", "liability", "statute", "legal penalty", "court ruling"],
+        5: ["climate", "carbon", "emissions", "esg", "sustainability", "renewable", "green energy", "recycling", "pollution", "waste", "weather disaster", "ecological", "resource conservation", "environmental penalty"],
+        6: ["startup", "new entrant", "barrier to entry", "capital requirement", "incumbent moat", "licensing barrier", "scale economies", "market entry", "new competitor", "setup cost", "entry barrier"],
+        7: ["buyer", "customer leverage", "price sensitivity", "switching cost", "churn", "buyer discount", "pricing power", "customer choice", "client retention", "shopper demand", "buyer leverage"],
+        8: ["supply chain", "supplier", "raw material", "shortage", "vendor price", "port congestion", "bottleneck", "shipping delay", "component cost", "freight transit", "logistics delay", "fabrication", "input cost"],
+        9: ["substitute", "alternative product", "workaround", "obsolete", "competing replacement", "at-home alternative", "cannibalization", "disruptive tech", "replacement solution", "alternative adoption"],
+        10: ["price war", "rivalry", "competitor", "market share", "freemium", "merger", "acquisition", "rival campaign", "consolidation", "head to head", "competitive battle", "race", "dominant player"]
     }
 
     @classmethod
     def compute_11d_vector(cls, text: str) -> list:
         """
-        Computes an 11-dimensional strategic vector (0.0 to 1.0) based on text content & strategic domain indicators.
+        Computes an authentic 11-dimensional strategic vector (0.05 to 0.95) based on semantic concept activation.
         """
+        if not text or not text.strip():
+            return [0.05] * 11
+
         text_lower = text.lower()
-        vector = [0.3] * 11  # Baseline moderate impact
+        words = set(re.findall(r"\w+", text_lower))
+        vector = []
 
-        for dim_idx, keywords in cls.DIMENSION_KEYWORDS.items():
-            matches = sum(1 for kw in keywords if kw in text_lower)
-            if matches > 0:
-                # Scale between 0.5 and 0.95 depending on match density
-                vector[dim_idx] = min(0.95, 0.45 + (matches * 0.12))
+        for dim_idx in range(11):
+            anchors = cls.STRATEGIC_CONCEPT_ANCHORS.get(dim_idx, [])
+            exact_matches = 0
+            phrase_matches = 0
 
-        return [round(v, 2) for v in vector]
+            for anchor in anchors:
+                if " " in anchor:
+                    if anchor in text_lower:
+                        phrase_matches += 1
+                else:
+                    if anchor in words or anchor in text_lower:
+                        exact_matches += 1
+
+            total_signal = (phrase_matches * 2.0) + (exact_matches * 1.0)
+
+            if total_signal == 0:
+                score = 0.05
+            elif total_signal == 1.0:
+                score = 0.35
+            elif total_signal == 2.0:
+                score = 0.70
+            elif total_signal == 3.0:
+                score = 0.85
+            else:
+                score = min(0.95, round(0.85 + ((total_signal - 3.0) * 0.03), 2))
+
+            vector.append(score)
+
+        return vector
 
     @classmethod
     def compute_384d_text_embedding(cls, text: str, dim: int = 384) -> list:
@@ -298,15 +323,66 @@ class GroqOllamaProvider:
         text = re.sub(r"💡?\s*(?:Pro Tip|Note):\s*You can add your.*", "", text, flags=re.IGNORECASE)
         return text.strip()
 
+    OBSOLETE_GROQ_MODELS = {
+        "llama-3.3-70b-versatile",
+        "llama-3.1-70b-versatile",
+        "llama3-70b-8192",
+        "llama3-8b-8192",
+        "mixtral-8x7b-32768",
+        "gemma-7b-it",
+        "gemma2-9b-it"
+    }
+
+    DEFAULT_ACTIVE_GROQ_MODELS = [
+        "openai/gpt-oss-120b",
+        "openai/gpt-oss-20b",
+        "llama-3.1-8b-instant",
+        "qwen/qwen3.6-27b",
+        "qwen/qwen3.8-27b",
+        "groq/compound"
+    ]
+
+    def _get_active_groq_models(self) -> list:
+        """Dynamically queries Groq API for active non-obsolete models, falling back to curated active list."""
+        if not self.groq_api_key:
+            return self.DEFAULT_ACTIVE_GROQ_MODELS
+
+        url = "https://api.groq.com/openai/v1/models"
+        headers = {
+            "Authorization": f"Bearer {self.groq_api_key}",
+            "Content-Type": "application/json"
+        }
+        try:
+            req = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+                models_data = data.get("data", [])
+                active_ids = [
+                    m["id"] for m in models_data 
+                    if isinstance(m, dict) and "id" in m and m["id"] not in self.OBSOLETE_GROQ_MODELS
+                ]
+                if active_ids:
+                    priority_order = [
+                        "openai/gpt-oss-120b", 
+                        "openai/gpt-oss-20b", 
+                        "llama-3.1-8b-instant", 
+                        "qwen/qwen3.6-27b", 
+                        "qwen/qwen3.8-27b", 
+                        "groq/compound"
+                    ]
+                    sorted_models = [m for m in priority_order if m in active_ids]
+                    for m in active_ids:
+                        if m not in sorted_models:
+                            sorted_models.append(m)
+                    return sorted_models
+        except Exception as e:
+            print(f"[GroqProvider] Dynamic model list fetch skipped: {e}")
+
+        return self.DEFAULT_ACTIVE_GROQ_MODELS
+
     def _call_groq(self, system_prompt: str, user_prompt: str, chat_history: list = None) -> str:
         url = "https://api.groq.com/openai/v1/chat/completions"
-        models_to_try = [
-            "llama-3.3-70b-versatile",
-            "llama-3.1-70b-versatile",
-            "llama3-70b-8192",
-            "llama-3.1-8b-instant",
-            "mixtral-8x7b-32768"
-        ]
+        models_to_try = self._get_active_groq_models()
 
         messages = [{"role": "system", "content": system_prompt}]
         if chat_history and isinstance(chat_history, list):
@@ -522,6 +598,241 @@ class BusinessEvaluator:
         kb = statement_of_key_benefit.strip() or "delivers superior value and performance"
 
         return f"For {tc} who {sn}, the {pn} is a {pc} that {kb}."
+
+    @staticmethod
+    def evaluate_revenue_events(events: list) -> dict:
+        """
+        Analyzes historical revenue time-series events (dips & spikes) to calculate PESTLE & Porter 5 Forces risk vectors.
+        """
+        axis_names = [
+            'Political', 'Economic', 'Social', 'Technological', 'Legal', 'Environmental',
+            'Threat of New Entrants', 'Buyer Power', 'Supplier Power', 'Threat of Substitutes', 'Competitive Rivalry'
+        ]
+
+        scores = [0.35] * 11
+        event_impacts = []
+
+        category_map = {
+            'political': 0, 'economic': 1, 'social': 2, 'technological': 3, 'legal': 4, 'environmental': 5,
+            'threat of new entrants': 6, 'entrants': 6,
+            'buyer power': 7, 'buyer': 7,
+            'supplier power': 8, 'supplier': 8,
+            'threat of substitutes': 9, 'substitutes': 9,
+            'competitive rivalry': 10, 'rivalry': 10
+        }
+
+        for ev in events:
+            title = ev.get('event_title', '').strip()
+            desc = ev.get('event_description', '').strip()
+            cat = ev.get('category_tag', '').strip().lower()
+            impact = ev.get('impact_type', 'dip').lower()
+            change_str = str(ev.get('revenue_change', '10')).replace('%', '').replace('$', '').strip()
+
+            try:
+                change_val = abs(float(change_str))
+            except ValueError:
+                change_val = 10.0
+
+            severity = min(0.35, max(0.05, change_val / 50.0))
+
+            full_text = f"{title} {desc}"
+            text_vector = VectorPlacementEngine.compute_11d_vector(full_text)
+            target_idx = category_map.get(cat, None)
+
+            if impact == 'dip':
+                if target_idx is not None:
+                    scores[target_idx] += severity * 1.5
+                for idx in range(11):
+                    scores[idx] += text_vector[idx] * severity * 0.4
+                event_impacts.append({
+                    "event": title or "Revenue Dip Event",
+                    "impact": f"-{change_val}% Revenue Dip",
+                    "primary_factor": axis_names[target_idx] if target_idx is not None else "Multi-Factor Market Shock"
+                })
+            else:
+                if target_idx is not None:
+                    scores[target_idx] = max(0.10, scores[target_idx] - severity * 0.8)
+                for idx in range(11):
+                    scores[idx] = max(0.10, scores[idx] - text_vector[idx] * severity * 0.2)
+                event_impacts.append({
+                    "event": title or "Revenue Spike Event",
+                    "impact": f"+{change_val}% Revenue Growth",
+                    "primary_factor": axis_names[target_idx] if target_idx is not None else "Market Opportunity"
+                })
+
+        clamped_scores = [round(min(0.95, max(0.12, s)), 2) for s in scores]
+
+        return {
+            "pestle_vector": clamped_scores[0:6],
+            "porter_vector": clamped_scores[6:11],
+            "11d_vector": clamped_scores,
+            "event_impacts": event_impacts
+        }
+
+
+class TemporalClusterMatcher:
+    """
+    Parses date-indexed revenue time series data, detects significant sales dips/rises,
+    and correlates them against market event clusters to filter verified relevant clusters vs noise.
+    """
+
+    SAMPLE_MARKET_CLUSTERS = [
+        {
+            "id": "cluster_pol_01",
+            "period": "2025-Q1",
+            "title": "Cross-Border Import Tariff Increase",
+            "description": "Government enacted 18% import duty hike on textile and retail apparel imports.",
+            "category": "Political",
+            "axis_idx": 0
+        },
+        {
+            "id": "cluster_sup_02",
+            "period": "2025-Q2",
+            "title": "Port Freight Congestion & Shipping Bottleneck",
+            "description": "Major container shipping hub delays caused 4-week supply chain inventory shortages.",
+            "category": "Supplier Power",
+            "axis_idx": 8
+        },
+        {
+            "id": "cluster_tech_03",
+            "period": "2025-Q3",
+            "title": "Direct-to-Consumer Mobile Checkout Release",
+            "description": "Rolled out 1-click native checkout app reducing buyer abandon rates.",
+            "category": "Technological",
+            "axis_idx": 3
+        },
+        {
+            "id": "cluster_riv_04",
+            "period": "2025-Q1",
+            "title": "Aggressive Competitor Freemium Launch",
+            "description": "Market leader slashed subscription prices by 30% and introduced free tier.",
+            "category": "Competitive Rivalry",
+            "axis_idx": 10
+        },
+        {
+            "id": "cluster_eco_05",
+            "period": "2025-Q2",
+            "title": "Corporate IT Procurement Spend Freeze",
+            "description": "Macro-economic rate hikes led enterprise buyers to pause software renewals.",
+            "category": "Economic",
+            "axis_idx": 1
+        },
+        {
+            "id": "cluster_noise_06",
+            "period": "2025-Q4",
+            "title": "Unrelated Regional Labor Union Negotiation",
+            "description": "Local transit union negotiations occurred with zero impact on digital operations.",
+            "category": "Social",
+            "axis_idx": 2
+        }
+    ]
+
+    @staticmethod
+    def process_time_series(revenue_series: list) -> dict:
+        """
+        Input: list of dicts: [{'period': '2025-Q1', 'change_pct': -18.5, 'revenue': 120000}, ...]
+        Returns:
+            - analyzed_series: series tagged with dip/rise/stable
+            - matched_clusters: clusters evaluated for temporal consistency (stored vs discarded)
+            - pestle_vector: 6-D scores from stored clusters only
+            - porter_vector: 5-D scores from stored clusters only
+            - 11d_vector: 11-D scores
+        """
+        axis_names = [
+            'Political', 'Economic', 'Social', 'Technological', 'Legal', 'Environmental',
+            'Threat of New Entrants', 'Buyer Power', 'Supplier Power', 'Threat of Substitutes', 'Competitive Rivalry'
+        ]
+
+        scores = [0.35] * 11
+        analyzed_series = []
+        fluctuation_periods = {}
+
+        for item in revenue_series:
+            period = str(item.get('period', '')).strip()
+            try:
+                val = float(item.get('revenue', item.get('value', 0)))
+            except (ValueError, TypeError):
+                val = 0.0
+
+            try:
+                chg = float(item.get('change_pct', item.get('change', 0)))
+            except (ValueError, TypeError):
+                chg = 0.0
+
+            label = item.get('label', '')
+
+            trend = 'stable'
+            if chg <= -5.0:
+                trend = 'dip'
+            elif chg >= 5.0:
+                trend = 'spike'
+
+            entry = {
+                'period': period,
+                'revenue': val,
+                'change_pct': chg,
+                'trend': trend,
+                'label': label
+            }
+            analyzed_series.append(entry)
+            if trend != 'stable':
+                fluctuation_periods[period.lower()] = entry
+
+        matched_clusters = []
+        stored_clusters = []
+
+        for cluster in TemporalClusterMatcher.SAMPLE_MARKET_CLUSTERS:
+            c_period = cluster['period'].lower()
+            fluc = fluctuation_periods.get(c_period)
+
+            if not fluc:
+                for period_key, f_data in fluctuation_periods.items():
+                    if c_period in period_key or period_key in c_period:
+                        fluc = f_data
+                        break
+
+            if fluc:
+                trend = fluc['trend']
+                chg_mag = abs(fluc['change_pct'])
+                severity = min(0.40, max(0.10, chg_mag / 40.0))
+
+                axis_idx = cluster['axis_idx']
+                if trend == 'dip':
+                    scores[axis_idx] += severity * 1.6
+                else:
+                    scores[axis_idx] = max(0.10, scores[axis_idx] - severity * 0.8)
+
+                matched_item = {
+                    **cluster,
+                    "matched_period": fluc['period'],
+                    "sales_impact": f"{fluc['change_pct']:+.1f}% Revenue {trend.upper()}",
+                    "status": "VERIFIED_RELEVANT",
+                    "stored": True,
+                    "rationale": f"Consistent Temporal Match: Sales {trend} of {fluc['change_pct']:+.1f}% occurred in {fluc['period']} co-occurring with market event cluster."
+                }
+                matched_clusters.append(matched_item)
+                stored_clusters.append(matched_item)
+            else:
+                matched_item = {
+                    **cluster,
+                    "matched_period": cluster['period'],
+                    "sales_impact": "0.0% (No Sales Impact)",
+                    "status": "UNCORRELATED_NOISE",
+                    "stored": False,
+                    "rationale": "Uncorrelated Noise: No significant sales dip or rise detected during this market cluster period. Discarded from intelligence base."
+                }
+                matched_clusters.append(matched_item)
+
+        clamped_scores = [round(min(0.95, max(0.12, s)), 2) for s in scores]
+
+        return {
+            "analyzed_series": analyzed_series,
+            "matched_clusters": matched_clusters,
+            "stored_clusters": stored_clusters,
+            "pestle_vector": clamped_scores[0:6],
+            "porter_vector": clamped_scores[6:11],
+            "11d_vector": clamped_scores
+        }
 
 
 class ChatbotEngine:
