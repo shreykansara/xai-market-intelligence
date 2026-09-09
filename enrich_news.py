@@ -257,50 +257,50 @@ def deterministic_fallback_location(full_text: str) -> str:
 STRATEGIC_CONCEPT_ANCHORS = {
     # PESTLE (6)
     "political": [
-        "tariff", "sanction", "sanctions", "government", "policy", "trade war", "regulation", "state subsidy",
-        "geopolitical", "ministry", "legislation", "bipartisan", "election", "diplomatic", "embargo", "parliament", "congress", "executive order", "state department", "customs duty"
+        "tariff", "tariffs", "sanction", "sanctions", "government", "policy", "trade war", "regulation", "state subsidy",
+        "geopolitical", "ministry", "legislation", "bipartisan", "election", "diplomatic", "embargo", "parliament", "congress", "executive order", "state department", "customs duty", "prime minister", "president", "pm modi", "white house", "bilateral ties", "geopolitics"
     ],
     "economic": [
         "inflation", "interest rate", "gdp", "recession", "central bank", "currency", "devaluation",
-        "spending freeze", "capital cost", "monetary policy", "debt market", "fiscal", "purchasing power", "stock market", "financial crisis", "revenue dip", "price hike"
+        "spending freeze", "capital cost", "monetary policy", "debt market", "fiscal", "purchasing power", "stock market", "financial crisis", "revenue dip", "price hike", "ipo", "deposit rates", "quarterly results", "bond yield", "oil price", "reit", "investor", "valuation", "sec filing"
     ],
     "social": [
         "demographic", "lifestyle", "public health", "labor union", "workforce", "consumer trend",
-        "brand perception", "boycott", "employment", "cultural", "societal", "community welfare", "household spending", "public sentiment"
+        "brand perception", "boycott", "employment", "cultural", "societal", "community welfare", "household spending", "public sentiment", "youth", "education", "school", "training program", "workforce training"
     ],
     "technological": [
         "ai", "artificial intelligence", "software", "automation", "semiconductor", "chip", "cloud",
-        "cybersecurity", "r&d", "patent", "digital", "algorithm", "platform", "machine learning", "hardware", "microcontroller", "it infrastructure"
+        "cybersecurity", "r&d", "patent", "digital", "algorithm", "platform", "machine learning", "hardware", "microcontroller", "it infrastructure", "data center", "asml", "chipmaking", "processor", "app", "tech"
     ],
     "legal": [
         "lawsuit", "court", "antitrust", "gdpr", "privacy", "compliance", "ftc", "sec", "litigation",
-        "verdict", "patent infringement", "contract dispute", "liability", "statute", "legal penalty", "court ruling"
+        "verdict", "patent infringement", "contract dispute", "liability", "statute", "legal penalty", "court ruling", "fir", "police", "charged", "supreme court", "judge", "safety rules", "veto"
     ],
     "environmental": [
         "climate", "carbon", "emissions", "esg", "sustainability", "renewable", "green energy",
-        "recycling", "pollution", "waste", "weather disaster", "ecological", "resource conservation", "environmental penalty"
+        "recycling", "pollution", "waste", "weather disaster", "ecological", "resource conservation", "environmental penalty", "flood", "floods", "forest", "tree", "rain", "natural disaster", "land diversion"
     ],
 
     # Porter's 5 Forces (5)
     "threat_of_new_entrants": [
         "startup", "new entrant", "barrier to entry", "capital requirement", "incumbent moat",
-        "licensing barrier", "scale economies", "market entry", "new competitor", "setup cost", "entry barrier"
+        "licensing barrier", "scale economies", "market entry", "new competitor", "setup cost", "entry barrier", "license fee"
     ],
     "bargaining_power_of_buyers": [
         "buyer", "customer leverage", "price sensitivity", "switching cost", "churn",
-        "buyer discount", "pricing power", "customer choice", "client retention", "shopper demand", "buyer leverage"
+        "buyer discount", "pricing power", "customer choice", "client retention", "shopper demand", "buyer leverage", "consumer demand"
     ],
     "bargaining_power_of_suppliers": [
         "supply chain", "supplier", "raw material", "shortage", "vendor price", "port congestion",
-        "bottleneck", "shipping delay", "component cost", "freight transit", "logistics delay", "fabrication", "input cost"
+        "bottleneck", "shipping delay", "component cost", "freight transit", "logistics delay", "fabrication", "input cost", "resource scarcity"
     ],
     "threat_of_substitutes": [
         "substitute", "alternative product", "workaround", "obsolete", "competing replacement",
-        "at-home alternative", "cannibalization", "disruptive tech", "replacement solution", "alternative adoption"
+        "at-home alternative", "cannibalization", "disruptive tech", "replacement solution", "alternative adoption", "replacement option"
     ],
     "competitive_rivalry": [
         "price war", "rivalry", "competitor", "market share", "freemium", "merger", "acquisition",
-        "rival campaign", "consolidation", "head to head", "competitive battle", "race", "dominant player"
+        "rival campaign", "consolidation", "head to head", "competitive battle", "race", "dominant player", "fight for funds", "reboot", "rival"
     ]
 }
 
