@@ -41,9 +41,31 @@ DIMENSION_KEYS = [
 ]
 
 
-def load_news_dataset(csv_path: Path, max_records: int = 10000):
-    """Loads news headlines, 768-D contextual embeddings, and 11-D strategic embeddings."""
-    print(f"[NewsClustering] Loading dataset from '{csv_path}' (sample limit: {max_records})...", flush=True)
+def compute_strategic_impact_score(strategic_11d: list) -> float:
+    """
+    Computes a strict Strategic Impact Score (0.00 to 1.00) for a news item based on its 11-D PESTLE & Porter scores.
+    High impact requires a strong peak score (>= 0.35) in at least one strategic driver.
+    Off-topic, low-signal, or baseline noise sitting near 0.05 yields an impact score < 0.20.
+    """
+    if not strategic_11d or len(strategic_11d) < 11:
+        return 0.05
+    s_arr = np.array(strategic_11d, dtype=np.float32)
+    sorted_scores = np.sort(s_arr)[::-1]
+    peak = float(sorted_scores[0])
+    top2_mean = float(np.mean(sorted_scores[:2]))
+    active_count = float(np.sum(s_arr > 0.20))
+
+    # Weight peak impact and top 2 strategic drivers
+    impact_score = (peak * 0.60) + (top2_mean * 0.30) + min(0.10, active_count * 0.02)
+    return round(float(impact_score), 4)
+
+
+def load_news_dataset(csv_path: Path, max_records: int = 10000, min_impact_threshold: float = 0.25):
+    """
+    Loads news headlines, 768-D contextual embeddings, and 11-D strategic embeddings,
+    filtering out low-impact / off-topic news items whose strategic impact score is below threshold.
+    """
+    print(f"[NewsClustering] Loading dataset from '{csv_path}' (limit: {max_records}, min_impact: {min_impact_threshold})...", flush=True)
     if not csv_path.exists():
         print(f"[NewsClustering] ERROR: CSV file '{csv_path}' does not exist.", flush=True)
         sys.exit(1)
@@ -51,24 +73,32 @@ def load_news_dataset(csv_path: Path, max_records: int = 10000):
     records = []
     X_contextual_list = []
     Y_strategic_list = []
+    discarded_low_impact = 0
 
     with open(csv_path, "r", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         for idx, r in enumerate(reader):
-            if idx >= max_records:
+            if len(records) >= max_records:
                 break
             try:
                 c_emb = json.loads(r.get("contextual_embedding", "[]"))
                 s_emb = json.loads(r.get("strategic_embedding", "[]"))
 
                 if len(c_emb) == 768 and len(s_emb) == 11:
+                    impact_score = compute_strategic_impact_score(s_emb)
+                    # Strict filtering: Discard low-impact background noise
+                    if impact_score < min_impact_threshold:
+                        discarded_low_impact += 1
+                        continue
+
                     records.append({
                         "id": r.get("id"),
                         "date": r.get("date"),
                         "headline": r.get("headline"),
                         "source_link": r.get("source_link"),
                         "location_affected": r.get("location_affected"),
-                        "strategic_11d": s_emb
+                        "strategic_11d": s_emb,
+                        "impact_score": impact_score
                     })
                     X_contextual_list.append(c_emb)
                     Y_strategic_list.append(s_emb)
@@ -78,7 +108,11 @@ def load_news_dataset(csv_path: Path, max_records: int = 10000):
     X_contextual = np.array(X_contextual_list, dtype=np.float32)
     Y_strategic = np.array(Y_strategic_list, dtype=np.float32)
 
-    print(f"[NewsClustering] Loaded {len(records)} valid records for clustering analysis.", flush=True)
+    print(
+        f"[NewsClustering] Retained {len(records)} high-impact records. "
+        f"Strictly eliminated {discarded_low_impact} unrelated/low-impact news items.",
+        flush=True
+    )
     return records, X_contextual, Y_strategic
 
 
@@ -100,7 +134,7 @@ def construct_hybrid_feature_space(X_contextual: np.ndarray, Y_strategic: np.nda
 
 def evaluate_and_cluster(records: list, hybrid_features: np.ndarray, n_clusters: int = 15):
     """
-    Performs high-precision clustering and computes cohesion metrics.
+    Performs high-precision clustering and computes cohesion metrics, filtering out noise items.
     """
     print(f"\n[NewsClustering] Running Agglomerative Cosine Clustering (n_clusters={n_clusters})...", flush=True)
     
@@ -125,6 +159,9 @@ def evaluate_and_cluster(records: list, hybrid_features: np.ndarray, n_clusters:
         member_records = [records[i] for i in member_indices]
         member_strats = np.array([r["strategic_11d"] for r in member_records])
 
+        # Filter cluster members to keep top impactful headlines
+        sorted_members = sorted(member_records, key=lambda x: x.get("impact_score", 0.0), reverse=True)
+
         mean_strat = np.mean(member_strats, axis=0)
         top_dims_idx = np.argsort(mean_strat)[::-1][:3]
         top_strategic_drivers = [
@@ -132,12 +169,14 @@ def evaluate_and_cluster(records: list, hybrid_features: np.ndarray, n_clusters:
             for idx in top_dims_idx if mean_strat[idx] > 0.10
         ]
 
-        sample_headlines = [r["headline"] for r in member_records[:5]]
+        sample_headlines = [r["headline"] for r in sorted_members[:5]]
+        avg_cluster_impact = round(float(np.mean([r.get("impact_score", 0.0) for r in member_records])), 3)
 
         cluster_summaries[f"cluster_{cluster_id}"] = {
             "cluster_id": cluster_id,
             "total_news_items": len(member_records),
             "percentage_of_dataset": round(len(member_records) / len(records) * 100, 2),
+            "average_impact_score": avg_cluster_impact,
             "top_strategic_drivers": top_strategic_drivers,
             "sample_headlines": sample_headlines
         }

@@ -1,0 +1,739 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Omniscope AI | Admin Stage Console</title>
+  <!-- Favicon -->
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="icon" type="image/png" sizes="64x64" href="favicon.png">
+  <link rel="shortcut icon" href="favicon.ico">
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <style>
+    :root {
+      --bg-dark: #050505;          /* Pitch Black */
+      --bg-surface: #0E0E11;       /* Obsidian Panel */
+      --bg-card: #15151A;          /* Graphite Card */
+      --bg-card-hover: #1E1E24;
+      --border-color: #272730;     /* Dark Slate Border */
+      --border-accent: rgba(0, 255, 102, 0.4);
+      
+      --primary-gradient: linear-gradient(135deg, #00FF66 0%, #00C853 100%);
+      --accent-green: #00FF66;     /* Electric Bright Green */
+      --accent-emerald: #10B981;   /* Emerald */
+      --accent-mint: #00E676;
+      --accent-cyan: #00E5FF;
+      --accent-purple: #A855F7;
+      --accent-rose: #FF2D55;
+      --accent-amber: #FFB300;
+
+      --text-main: #FAFAFA;
+      --text-muted: #A1A1AA;
+      --text-dim: #71717A;
+
+      --radius-sm: 4px;
+      --radius-md: 6px;
+      --radius-lg: 8px;
+
+      --shadow-main: 0 4px 20px rgba(0, 255, 102, 0.15);
+      --shadow-card: 0 2px 10px rgba(0, 0, 0, 0.6);
+      --font-main: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-heading: 'Space Grotesk', 'Plus Jakarta Sans', sans-serif;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: var(--font-main);
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      line-height: 1.5;
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* Custom Scrollbars */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg-dark); }
+    ::-webkit-scrollbar-thumb { background: #272730; border-radius: var(--radius-sm); }
+    ::-webkit-scrollbar-thumb:hover { background: var(--accent-green); }
+
+    /* Omniscope Admin Header */
+    .admin-header {
+      background: rgba(14, 14, 17, 0.92);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border-color);
+      padding: 1rem 2rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.85rem;
+    }
+    .brand-title {
+      font-family: var(--font-heading);
+      font-size: 1.35rem;
+      font-weight: 700;
+      color: var(--text-main);
+    }
+    .brand-title span { color: var(--accent-green); }
+    .brand-badge {
+      background: rgba(0, 255, 102, 0.1);
+      color: var(--accent-green);
+      border: 1px solid rgba(0, 255, 102, 0.3);
+      padding: 0.25rem 0.65rem;
+      border-radius: var(--radius-md);
+      font-size: 0.75rem;
+      font-family: var(--font-heading);
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 1.25rem;
+    }
+    .status-pill {
+      background: rgba(0, 255, 102, 0.08);
+      color: var(--accent-green);
+      border: 1px solid rgba(0, 255, 102, 0.25);
+      padding: 0.4rem 0.95rem;
+      border-radius: 9999px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      font-family: var(--font-heading);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      background-color: var(--accent-green);
+      border-radius: 50%;
+      box-shadow: 0 0 10px var(--accent-green);
+    }
+    .user-app-link {
+      color: var(--accent-green);
+      text-decoration: none;
+      font-size: 0.9rem;
+      font-weight: 600;
+      font-family: var(--font-heading);
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+      transition: color 0.2s;
+    }
+    .user-app-link:hover { color: #80FF99; text-shadow: 0 0 10px rgba(0, 255, 102, 0.4); }
+
+    /* Admin Container & Tabs */
+    .admin-container {
+      max-width: 1300px;
+      margin: 0 auto;
+      padding: 2.5rem 1.5rem;
+    }
+    .tabs-bar {
+      display: flex;
+      gap: 0.5rem;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-color);
+      padding: 0.5rem;
+      border-radius: var(--radius-lg);
+      margin-bottom: 2rem;
+    }
+    .tab-btn {
+      flex: 1;
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      padding: 0.85rem 1.1rem;
+      font-family: var(--font-heading);
+      font-size: 0.92rem;
+      font-weight: 600;
+      cursor: pointer;
+      border-radius: var(--radius-md);
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+    }
+    .tab-btn:hover { color: var(--text-main); background: var(--bg-card); }
+    .tab-btn.active {
+      color: var(--accent-green);
+      background: rgba(0, 255, 102, 0.1);
+      border: 1px solid rgba(0, 255, 102, 0.3);
+      box-shadow: 0 0 12px rgba(0, 255, 102, 0.15);
+    }
+
+    /* Content Panels */
+    .panel { display: none; }
+    .panel.active { display: block; animation: fadeIn 0.3s ease; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
+    /* Cards & Grids */
+    .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; margin-bottom: 2rem; }
+    .card {
+      background-color: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      padding: 1.75rem;
+      box-shadow: var(--shadow-card);
+    }
+    .card h3 {
+      font-family: var(--font-heading);
+      font-size: 1.2rem;
+      font-weight: 700;
+      color: var(--text-main);
+    }
+    .card-header-title {
+      font-size: 0.82rem;
+      font-family: var(--font-heading);
+      text-transform: uppercase;
+      color: var(--text-muted);
+      letter-spacing: 0.05em;
+      margin-bottom: 0.5rem;
+    }
+    .card-big-value {
+      font-size: 2.4rem;
+      font-weight: 800;
+      font-family: var(--font-heading);
+      color: var(--text-main);
+    }
+
+    /* Buttons & Inputs */
+    .btn {
+      background: var(--primary-gradient);
+      color: #050505;
+      border: none;
+      padding: 0.75rem 1.35rem;
+      border-radius: var(--radius-md);
+      font-family: var(--font-heading);
+      font-weight: 700;
+      font-size: 0.95rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      box-shadow: 0 0 15px rgba(0, 255, 102, 0.2);
+    }
+    .btn:hover { opacity: 0.95; box-shadow: 0 0 25px rgba(0, 255, 102, 0.45); transform: translateY(-1px); }
+    .btn-secondary { background: var(--bg-card-hover); color: var(--text-main); border: 1px solid var(--border-color); box-shadow: none; }
+    .btn-secondary:hover { background: #272730; border-color: var(--accent-green); }
+
+    input, select {
+      background-color: var(--bg-dark);
+      border: 1px solid var(--border-color);
+      color: var(--text-main);
+      padding: 0.75rem 1rem;
+      border-radius: var(--radius-md);
+      font-family: var(--font-main);
+      font-size: 0.9rem;
+      outline: none;
+      transition: border-color 0.2s ease;
+    }
+    input:focus, select:focus { border-color: var(--accent-green); box-shadow: 0 0 10px rgba(0, 255, 102, 0.2); }
+
+    /* Tables */
+    .table-box {
+      background-color: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      margin-top: 1.5rem;
+    }
+    table { width: 100%; border-collapse: collapse; text-align: left; }
+    th {
+      background-color: var(--bg-surface);
+      color: var(--text-muted);
+      font-family: var(--font-heading);
+      font-weight: 600;
+      font-size: 0.82rem;
+      text-transform: uppercase;
+      padding: 1rem 1.25rem;
+      border-bottom: 1px solid var(--border-color);
+    }
+    td { padding: 1rem 1.25rem; border-bottom: 1px solid var(--border-color); font-size: 0.9rem; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background-color: var(--bg-card-hover); }
+
+    /* Badges & Tags */
+    .badge-tag {
+      display: inline-block;
+      padding: 0.25rem 0.6rem;
+      border-radius: var(--radius-sm);
+      font-size: 0.75rem;
+      font-family: var(--font-heading);
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+    .tag-cyan { background: rgba(0, 229, 255, 0.15); color: var(--accent-cyan); border: 1px solid rgba(0, 229, 255, 0.3); }
+    .tag-green { background: rgba(0, 255, 102, 0.15); color: var(--accent-green); border: 1px solid rgba(0, 255, 102, 0.3); }
+
+    /* Progress Bar */
+    .bar-bg { background: var(--bg-dark); border-radius: 9999px; height: 8px; overflow: hidden; margin-top: 0.25rem; border: 1px solid var(--border-color); }
+    .bar-fill { height: 100%; background: var(--primary-gradient); border-radius: 9999px; }
+  </style>
+</head>
+<body>
+
+  <!-- Admin Header -->
+  <header class="admin-header">
+    <div class="brand">
+      <svg class="omniscope-logo-svg" viewBox="0 0 100 100" fill="none" style="width: 34px; height: 34px;">
+        <circle cx="50" cy="50" r="44" stroke="#00FF66" stroke-width="3" stroke-dasharray="6 4" opacity="0.4"/>
+        <circle cx="50" cy="50" r="34" stroke="#00FF66" stroke-width="4"/>
+        <circle cx="50" cy="50" r="22" stroke="#00E5FF" stroke-width="3"/>
+        <circle cx="50" cy="50" r="6" fill="#00FF66"/>
+        <line x1="50" y1="6" x2="50" y2="94" stroke="#00FF66" stroke-width="2" opacity="0.5"/>
+        <line x1="6" y1="50" x2="94" y2="50" stroke="#00FF66" stroke-width="2" opacity="0.5"/>
+        <circle cx="74" cy="50" r="4" fill="#00E5FF"/>
+        <circle cx="50" cy="26" r="4" fill="#00FF66"/>
+        <circle cx="34" cy="66" r="4" fill="#10B981"/>
+      </svg>
+      <span class="brand-title">Omniscope <span>AI</span></span>
+      <span class="brand-badge">Admin Console</span>
+    </div>
+    <div class="header-actions">
+      <div class="status-pill" id="admin-db-status">
+        <span class="status-dot"></span> Supabase Vector DB Connected
+      </div>
+      <a href="/" class="user-app-link">
+        <i class="fa-solid fa-arrow-left"></i> Consumer Dashboard
+      </a>
+    </div>
+  </header>
+
+  <!-- Admin Main Container -->
+  <div class="admin-container">
+    
+    <!-- Level Navigation Tabs -->
+    <div class="tabs-bar">
+      <button class="tab-btn active" onclick="switchAdminTab('level1')">
+        <i class="fa-solid fa-cloud-arrow-down"></i> Level 1: Stage 1 Raw Data
+      </button>
+      <button class="tab-btn" onclick="switchAdminTab('level2')">
+        <i class="fa-solid fa-filter"></i> Level 2: Stage 2 Filtered News
+      </button>
+      <button class="tab-btn" onclick="switchAdminTab('level3')">
+        <i class="fa-solid fa-database"></i> Level 3: DB & 11-D Vectors
+      </button>
+      <button class="tab-btn" onclick="switchAdminTab('orchestrator')">
+        <i class="fa-solid fa-bolt"></i> Pipeline Controls & Auto-Purge
+      </button>
+    </div>
+
+    <!-- LEVEL 1 PANEL -->
+    <div id="panel-level1" class="panel active">
+      <div class="card" style="max-width: 800px; margin: 0 auto;">
+        <h3 style="margin-bottom: 0.75rem;"><i class="fa-solid fa-cloud-arrow-down" style="color: var(--accent-green);"></i> Level 1: Stage 1 Raw GDELT Zip Ingestion</h3>
+        <p style="color: var(--text-muted); margin-bottom: 2rem;">
+          Select the start and end date (both inclusive) to fetch daily raw GDELT archives in-memory and stream records directly into Supabase database.
+        </p>
+
+        <!-- Date Range Selection Form -->
+        <div style="display: flex; flex-direction: column; gap: 1.25rem; margin-bottom: 2rem;">
+          <div style="display: flex; gap: 1.5rem; flex-wrap: wrap;">
+            <div style="flex: 1; min-width: 220px;">
+              <label style="display: block; font-size: 0.85rem; font-weight: 600; color: var(--text-muted); margin-bottom: 0.4rem;">Start Date (Inclusive):</label>
+              <input type="date" id="l1-start-date" value="2026-08-01" style="width: 100%;">
+            </div>
+            <div style="flex: 1; min-width: 220px;">
+              <label style="display: block; font-size: 0.85rem; font-weight: 600; color: var(--text-muted); margin-bottom: 0.4rem;">End Date (Inclusive):</label>
+              <input type="date" id="l1-end-date" value="2026-08-05" style="width: 100%;">
+            </div>
+          </div>
+
+          <button class="btn" id="l1-submit-btn" onclick="startLevel1Ingestion()" style="width: 100%; justify-content: center; padding: 0.85rem; font-size: 1rem;">
+            <i class="fa-solid fa-download"></i> Fetch & Ingest Raw GDELT Zips into Database
+          </button>
+        </div>
+
+        <!-- Live Ingestion Progress Box (Shown during execution) -->
+        <div id="l1-progress-box" style="display: none; background: var(--bg-dark); padding: 1.5rem; border-radius: 10px; border: 1px solid var(--border-color); margin-bottom: 1.5rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+            <span style="font-weight: 600; color: var(--accent-green);"><i class="fa-solid fa-spinner fa-spin"></i> Ingestion In Progress...</span>
+            <span id="l1-progress-pct" style="font-weight: 800; font-size: 1.1rem; color: var(--accent-green);">0%</span>
+          </div>
+          <div class="bar-bg" style="height: 12px; margin-bottom: 0.75rem;">
+            <div class="bar-fill" id="l1-progress-fill" style="width: 0%;"></div>
+          </div>
+          <div id="l1-progress-msg" style="font-size: 0.85rem; color: var(--text-muted);">Initializing ingestion engine...</div>
+        </div>
+
+        <!-- Completion / Error Status Box (Shown at end of operation) -->
+        <div id="l1-status-box" style="display: none; padding: 1.25rem; border-radius: 10px; font-weight: 600; font-size: 0.95rem;">
+          <!-- Rendered dynamically -->
+        </div>
+
+      </div>
+    </div>
+
+    <!-- LEVEL 2 PANEL -->
+    <div id="panel-level2" class="panel">
+      <div class="card">
+        <h3 style="margin-bottom: 0.75rem;"><i class="fa-solid fa-list-check"></i> Level 2: Stage 2 Filtered News Inspector</h3>
+        <p style="color: var(--text-muted); margin-bottom: 1.5rem;">
+          Inspect scraped news articles with irrelevant/clickbait stories strictly filtered out before 11-D vector projection.
+        </p>
+
+        <div style="display: flex; gap: 1rem; margin-bottom: 1.5rem;">
+          <input type="text" id="l2-search" placeholder="Filter headlines..." style="flex: 1;" onkeyup="loadLevel2Records()">
+          <select id="l2-location" onchange="loadLevel2Records()">
+            <option value="">All Locations</option>
+            <option value="India">India</option>
+            <option value="World">World</option>
+            <option value="LPU">LPU</option>
+            <option value="Punjab">Punjab</option>
+          </select>
+        </div>
+
+        <div class="table-box">
+          <table>
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Headline</th>
+                <th>Location</th>
+                <th>Source URL</th>
+              </tr>
+            </thead>
+            <tbody id="l2-records-body">
+              <tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Loading filtered records...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- LEVEL 3 PANEL -->
+    <div id="panel-level3" class="panel">
+      <!-- Live DB Cards -->
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-header-title">Live Benchmark Companies Table</div>
+          <div class="card-big-value" id="l3-comp-count">500</div>
+          <div style="color: var(--green-accent); font-size: 0.85rem; margin-top: 0.25rem;">
+            <i class="fa-solid fa-check"></i> 11-D & 384-D Vector Indexed in Supabase
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header-title">Live Strategic News Articles Table</div>
+          <div class="card-big-value" id="l3-news-count">81,903</div>
+          <div style="color: var(--cyan-accent); font-size: 0.85rem; margin-top: 0.25rem;">
+            <i class="fa-solid fa-check"></i> HNSW Cosine Similarity Index Live
+          </div>
+        </div>
+      </div>
+
+      <!-- Live 11-D Vector Projection Tester Card -->
+      <div class="card" style="margin-bottom: 2rem;">
+        <h3 style="margin-bottom: 0.75rem;"><i class="fa-solid fa-bolt" style="color: var(--cyan-accent);"></i> Live 11-D Strategic Vector Projection Tester</h3>
+        <p style="color: var(--text-muted); margin-bottom: 1rem;">
+          Input any news headline to compute its 768-D Cloud Embedding via Hugging Face API and project its 11-D PESTLE & Porter scores live!
+        </p>
+
+        <div style="display: flex; gap: 1rem; margin-bottom: 1.5rem;">
+          <input type="text" id="l3-headline-input" value="India monitors US trade tariffs on oil imports while launching AI chip technology subsidies" style="flex: 1;">
+          <button class="btn" onclick="projectHeadlineLive()"><i class="fa-solid fa-wand-magic-sparkles"></i> Project 11-D Vector</button>
+        </div>
+
+        <div id="l3-vector-result" style="display: none; background: var(--bg-dark); padding: 1.25rem; border-radius: 8px; border: 1px solid var(--border-color);">
+          <h4 style="color: var(--cyan-accent); margin-bottom: 0.5rem;">11-D Strategic Vector Projection</h4>
+          <div id="l3-impact-badge" style="font-weight: 700; margin-bottom: 1rem; color: var(--green-accent);">Impact Score: --</div>
+          <div id="l3-bars-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+            <!-- Bars rendered dynamically -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Benchmark Companies Inspector Table -->
+      <div class="card">
+        <h3>500 Benchmark Companies (Vector Database)</h3>
+        <div class="table-box">
+          <table>
+            <thead>
+              <tr>
+                <th>Company</th>
+                <th>Sector</th>
+                <th>Product</th>
+                <th>Customer Value Proposition (CVP)</th>
+              </tr>
+            </thead>
+            <tbody id="l3-companies-body">
+              <tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Loading benchmark companies...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- PIPELINE CONTROLS PANEL -->
+    <div id="panel-orchestrator" class="panel">
+      <div class="card">
+        <h3 style="margin-bottom: 0.75rem;"><i class="fa-solid fa-gears"></i> Master Pipeline Controller & Auto-Purge Manager</h3>
+        <p style="color: var(--text-muted); margin-bottom: 1.5rem;">
+          Trigger pipeline stages manually. Intermediate data is stored safely per stage and automatically purged upon successful transition to save disk space.
+        </p>
+
+        <div style="display: flex; flex-direction: column; gap: 1rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center; background: var(--bg-dark); padding: 1.25rem; border-radius: 8px; border: 1px solid var(--border-color);">
+            <div>
+              <strong>Stage 1: Fetch Raw GDELT Zip</strong>
+              <div style="font-size: 0.85rem; color: var(--text-muted);">Downloads raw event zip files into <code>gdelt_data/</code></div>
+            </div>
+            <button class="btn btn-secondary" onclick="triggerL1Download()"><i class="fa-solid fa-play"></i> Run Stage 1</button>
+          </div>
+
+          <div style="display: flex; justify-content: space-between; align-items: center; background: var(--bg-dark); padding: 1.25rem; border-radius: 8px; border: 1px solid var(--border-color);">
+            <div>
+              <strong>Stage 2: Filter & Scrape Irrelevant News</strong>
+              <div style="font-size: 0.85rem; color: var(--text-muted);">Scrapes articles, filters clickbait, then <strong>AUTO-PURGES Stage 1 Raw Zips</strong></div>
+            </div>
+            <button class="btn" onclick="triggerL2Filter()"><i class="fa-solid fa-filter"></i> Run Stage 2 (Auto-Purge)</button>
+          </div>
+
+          <div style="display: flex; justify-content: space-between; align-items: center; background: var(--bg-dark); padding: 1.25rem; border-radius: 8px; border: 1px solid var(--border-color);">
+            <div>
+              <strong>Stage 3: 11-D Projection & Master DB Ingestion</strong>
+              <div style="font-size: 0.85rem; color: var(--text-muted);">Projects 11-D vectors, inserts into Supabase, then <strong>AUTO-PURGES Stage 2 CSVs</strong></div>
+            </div>
+            <button class="btn" onclick="triggerL3Deploy()"><i class="fa-solid fa-upload"></i> Run Stage 3 (Auto-Purge)</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    function switchAdminTab(panelId) {
+      document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+      document.querySelectorAll('.panel').forEach(panel => panel.classList.remove('active'));
+      
+      event.target.classList.add('active');
+      document.getElementById('panel-' + panelId).classList.add('active');
+
+      if (panelId === 'level2') loadLevel2Records();
+      if (panelId === 'level3') { loadLevel3DBStatus(); loadLevel3Companies(); }
+    }
+
+    let l1PollInterval = null;
+
+    async function startLevel1Ingestion() {
+      const sDate = document.getElementById('l1-start-date').value;
+      const eDate = document.getElementById('l1-end-date').value;
+
+      if (!sDate || !eDate) {
+        alert('Please select both Start Date and End Date.');
+        return;
+      }
+      if (sDate > eDate) {
+        alert('Start Date must be before or equal to End Date.');
+        return;
+      }
+
+      const btn = document.getElementById('l1-submit-btn');
+      const progressBox = document.getElementById('l1-progress-box');
+      const statusBox = document.getElementById('l1-status-box');
+
+      // UI setup
+      btn.disabled = true;
+      btn.style.opacity = '0.5';
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Ingestion Running...';
+      
+      progressBox.style.display = 'block';
+      statusBox.style.display = 'none';
+
+      document.getElementById('l1-progress-pct').innerText = '0%';
+      document.getElementById('l1-progress-fill').style.width = '0%';
+      document.getElementById('l1-progress-msg').innerText = 'Initiating ingestion request...';
+
+      try {
+        const res = await fetch('/api/stage1/ingest', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ start_date: sDate, end_date: eDate })
+        });
+        const data = await res.json();
+
+        if (!data.success) {
+          btn.disabled = false;
+          btn.style.opacity = '1';
+          btn.innerHTML = '<i class="fa-solid fa-download"></i> Fetch & Ingest Raw GDELT Zips into Database';
+          
+          statusBox.style.display = 'block';
+          statusBox.style.background = 'rgba(255, 0, 85, 0.15)';
+          statusBox.style.border = '1px solid var(--danger-accent)';
+          statusBox.style.color = '#FF4D6D';
+          statusBox.innerHTML = `<i class="fa-solid fa-circle-exclamation"></i> <strong>Error:</strong> ${data.error}`;
+          return;
+        }
+
+        // Start polling progress
+        if (l1PollInterval) clearInterval(l1PollInterval);
+        l1PollInterval = setInterval(pollLevel1Progress, 600);
+
+      } catch (e) {
+        btn.disabled = false;
+        btn.style.opacity = '1';
+        btn.innerHTML = '<i class="fa-solid fa-download"></i> Fetch & Ingest Raw GDELT Zips into Database';
+        
+        statusBox.style.display = 'block';
+        statusBox.style.background = 'rgba(255, 0, 85, 0.15)';
+        statusBox.style.border = '1px solid var(--danger-accent)';
+        statusBox.style.color = '#FF4D6D';
+        statusBox.innerHTML = `<i class="fa-solid fa-circle-exclamation"></i> <strong>Network Error:</strong> ${e.message}`;
+      }
+    }
+
+    async function pollLevel1Progress() {
+      try {
+        const res = await fetch('/api/stage1/progress');
+        const data = await res.json();
+
+        const pct = data.progress_pct || 0;
+        document.getElementById('l1-progress-pct').innerText = `${pct}%`;
+        document.getElementById('l1-progress-fill').style.width = `${pct}%`;
+        document.getElementById('l1-progress-msg').innerText = data.message || 'Processing GDELT export archives...';
+
+        if (data.status === 'completed' || data.status === 'error') {
+          clearInterval(l1PollInterval);
+          l1PollInterval = null;
+
+          const btn = document.getElementById('l1-submit-btn');
+          btn.disabled = false;
+          btn.style.opacity = '1';
+          btn.innerHTML = '<i class="fa-solid fa-download"></i> Fetch & Ingest Raw GDELT Zips into Database';
+
+          const statusBox = document.getElementById('l1-status-box');
+          statusBox.style.display = 'block';
+
+          if (data.status === 'completed') {
+            statusBox.style.background = 'rgba(0, 255, 102, 0.12)';
+            statusBox.style.border = '1px solid rgba(0, 255, 102, 0.4)';
+            statusBox.style.color = 'var(--accent-green)';
+            statusBox.innerHTML = `<i class="fa-solid fa-circle-check"></i> <strong>SUCCESS:</strong> ${data.message}`;
+          } else {
+            statusBox.style.background = 'rgba(255, 0, 85, 0.15)';
+            statusBox.style.border = '1px solid var(--danger-accent)';
+            statusBox.style.color = '#FF4D6D';
+            statusBox.innerHTML = `<i class="fa-solid fa-circle-exclamation"></i> <strong>INGESTION FAILED:</strong> ${data.message}`;
+          }
+        }
+      } catch (e) {
+        console.error('Progress polling error:', e);
+      }
+    }
+
+    async function loadLevel2Records() {
+      const search = document.getElementById('l2-search').value;
+      const loc = document.getElementById('l2-location').value;
+      try {
+        const res = await fetch(`/api/stage2/records?search=${encodeURIComponent(search)}&location=${encodeURIComponent(loc)}`);
+        const data = await res.json();
+        const tbody = document.getElementById('l2-records-body');
+        if (data.records && data.records.length > 0) {
+          tbody.innerHTML = data.records.map(r => `
+            <tr>
+              <td>${r.date}</td>
+              <td style="font-weight: 500;">${r.headline}</td>
+              <td><span class="badge-tag tag-green">${r.location_affected}</span></td>
+              <td><a href="${r.source_link}" target="_blank" style="color: var(--cyan-accent);">Source 🔗</a></td>
+            </tr>
+          `).join('');
+        } else {
+          tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted);">No Stage 2 filtered records found.</td></tr>`;
+        }
+      } catch (e) { console.error(e); }
+    }
+
+    async function loadLevel3DBStatus() {
+      try {
+        const res = await fetch('/api/stage3/db-status');
+        const data = await res.json();
+        const pill = document.getElementById('admin-db-status');
+        if (data.connected) {
+          pill.innerHTML = `<span class="status-dot"></span> Supabase DB Connected (${data.news_articles_count.toLocaleString()} News Live)`;
+          document.getElementById('l3-comp-count').innerText = data.benchmark_companies_count.toLocaleString();
+          document.getElementById('l3-news-count').innerText = data.news_articles_count.toLocaleString();
+        } else {
+          pill.innerHTML = `<span class="status-dot" style="background: var(--warning-accent);"></span> DB Connection Pending`;
+        }
+      } catch (e) { console.error(e); }
+    }
+
+    async function loadLevel3Companies() {
+      try {
+        const res = await fetch('/api/stage3/companies?limit=15');
+        const data = await res.json();
+        const tbody = document.getElementById('l3-companies-body');
+        if (data.companies && data.companies.length > 0) {
+          tbody.innerHTML = data.companies.map(c => `
+            <tr>
+              <td style="font-weight: 600; color: var(--cyan-accent);">${c.company}</td>
+              <td><span class="badge-tag tag-green">${c.sector}</span></td>
+              <td>${c.product_name || '--'}</td>
+              <td style="font-size: 0.85rem; color: var(--text-muted);">${c.cvp}</td>
+            </tr>
+          `).join('');
+        }
+      } catch (e) { console.error(e); }
+    }
+
+    async function projectHeadlineLive() {
+      const headline = document.getElementById('l3-headline-input').value;
+      const res = await fetch('/api/stage3/project-headline', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ headline: headline })
+      });
+      const data = await res.json();
+      if (data.success) {
+        document.getElementById('l3-vector-result').style.display = 'block';
+        document.getElementById('l3-impact-badge').innerText = `Strategic Impact Score: ${data.impact_score}`;
+        
+        const container = document.getElementById('l3-bars-grid');
+        container.innerHTML = Object.entries(data.driver_breakdown).map(([dim, score]) => `
+          <div>
+            <div style="display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--text-muted);">
+              <span>${dim}</span>
+              <span style="color: var(--cyan-accent); font-weight: 600;">${score}</span>
+            </div>
+            <div class="bar-bg">
+              <div class="bar-fill" style="width: ${Math.round(score * 100)}%;"></div>
+            </div>
+          </div>
+        `).join('');
+      }
+    }
+
+    async function triggerL2Filter() {
+      const res = await fetch('/api/stage2/trigger', { method: 'POST' });
+      const data = await res.json();
+      alert(data.message || data.error);
+    }
+    async function triggerL3Deploy() {
+      const res = await fetch('/api/stage3/trigger', { method: 'POST' });
+      const data = await res.json();
+      alert(data.message || data.error);
+    }
+
+    // Init
+    loadLevel3DBStatus();
+  </script>
+</body>
+</html>

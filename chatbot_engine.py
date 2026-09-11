@@ -246,17 +246,30 @@ class MarketKnowledgeBase:
             except Exception as e:
                 print(f"[KnowledgeBase] Error loading companies JSON: {e}")
 
-    def load_news(self):
+    def load_news(self, min_impact_threshold: float = 0.25):
         if ENRICHED_CSV_PATH.exists():
             try:
                 with open(ENRICHED_CSV_PATH, "r", encoding="utf-8") as f:
                     reader = csv.DictReader(f)
-                    count = 0
                     for row in reader:
-                        if count >= 200:  # Load top 200 sample news items into memory
-                            break
-                        self.news_records.append(row)
-                        count += 1
+                        s_emb = []
+                        try:
+                            s_emb = json.loads(row.get("strategic_embedding", "[]"))
+                        except Exception:
+                            pass
+                        
+                        # Compute Strategic Impact Score (peak score + top 2 drivers)
+                        if s_emb and len(s_emb) == 11:
+                            peak = max(s_emb)
+                            top2_mean = sum(sorted(s_emb, reverse=True)[:2]) / 2.0
+                            impact_score = round((peak * 0.60) + (top2_mean * 0.40), 3)
+                        else:
+                            impact_score = 0.05
+
+                        # Strict filtering: Discard low-impact, off-topic noise news
+                        if impact_score >= min_impact_threshold:
+                            row["impact_score"] = impact_score
+                            self.news_records.append(row)
             except Exception as e:
                 print(f"[KnowledgeBase] Error loading news CSV: {e}")
 
@@ -267,21 +280,28 @@ class MarketKnowledgeBase:
                 return c
         return None
 
-    def search_news(self, query: str, limit: int = 3) -> list:
+    def search_news(self, query: str, limit: int = 3, min_impact: float = 0.30) -> list:
         query_lower = query.lower()
+        query_terms = [q for q in query_lower.split() if len(q) > 2]
         matches = []
+        
         for r in self.news_records:
             headline = r.get("headline", "").lower()
-            if any(q in headline for q in query_lower.split()):
+            impact = r.get("impact_score", 0.05)
+            
+            # Require both term match AND strict strategic impact score
+            if impact >= min_impact and any(q in headline for q in query_terms):
                 matches.append({
                     "headline": r.get("headline"),
                     "date": r.get("date"),
                     "source_link": r.get("source_link"),
-                    "location": r.get("location_affected")
+                    "location": r.get("location_affected"),
+                    "impact_score": impact
                 })
-                if len(matches) >= limit:
-                    break
-        return matches
+        
+        # Sort matches by strategic impact score descending
+        matches.sort(key=lambda x: x["impact_score"], reverse=True)
+        return matches[:limit]
 
 
 class GroqOllamaProvider:
