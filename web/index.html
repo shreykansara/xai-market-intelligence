@@ -22,10 +22,394 @@
     <div class="app-wrapper">
 
         <!-- =============================================================== -->
-        <!-- STEP 1: CVP INPUT & DUAL RADAR ANALYSIS SCREEN                   -->
+        <!-- LANDING PAGE SCREEN                                             -->
         <!-- =============================================================== -->
-        <div class="screen-view active" id="view-step1-cvp">
+        <div class="screen-view active" id="view-landing-page">
+            <!-- Top Navigation Bar -->
+            <nav class="landing-navbar">
+                <div class="navbar-container">
+                    <a href="#view-landing-page" class="nav-brand" id="brand-logo-home">
+                        <svg class="omniscope-logo-svg nav-logo-svg" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <circle cx="50" cy="50" r="44" stroke="#00FF66" stroke-width="3" stroke-dasharray="6 4" opacity="0.4"/>
+                            <circle cx="50" cy="50" r="34" stroke="#00FF66" stroke-width="4"/>
+                            <circle cx="50" cy="50" r="22" stroke="#00E5FF" stroke-width="3"/>
+                            <circle cx="50" cy="50" r="6" fill="#00FF66"/>
+                            <line x1="50" y1="6" x2="50" y2="94" stroke="#00FF66" stroke-width="2" opacity="0.5"/>
+                            <line x1="6" y1="50" x2="94" y2="50" stroke="#00FF66" stroke-width="2" opacity="0.5"/>
+                            <circle cx="74" cy="50" r="4" fill="#00E5FF"/>
+                            <circle cx="50" cy="26" r="4" fill="#00FF66"/>
+                        </svg>
+                        <span>Omniscope <span class="accent-text">AI</span></span>
+                    </a>
+                    <div class="nav-links">
+                        <a href="#landing-audience" class="nav-link">Founders & Investors</a>
+                        <a href="#landing-pipeline" class="nav-link">Methodology</a>
+                        <a href="#landing-comparison" class="nav-link">Comparison</a>
+                        <a href="admin.html" class="nav-link admin-nav-link" target="_blank">
+                            <i class="fa-solid fa-lock"></i> Ingestion Admin
+                        </a>
+                    </div>
+                    <div class="nav-actions">
+                        <button type="button" class="btn-primary-md" id="btn-nav-launch-app">
+                            <span>Launch Platform</span>
+                            <i class="fa-solid fa-rocket"></i>
+                        </button>
+                    </div>
+                </div>
+            </nav>
+
+            <!-- Hero Section -->
+            <section class="landing-hero" id="landing-hero">
+                <div class="hero-bg-glow"></div>
+                <div class="hero-container">
+                    <div class="hero-content">
+                        <div class="hero-badge">
+                            <i class="fa-solid fa-bolt"></i>
+                            <span>REAL-TIME EXPLAINABLE MARKET INTELLIGENCE</span>
+                        </div>
+                        <h1 class="hero-title">
+                            Don't Build or Invest <br><span class="gradient-text">in the Dark.</span>
+                        </h1>
+                        <!-- Single Hook for Investors & Young Entrepreneurs -->
+                        <p class="hero-hook-desc">
+                            Omniscope AI maps business value propositions into <strong>384-dimensional vector space</strong> against <strong>80,000+ real-time macro event signals</strong> — empowering <u>young entrepreneurs</u> to prove Product-Market Fit before burning capital, and providing <u>investors</u> with instant, explainable 11-D PESTLE & Porter due diligence in sub-seconds.
+                        </p>
+                        <div class="hero-cta-group">
+                            <button type="button" class="btn-hero-primary" id="btn-hero-launch-cvp">
+                                <i class="fa-solid fa-bullseye"></i>
+                                <span>Validate Value Proposition (CVP Mode)</span>
+                            </button>
+                            <button type="button" class="btn-hero-secondary" id="btn-hero-launch-revenue">
+                                <i class="fa-solid fa-chart-line"></i>
+                                <span>Analyze Revenue Sensitivity (Sales Mode)</span>
+                            </button>
+                        </div>
+                        <div class="hero-trust-badges">
+                            <span><i class="fa-solid fa-shield-check"></i> Zero LLM Hallucinations</span>
+                            <span><i class="fa-solid fa-bolt"></i> &lt;5ms Vector Search</span>
+                            <span><i class="fa-solid fa-diagram-project"></i> 100% Citation Traceability</span>
+                        </div>
+                    </div>
+
+                    <!-- Interactive Live Hero Visual Showcase -->
+                    <div class="hero-visual-card glass-panel">
+                        <div class="visual-card-header">
+                            <div class="card-dots">
+                                <span class="dot red"></span>
+                                <span class="dot yellow"></span>
+                                <span class="dot green"></span>
+                            </div>
+                            <span class="card-title-tag"><i class="fa-solid fa-microchip"></i> Omniscope Vector Engine v3.4</span>
+                            <span class="card-live-pulse"><i class="fa-solid fa-circle"></i> Live Signals</span>
+                        </div>
+                        <div class="visual-card-body">
+                            <div class="vector-radar-preview">
+                                <div class="preview-metric-box">
+                                    <span class="preview-label">384-D Vector Space</span>
+                                    <span class="preview-val green-glow">500+ Peers Mapped</span>
+                                </div>
+                                <div class="preview-metric-box">
+                                    <span class="preview-label">GDELT Event Stream</span>
+                                    <span class="preview-val cyan-glow">80,240 Ingested</span>
+                                </div>
+                            </div>
+                            <div class="preview-radar-mini">
+                                <div class="mini-radar-badge"><i class="fa-solid fa-chart-pie"></i> 11-D Risk Vectors</div>
+                                <div class="mini-tags">
+                                    <span class="tag-pill"><i class="fa-solid fa-shield"></i> PESTLE Vulnerability: LOW (0.24)</span>
+                                    <span class="tag-pill cyan"><i class="fa-solid fa-building-columns"></i> Porter Threat: BALANCED</span>
+                                    <span class="tag-pill emerald"><i class="fa-solid fa-brain"></i> RAG Faithfulness: 99.8%</span>
+                                </div>
+                            </div>
+                            <div class="hero-preset-teaser">
+                                <span class="teaser-label">Try Demo Scenarios Live:</span>
+                                <div class="hero-preset-buttons">
+                                    <button type="button" class="btn-preset-mini" id="hero-preset-tesla">
+                                        <i class="fa-solid fa-car"></i> Tesla EV Strategy
+                                    </button>
+                                    <button type="button" class="btn-preset-mini" id="hero-preset-stripe">
+                                        <i class="fa-solid fa-credit-card"></i> Stripe Fintech API
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Key Platform Metrics Bar -->
+            <section class="landing-stats-bar">
+                <div class="stats-container">
+                    <div class="stat-item">
+                        <div class="stat-num gradient-text">500+</div>
+                        <div class="stat-label">Vectorized Enterprise Companies</div>
+                    </div>
+                    <div class="stat-divider"></div>
+                    <div class="stat-item">
+                        <div class="stat-num cyan-text">80,000+</div>
+                        <div class="stat-label">Real-Time Macro Event Signals</div>
+                    </div>
+                    <div class="stat-divider"></div>
+                    <div class="stat-item">
+                        <div class="stat-num emerald-text">&lt; 5ms</div>
+                        <div class="stat-label">384-D Semantic Retrieval</div>
+                    </div>
+                    <div class="stat-divider"></div>
+                    <div class="stat-item">
+                        <div class="stat-num gradient-text">11-D</div>
+                        <div class="stat-label">Explainable Risk Dimensions</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Dual Value Proposition Section (Founders & Investors) -->
+            <section class="landing-section" id="landing-audience">
+                <div class="section-container">
+                    <div class="section-header text-center">
+                        <span class="section-badge"><i class="fa-solid fa-users"></i> DUAL AUDIENCE VALUE PROPOSITION</span>
+                        <h2>Tailored Market Intelligence for <span class="gradient-text">Founders & Capital Allocators</span></h2>
+                        <p class="section-desc">Whether you are validating a new venture or allocating millions in venture capital, Omniscope AI eliminates guesswork with mathematical precision.</p>
+                    </div>
+
+                    <div class="dual-grid">
+                        <!-- Card 1: Young Entrepreneurs -->
+                        <div class="dual-card founder-card">
+                            <div class="dual-card-header">
+                                <div class="dual-icon-box green-icon">
+                                    <i class="fa-solid fa-rocket"></i>
+                                </div>
+                                <div class="dual-tag">FOR YOUNG ENTREPRENEURS & FOUNDERS</div>
+                            </div>
+                            <h3>Prove Product-Market Fit Before Burning Capital</h3>
+                            <p class="dual-intro">Stop relying on intuition or generic survey data. Validate how your business model positions against existing market titans before writing a single line of code.</p>
+                            <ul class="dual-features">
+                                <li>
+                                    <i class="fa-solid fa-circle-check"></i>
+                                    <div>
+                                        <strong>384-D Vector Positioning</strong>
+                                        <span>Map your exact CVP against 500+ top enterprises to discover hidden white spaces and avoid overcrowded niches.</span>
+                                    </div>
+                                </li>
+                                <li>
+                                    <i class="fa-solid fa-circle-check"></i>
+                                    <div>
+                                        <strong>PESTLE Vulnerability Audit</strong>
+                                        <span>Uncover regulatory, technological, and economic headwinds before launching your product to market.</span>
+                                    </div>
+                                </li>
+                                <li>
+                                    <i class="fa-solid fa-circle-check"></i>
+                                    <div>
+                                        <strong>AI Strategic Pivot Copilot</strong>
+                                        <span>Receive immediate actionable advice on how to refine your value proposition for maximum investor attraction.</span>
+                                    </div>
+                                </li>
+                            </ul>
+                            <button type="button" class="btn-dual-action btn-green-glow" id="btn-founder-launch">
+                                <span>Validate My Startup CVP</span>
+                                <i class="fa-solid fa-arrow-right"></i>
+                            </button>
+                        </div>
+
+                        <!-- Card 2: Investors -->
+                        <div class="dual-card investor-card">
+                            <div class="dual-card-header">
+                                <div class="dual-icon-box cyan-icon">
+                                    <i class="fa-solid fa-shield-halved"></i>
+                                </div>
+                                <div class="dual-tag cyan-tag">FOR ANGEL INVESTORS & VENTURE CAPITALISTS</div>
+                            </div>
+                            <h3>De-Risk Early-Stage Bets with Mathematical Precision</h3>
+                            <p class="dual-intro">Traditional due diligence takes weeks and relies on static pitch decks. Omniscope AI provides quantitative, explainable risk radar analytics in sub-seconds.</p>
+                            <ul class="dual-features">
+                                <li>
+                                    <i class="fa-solid fa-circle-check cyan-check"></i>
+                                    <div>
+                                        <strong>11-Dimensional Risk Analytics</strong>
+                                        <span>Quantify risk across Political, Economic, Social, Tech, Legal, and Porter's 5 Forces simultaneously.</span>
+                                    </div>
+                                </li>
+                                <li>
+                                    <i class="fa-solid fa-circle-check cyan-check"></i>
+                                    <div>
+                                        <strong>Financial & Revenue Stress Testing</strong>
+                                        <span>Correlate portfolio startup revenues with real-world GDELT macroeconomic shock event clusters.</span>
+                                    </div>
+                                </li>
+                                <li>
+                                    <i class="fa-solid fa-circle-check cyan-check"></i>
+                                    <div>
+                                        <strong>100% Explainable RAG Proofs</strong>
+                                        <span>Zero black-box assertions. Every strategic insight is linked directly to raw GDELT event IDs and vector distance metrics.</span>
+                                    </div>
+                                </li>
+                            </ul>
+                            <button type="button" class="btn-dual-action btn-cyan-glow" id="btn-investor-launch">
+                                <span>Perform Investment Due Diligence</span>
+                                <i class="fa-solid fa-arrow-right"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 3-Step Explainable Pipeline Architecture -->
+            <section class="landing-section bg-surface" id="landing-pipeline">
+                <div class="section-container">
+                    <div class="section-header text-center">
+                        <span class="section-badge"><i class="fa-solid fa-diagram-project"></i> TRANSPARENT METHODOLOGY</span>
+                        <h2>The <span class="gradient-text">3-Step Explainable</span> Intelligence Pipeline</h2>
+                        <p class="section-desc">From zero-trace memory ingestion to 384-D vector matching and Groq/Llama-3 strategic reasoning.</p>
+                    </div>
+
+                    <div class="pipeline-grid">
+                        <div class="pipeline-card">
+                            <div class="pipeline-step-num">01</div>
+                            <div class="pipeline-icon"><i class="fa-solid fa-database"></i></div>
+                            <h3>Zero-Trace In-Memory Ingestion</h3>
+                            <p>Fetches real-time GDELT event CSVs and financial time-series into SQLite memory buffers. Zero local disk residual, ensuring maximum data security and real-time processing speed.</p>
+                            <div class="pipeline-tag">In-Memory Stream</div>
+                        </div>
+
+                        <div class="pipeline-connector"><i class="fa-solid fa-chevron-right"></i></div>
+
+                        <div class="pipeline-card">
+                            <div class="pipeline-step-num">02</div>
+                            <div class="pipeline-icon"><i class="fa-solid fa-network-wired"></i></div>
+                            <h3>384-D Vector & 11-D Risk Projection</h3>
+                            <p>Projects business CVP text into 384-dimensional vector space using MiniLM-L6-v2 embeddings while projecting macroeconomic shocks onto dual 11-D PESTLE & Porter radar axes.</p>
+                            <div class="pipeline-tag cyan-tag-bg">Vector Math Engine</div>
+                        </div>
+
+                        <div class="pipeline-connector"><i class="fa-solid fa-chevron-right"></i></div>
+
+                        <div class="pipeline-card">
+                            <div class="pipeline-step-num">03</div>
+                            <div class="pipeline-icon"><i class="fa-solid fa-brain"></i></div>
+                            <h3>RAG Strategic Synthesis & Chat</h3>
+                            <p>Injects exact vector similarity scores, cluster correlations, and GDELT event citations into Groq Llama-3 LPU for hallucination-free, explainable executive recommendations.</p>
+                            <div class="pipeline-tag emerald-tag-bg">Groq LPU Acceleration</div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Comparison Table: Traditional vs Omniscope AI -->
+            <section class="landing-section" id="landing-comparison">
+                <div class="section-container">
+                    <div class="section-header text-center">
+                        <span class="section-badge"><i class="fa-solid fa-scale-balanced"></i> UNMATCHED ADVANTAGE</span>
+                        <h2>Why Omniscope AI <span class="gradient-text">Outperforms Traditional Market Research</span></h2>
+                    </div>
+
+                    <div class="comparison-table-wrapper glass-panel">
+                        <table class="comparison-table">
+                            <thead>
+                                <tr>
+                                    <th>Feature / Capability</th>
+                                    <th>Traditional Research & Pitch Decks</th>
+                                    <th class="highlight-col">Omniscope AI System</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td class="feature-name"><i class="fa-solid fa-clock"></i> Time to Actionable Insight</td>
+                                    <td class="negative-text"><i class="fa-solid fa-xmark"></i> 4 to 6 Weeks (Manual)</td>
+                                    <td class="highlight-col positive-text"><i class="fa-solid fa-check"></i> &lt; 5 Seconds (Automated)</td>
+                                </tr>
+                                <tr>
+                                    <td class="feature-name"><i class="fa-solid fa-earth-americas"></i> Real-Time Macro Event Sensitivity</td>
+                                    <td class="negative-text"><i class="fa-solid fa-xmark"></i> Static / Outdated Assumptions</td>
+                                    <td class="highlight-col positive-text"><i class="fa-solid fa-check"></i> 80,000+ Real-Time GDELT Events</td>
+                                </tr>
+                                <tr>
+                                    <td class="feature-name"><i class="fa-solid fa-bullseye"></i> Semantic Positioning Accuracy</td>
+                                    <td class="negative-text"><i class="fa-solid fa-xmark"></i> Subjective Keyword Overlap</td>
+                                    <td class="highlight-col positive-text"><i class="fa-solid fa-check"></i> 384-D Vector Space Mathematics</td>
+                                </tr>
+                                <tr>
+                                    <td class="feature-name"><i class="fa-solid fa-shield-halved"></i> Risk Auditability & Proofs</td>
+                                    <td class="negative-text"><i class="fa-solid fa-xmark"></i> Black-box Consultant Opinions</td>
+                                    <td class="highlight-col positive-text"><i class="fa-solid fa-check"></i> 11-D Dual Radars + Raw Event IDs</td>
+                                </tr>
+                                <tr>
+                                    <td class="feature-name"><i class="fa-solid fa-comments"></i> Contextual AI Strategic Chat</td>
+                                    <td class="negative-text"><i class="fa-solid fa-xmark"></i> Static PDF Reports</td>
+                                    <td class="highlight-col positive-text"><i class="fa-solid fa-check"></i> Groq LPU Interactive Copilot</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Bottom CTA Banner Section -->
+            <section class="landing-cta-banner">
+                <div class="cta-banner-container glass-panel">
+                    <div class="cta-content">
+                        <h2>Ready to Stress-Test Your Business Model?</h2>
+                        <p>Join founders and investors leveraging 384-D vector intelligence to de-risk investments and dominate markets.</p>
+                        <div class="cta-buttons">
+                            <button type="button" class="btn-primary-lg" id="btn-banner-launch-hub">
+                                <span>Launch Analysis Hub</span>
+                                <i class="fa-solid fa-arrow-right"></i>
+                            </button>
+                            <a href="admin.html" class="btn-outline-lg" target="_blank">
+                                <i class="fa-solid fa-database"></i> Access Ingestion Admin
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Footer -->
+            <footer class="landing-footer">
+                <div class="footer-container">
+                    <div class="footer-brand">
+                        <div class="nav-brand">
+                            <svg class="omniscope-logo-svg nav-logo-svg" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <circle cx="50" cy="50" r="44" stroke="#00FF66" stroke-width="3" stroke-dasharray="6 4" opacity="0.4"/>
+                                <circle cx="50" cy="50" r="34" stroke="#00FF66" stroke-width="4"/>
+                                <circle cx="50" cy="50" r="22" stroke="#00E5FF" stroke-width="3"/>
+                                <circle cx="50" cy="50" r="6" fill="#00FF66"/>
+                            </svg>
+                            <span>Omniscope <span class="accent-text">AI</span></span>
+                        </div>
+                        <p>Explainable Market Intelligence & Vector-Based Risk Analytics Platform.</p>
+                    </div>
+                    <div class="footer-links">
+                        <div class="footer-col">
+                            <h4>Platform</h4>
+                            <a href="#view-landing-page" id="foot-link-landing">Landing Page</a>
+                            <a href="#" id="foot-link-hub">Analysis Hub</a>
+                            <a href="#" id="foot-link-cvp">CVP Analysis Mode</a>
+                            <a href="#" id="foot-link-revenue">Sales Analysis Mode</a>
+                        </div>
+                        <div class="footer-col">
+                            <h4>Resources</h4>
+                            <a href="admin.html" target="_blank">Data Ingestion Admin</a>
+                            <a href="/api/health" target="_blank">API Health Status</a>
+                            <a href="#landing-pipeline">Pipeline Architecture</a>
+                        </div>
+                    </div>
+                </div>
+                <div class="footer-bottom">
+                    <p>© 2026 Omniscope AI. Built for Smart India Hackathon. All rights reserved.</p>
+                </div>
+            </footer>
+        </div>
+
+        <!-- =============================================================== -->
+        <!-- MODE SELECTION HUB SCREEN                                       -->
+        <!-- =============================================================== -->
+        <div class="screen-view hidden" id="view-mode-selection">
             <div class="step1-container">
+                <div class="step-nav-bar" style="margin-bottom: -10px;">
+                    <button type="button" class="btn-back-hub" id="btn-back-landing-hub">
+                        <i class="fa-solid fa-house"></i> Home Landing Page
+                    </button>
+                </div>
+
                 <!-- Hero Branding -->
                 <header class="hero-header">
                     <div class="hero-logo-wrapper">
@@ -42,7 +426,80 @@
                         </svg>
                     </div>
                     <h1>Omniscope <span>AI</span></h1>
-                    <p class="hero-subtitle">Explainable Market Intelligence & Vector Placement Engine. Map your Customer Value Proposition into 384-D vector space and generate dual PESTLE & Porter risk analytics.</p>
+                    <p class="hero-subtitle">Explainable Market Intelligence System. Select your preferred analysis methodology below.</p>
+                </header>
+
+                <!-- Mode Selection Cards Grid -->
+                <div class="mode-selection-grid">
+                    <!-- Mode 1: CVP Analysis -->
+                    <div class="mode-card" id="card-cvp-mode">
+                        <div class="mode-card-badge"><i class="fa-solid fa-bullseye"></i> Value Proposition Mode</div>
+                        <div class="mode-card-icon">
+                            <i class="fa-solid fa-pen-nib"></i>
+                        </div>
+                        <h3>1. Customer Value Proposition (CVP) Analysis</h3>
+                        <p>Input your business CVP statement to project into 384-D vector space, generate dual PESTLE & Porter radar analytics, and benchmark against 500 companies.</p>
+                        <ul class="mode-features">
+                            <li><i class="fa-solid fa-circle-check"></i> 384-D CVP Semantic Vector Match</li>
+                            <li><i class="fa-solid fa-circle-check"></i> Dual PESTLE & Porter Risk Radars</li>
+                            <li><i class="fa-solid fa-circle-check"></i> Tailored AI Strategy Chatbot</li>
+                        </ul>
+                        <button type="button" class="btn-primary-lg" id="btn-select-cvp-mode" style="width: 100%;">
+                            <span>Launch CVP Analysis</span>
+                            <i class="fa-solid fa-arrow-right"></i>
+                        </button>
+                    </div>
+
+                    <!-- Mode 2: Sales & Financial Revenue Analysis -->
+                    <div class="mode-card" id="card-revenue-mode">
+                        <div class="mode-card-badge badge-cyan"><i class="fa-solid fa-chart-line"></i> Financial Impact Mode</div>
+                        <div class="mode-card-icon icon-cyan">
+                            <i class="fa-solid fa-file-csv"></i>
+                        </div>
+                        <h3>2. Sales & Financial Revenue Analysis</h3>
+                        <p>Upload sales time-series CSV data or choose business presets to analyze revenue sensitivity against macro market event clusters and PESTLE shocks.</p>
+                        <ul class="mode-features">
+                            <li><i class="fa-solid fa-circle-check" style="color: #00E5FF;"></i> Sales CSV & Presets Data Import</li>
+                            <li><i class="fa-solid fa-circle-check" style="color: #00E5FF;"></i> Market Event Cluster Correlation</li>
+                            <li><i class="fa-solid fa-circle-check" style="color: #00E5FF;"></i> Financial Shock Risk Radar</li>
+                        </ul>
+                        <button type="button" class="btn-primary-lg btn-cyan" id="btn-select-revenue-mode" style="width: 100%;">
+                            <span>Launch Sales Analysis</span>
+                            <i class="fa-solid fa-arrow-right"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- =============================================================== -->
+        <!-- STEP 1: CVP INPUT & DUAL RADAR ANALYSIS SCREEN                   -->
+        <!-- =============================================================== -->
+        <div class="screen-view hidden" id="view-step1-cvp">
+            <div class="step1-container">
+                <div class="step-nav-bar">
+                    <button type="button" class="btn-back-hub" id="btn-back-hub-cvp">
+                        <i class="fa-solid fa-arrow-left"></i> Switch Analysis Mode (CVP vs Sales)
+                    </button>
+                </div>
+
+                <!-- Hero Branding -->
+                <header class="hero-header">
+                    <div class="hero-logo-wrapper">
+                        <svg class="omniscope-logo-svg hero-svg" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <circle cx="50" cy="50" r="44" stroke="#00FF66" stroke-width="3" stroke-dasharray="6 4" opacity="0.4"/>
+                            <circle cx="50" cy="50" r="34" stroke="#00FF66" stroke-width="4"/>
+                            <circle cx="50" cy="50" r="22" stroke="#00E5FF" stroke-width="3"/>
+                            <circle cx="50" cy="50" r="6" fill="#00FF66"/>
+                            <line x1="50" y1="6" x2="50" y2="94" stroke="#00FF66" stroke-width="2" opacity="0.5"/>
+                            <line x1="6" y1="50" x2="94" y2="50" stroke="#00FF66" stroke-width="2" opacity="0.5"/>
+                            <circle cx="74" cy="50" r="4" fill="#00E5FF"/>
+                            <circle cx="50" cy="26" r="4" fill="#00FF66"/>
+                            <circle cx="34" cy="66" r="4" fill="#10B981"/>
+                        </svg>
+                    </div>
+                    <h1>Omniscope <span>AI</span></h1>
+                    <p class="hero-subtitle">Customer Value Proposition (CVP) Vector Placement & Risk Engine.</p>
                 </header>
 
                 <!-- CVP Input Form Card -->
@@ -51,6 +508,18 @@
                         <i class="fa-solid fa-pen-nib"></i>
                         <span>Step 1: Enter Your Customer Value Proposition (CVP)</span>
                     </div>
+
+                    <!-- Quick Demo Presets Bar -->
+                    <div class="presets-bar" style="margin: 1.25rem 0 1rem 0;">
+                        <span class="presets-label"><i class="fa-solid fa-bolt" style="color: var(--accent-green);"></i> Quick Demo Presets:</span>
+                        <button type="button" class="btn-preset-chip" id="btn-preset-cvp-tesla">
+                            <i class="fa-solid fa-car-side" style="color: var(--accent-green);"></i> Preset 1: Tesla (EV & Autonomous Tech)
+                        </button>
+                        <button type="button" class="btn-preset-chip" id="btn-preset-cvp-stripe">
+                            <i class="fa-solid fa-credit-card" style="color: var(--accent-green);"></i> Preset 2: Stripe (Fintech & Global Payments)
+                        </button>
+                    </div>
+
                     <form id="form-cvp-input">
                         <div class="form-group">
                             <label for="input-cvp-text">Customer Value Proposition Statement:</label>
@@ -142,6 +611,236 @@
         </div>
 
         <!-- =============================================================== -->
+        <!-- STEP 1: SALES & FINANCIAL REVENUE ANALYSIS SCREEN              -->
+        <!-- =============================================================== -->
+        <div class="screen-view hidden" id="view-step1-revenue">
+            <div class="step1-container">
+                <div class="step-nav-bar">
+                    <button type="button" class="btn-back-hub" id="btn-back-hub-revenue">
+                        <i class="fa-solid fa-arrow-left"></i> Switch Analysis Mode (CVP vs Sales)
+                    </button>
+                </div>
+
+                <div class="section-title-box">
+                    <h2><i class="fa-solid fa-chart-line color-cyan"></i> Sales & Financial Revenue Sensitivity Analysis</h2>
+                    <p>Upload sales time-series data or pick a dataset preset to match sales fluctuations against verified market event clusters.</p>
+                </div>
+
+                <!-- CSV Upload & Dataset Presets Card -->
+                <div class="card glass-card">
+                    <div class="card-header">
+                        <i class="fa-solid fa-file-csv color-cyan"></i>
+                        <span>Upload Sales Time-Series (CSV / JSON) or Select Sample Preset</span>
+                    </div>
+
+                    <div class="presets-bar" style="margin-bottom: 1.25rem;">
+                        <span class="presets-label">Sample Presets:</span>
+                        <button type="button" class="btn-preset-chip" id="btn-preset-csv-retail">
+                            <i class="fa-solid fa-shirt color-cyan"></i> Retail Apparel Sales (Jul – Aug 2026)
+                        </button>
+                        <button type="button" class="btn-preset-chip" id="btn-preset-csv-tech">
+                            <i class="fa-solid fa-cloud color-cyan"></i> Enterprise SaaS MRR (Jul – Aug 2026)
+                        </button>
+                    </div>
+
+                    <!-- Drag & Drop Zone -->
+                    <div class="dropzone" id="revenue-dropzone">
+                        <i class="fa-solid fa-cloud-arrow-up dropzone-icon color-cyan"></i>
+                        <p class="dropzone-text">Drag & Drop your sales CSV file here, or <span class="dropzone-link color-cyan">browse files</span></p>
+                        <span class="dropzone-subtext">Supported formats: CSV, JSON (Period, Revenue, Change_Pct)</span>
+                        <input type="file" id="input-file-revenue" accept=".csv,.json" style="display: none;">
+                    </div>
+
+                    <div class="file-status-bar hidden" id="file-status-bar" style="margin-top: 1rem;">
+                        <div class="file-info">
+                            <i class="fa-solid fa-file-circle-check color-cyan"></i>
+                            <span id="file-name-label">sales_data.csv</span>
+                            <span class="file-tag" id="file-count-tag">0 rows</span>
+                        </div>
+                        <button type="button" class="btn-remove-file" id="btn-clear-file">&times;</button>
+                    </div>
+
+                    <!-- Input Data Preview Table (Visible Before Clicking Generate) -->
+                    <div id="revenue-input-preview-box" class="revenue-preview-box hidden" style="margin-top: 1rem;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.6rem; flex-wrap: wrap; gap: 0.5rem;">
+                            <span style="font-size: 0.82rem; font-weight: 700; color: var(--accent-cyan);">
+                                <i class="fa-solid fa-table-list"></i> Loaded Input Time-Series Data (Preset Preloaded):
+                            </span>
+                            <span style="font-size: 0.75rem; color: #8892b0; background: rgba(0, 229, 255, 0.08); padding: 2px 8px; border-radius: 4px; border: 1px solid rgba(0, 229, 255, 0.2);">
+                                Ready for Algorithm Execution &bull; Click 'Match & Filter' Below to Generate
+                            </span>
+                        </div>
+                        <div style="overflow-x: auto;">
+                            <table class="revenue-preview-table" style="width: 100%; border-collapse: collapse; font-size: 0.8rem;">
+                                <thead>
+                                    <tr style="border-bottom: 1px solid rgba(0, 229, 255, 0.2); text-align: left; color: #8892b0;">
+                                        <th style="padding: 6px 10px;">Period</th>
+                                        <th style="padding: 6px 10px;">Recorded Metric</th>
+                                        <th style="padding: 6px 10px;">Fluctuation (% Δ)</th>
+                                        <th style="padding: 6px 10px;">Context / Notes</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="revenue-preview-tbody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="form-actions" style="margin-top: 1.5rem;">
+                        <button type="button" class="btn-primary-lg btn-cyan" id="btn-analyze-revenue" style="width: 100%;">
+                            <i class="fa-solid fa-wand-magic-sparkles"></i> Match Revenue Fluctuation & Filter Relevant Market Clusters
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Sales Analysis Results Panel -->
+                <div class="step1-results-panel hidden" id="revenue-results-panel">
+                    
+                    <!-- Section 1: Fluctuation Clusters & Collective Decisions -->
+                    <div class="card glass-card">
+                        <div class="card-header">
+                            <i class="fa-solid fa-layer-group color-cyan"></i>
+                            <span>1. Fluctuation Clusters & Collective Decisions (Grouped by % Change)</span>
+                        </div>
+                        <p style="font-size: 13px; color: var(--text-muted); margin: 6px 0 16px 0; line-height: 1.5;">
+                            All revenue movements are grouped into discrete fluctuation bands by severity (<span style="color:var(--accent-green);">% change</span>). For each cluster, a collective strategic decision is formulated from the dominant news category.
+                        </p>
+                        <div id="fluctuation-clusters-list" class="clusters-grid">
+                            <!-- Populated dynamically with cluster cards and collective decision callouts -->
+                        </div>
+                    </div>
+
+                    <!-- Section 2: Lagging Indicator News & Likelihood Scoring Matrix -->
+                    <div class="card glass-card">
+                        <div class="card-header">
+                            <i class="fa-solid fa-newspaper color-cyan"></i>
+                            <span>2. Lagging Indicator News Assignment & Causal Likelihood Scores</span>
+                        </div>
+                        <p style="font-size: 13px; color: var(--text-muted); margin: 6px 0 16px 0; line-height: 1.5;">
+                            Sales is an empirical lagging indicator. For each fluctuation, historical macro news emerging prior to that period is assigned with a calibrated causal likelihood score.
+                        </p>
+                        <div id="correlation-matrix-list" style="margin-top: 1rem;">
+                            <!-- Dynamically populated with lagging news & likelihood meters -->
+                        </div>
+                    </div>
+
+                    <!-- Section 3: Dual Radar Charts Grid for Revenue -->
+                    <div class="dual-radar-grid">
+                        <div class="card glass-card radar-card">
+                            <div class="card-header">
+                                <i class="fa-solid fa-chart-pie color-pestle"></i>
+                                <span>3A. PESTLE Macro Risk Impact (Sales Mode)</span>
+                            </div>
+                            <div class="canvas-wrapper">
+                                <canvas id="canvas-revenue-pestle" width="300" height="300"></canvas>
+                            </div>
+                            <ul class="radar-legend-list" id="legend-rev-pestle-list">
+                                <li><span class="dot p1"></span> Political: <strong id="val-rev-p0">0.00</strong></li>
+                                <li><span class="dot p2"></span> Economic: <strong id="val-rev-p1">0.00</strong></li>
+                                <li><span class="dot p3"></span> Social: <strong id="val-rev-p2">0.00</strong></li>
+                                <li><span class="dot p4"></span> Tech: <strong id="val-rev-p3">0.00</strong></li>
+                                <li><span class="dot p5"></span> Legal: <strong id="val-rev-p4">0.00</strong></li>
+                                <li><span class="dot p6"></span> Enviro: <strong id="val-rev-p5">0.00</strong></li>
+                            </ul>
+                        </div>
+
+                        <div class="card glass-card radar-card">
+                            <div class="card-header">
+                                <i class="fa-solid fa-shield-halved color-porter"></i>
+                                <span>3B. Porter's 5 Forces Impact (Sales Mode)</span>
+                            </div>
+                            <div class="canvas-wrapper">
+                                <canvas id="canvas-revenue-porter" width="300" height="300"></canvas>
+                            </div>
+                            <ul class="radar-legend-list" id="legend-rev-porter-list">
+                                <li><span class="dot f1"></span> New Entrants: <strong id="val-rev-p6">0.00</strong></li>
+                                <li><span class="dot f2"></span> Buyer Power: <strong id="val-rev-p7">0.00</strong></li>
+                                <li><span class="dot f3"></span> Supplier Power: <strong id="val-rev-p8">0.00</strong></li>
+                                <li><span class="dot f4"></span> Substitutes: <strong id="val-rev-p9">0.00</strong></li>
+                                <li><span class="dot f5"></span> Rivalry: <strong id="val-rev-p10">0.00</strong></li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <!-- Section 4: PESTLE & Porter Evidences & Scoring Rationales -->
+                    <div class="card glass-card evidence-container-card">
+                        <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <i class="fa-solid fa-scale-balanced color-cyan"></i>
+                                <span>4. PESTLE & Porter Scoring Evidences & Rationales (Audit Trail)</span>
+                            </div>
+                            <div class="audit-header-actions">
+                                <span class="audit-total-badge"><i class="fa-solid fa-layer-group"></i> 11 Categories Evaluated</span>
+                                <button type="button" class="btn-audit-toggle" id="btn-expand-all-audit"><i class="fa-solid fa-angles-down"></i> Expand All</button>
+                                <button type="button" class="btn-audit-toggle" id="btn-collapse-all-audit"><i class="fa-solid fa-angles-up"></i> Collapse All</button>
+                            </div>
+                        </div>
+                        <p style="font-size: 13px; color: var(--text-muted); margin: 6px 0 18px 0; line-height: 1.5;">
+                            Empirical justification audit trail: Every assigned score across all 11 strategic dimensions is substantiated with explicit mathematical rationales, real database news articles (July – August 2026), causal likelihood scores, and direct clickable source links.
+                        </p>
+
+                        <!-- Master Category 1: PESTLE Macro Analysis -->
+                        <div class="audit-master-section">
+                            <div class="audit-master-header pestle-master">
+                                <div class="audit-master-title">
+                                    <i class="fa-solid fa-globe color-cyan"></i>
+                                    <span>Master Category: PESTLE Macro Environmental Analysis (6 Dimensions)</span>
+                                </div>
+                                <span class="audit-master-count">6 Dimensions</span>
+                            </div>
+                            <div id="audit-pestle-categories-list" class="audit-accordion-list">
+                                <!-- Populated dynamically with 6 PESTLE accordion categories -->
+                            </div>
+                        </div>
+
+                        <!-- Master Category 2: Porter's Five Forces Analysis -->
+                        <div class="audit-master-section" style="margin-top: 24px;">
+                            <div class="audit-master-header porter-master">
+                                <div class="audit-master-title">
+                                    <i class="fa-solid fa-shield-halved color-green"></i>
+                                    <span>Master Category: Porter's Five Forces Industry Structure (5 Dimensions)</span>
+                                </div>
+                                <span class="audit-master-count">5 Forces</span>
+                            </div>
+                            <div id="audit-porter-categories-list" class="audit-accordion-list">
+                                <!-- Populated dynamically with 5 Porter accordion categories -->
+                            </div>
+                        </div>
+
+                        <!-- Hidden fallback container for backward compatibility -->
+                        <div id="strategic-evidence-list" style="display:none;"></div>
+                    </div>
+
+                    <!-- Section 5: Nearest Benchmark Peer Companies in Revenue Mode -->
+                    <div class="card glass-card benchmark-results-card">
+                        <div class="card-header">
+                            <i class="fa-solid fa-chart-scatter color-cyan"></i>
+                            <span>5. Nearest Strategic Benchmark Peers (500 Company Database)</span>
+                        </div>
+                        <p style="font-size: 13px; color: var(--text-muted); margin: 6px 0 16px 0; line-height: 1.5;">
+                            500-Company Vector Engine matches: Companies with closest strategic risk vectors to your revenue sensitivity profile. Click any company to view its database profile.
+                        </p>
+                        <div class="cvp-matches-list" id="revenue-peers-list">
+                            <!-- Populated dynamically -->
+                        </div>
+                    </div>
+
+                    <!-- Next Step CTA -->
+                    <div class="cta-banner">
+                        <div class="cta-text">
+                            <h3>Sales Sensitivity & Strategic Evidence Analysis Complete!</h3>
+                            <p>Proceed to your AI Market Assistant with all fluctuation clusters, collective decisions, and news rationales pre-loaded into context.</p>
+                        </div>
+                        <button type="button" class="btn-cta-lg btn-cyan" id="btn-proceed-revenue-chatbot">
+                            <span>Proceed to Revenue AI Chatbot</span>
+                            <i class="fa-solid fa-arrow-right"></i>
+                        </button>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
+        <!-- =============================================================== -->
         <!-- STEP 2: PERSONALIZED MARKET INTELLIGENCE CHATBOT SCREEN         -->
         <!-- =============================================================== -->
         <div class="screen-view hidden" id="view-step2-chatbot">
@@ -172,10 +871,16 @@
                             <span>Active CVP Context</span>
                         </div>
                         <p id="sidebar-active-cvp">Loading CVP...</p>
-                        <button class="btn-link-sm" id="btn-change-cvp" type="button">
-                            <i class="fa-solid fa-rotate-left"></i> Change / Re-analyze CVP
-                        </button>
+                        <div class="active-cvp-actions">
+                            <button class="btn-link-sm" id="btn-quick-edit-cvp" type="button" title="Modify CVP in popup dialog">
+                                <i class="fa-solid fa-pen-to-square"></i> Modify CVP
+                            </button>
+                            <button class="btn-link-sm" id="btn-change-cvp" type="button" title="Return to Step 1 input form">
+                                <i class="fa-solid fa-arrow-left"></i> Edit in Step 1
+                            </button>
+                        </div>
                     </div>
+
 
                     <!-- Sidebar Radar 1: PESTLE Macro-Environment Card -->
                     <div class="sidebar-radar-card">
@@ -223,6 +928,18 @@
                         <div class="card-body" id="sidebar-neighbors-list">
                             <!-- Populated dynamically -->
                         </div>
+                    </div>
+
+                    <div class="sidebar-nav-actions">
+                        <button class="btn-sidebar-nav" id="btn-back-step1" type="button" title="Back to Step 1 CVP Input">
+                            <i class="fa-solid fa-arrow-left"></i> Step 1 CVP
+                        </button>
+                        <button class="btn-sidebar-nav" id="btn-sidebar-hub" type="button" title="Return to Analysis Mode Hub">
+                            <i class="fa-solid fa-layer-group"></i> Hub
+                        </button>
+                        <button class="btn-sidebar-nav" id="btn-sidebar-home" type="button" title="Home Landing Page">
+                            <i class="fa-solid fa-house"></i> Home
+                        </button>
                     </div>
 
                     <div class="sidebar-footer">
@@ -291,6 +1008,106 @@
             </div>
             <div class="modal-footer">
                 <button class="btn-primary" id="btn-save-key" type="button">Save Key</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- On-DB Company Profile Modal -->
+    <div class="modal-overlay" id="modal-company-profile">
+        <div class="modal-box modal-lg">
+            <div class="modal-header">
+                <div class="modal-title-group">
+                    <div class="company-badge-row">
+                        <span class="badge-db-verified"><i class="fa-solid fa-database"></i> Database Verified Profile</span>
+                        <span class="badge-sector-pill" id="modal-comp-sector">Sector</span>
+                    </div>
+                    <h2 id="modal-comp-name">Company Name</h2>
+                    <p class="modal-comp-product" id="modal-comp-product">Product Name & Category</p>
+                </div>
+                <button class="btn-close" id="btn-close-comp-modal" type="button">&times;</button>
+            </div>
+            <div class="modal-body modal-scroll">
+                <!-- Full CVP Box -->
+                <div class="profile-section-card">
+                    <h4><i class="fa-solid fa-bullseye" style="color: var(--accent-green);"></i> Full Customer Value Proposition (CVP)</h4>
+                    <p class="profile-cvp-text" id="modal-comp-cvp">Loading CVP statement...</p>
+                </div>
+
+                <!-- Customer & Need Grid -->
+                <div class="profile-meta-grid">
+                    <div class="profile-meta-card">
+                        <span class="meta-label"><i class="fa-solid fa-users"></i> Target Customer:</span>
+                        <p id="modal-comp-target-customer">-</p>
+                    </div>
+                    <div class="profile-meta-card">
+                        <span class="meta-label"><i class="fa-solid fa-triangle-exclamation"></i> Statement of Need:</span>
+                        <p id="modal-comp-need">-</p>
+                    </div>
+                    <div class="profile-meta-card full-width">
+                        <span class="meta-label"><i class="fa-solid fa-gem"></i> Statement of Key Benefit:</span>
+                        <p id="modal-comp-benefit">-</p>
+                    </div>
+                </div>
+
+                <!-- Relative PESTLE & Porter Analysis Comparison -->
+                <div class="relative-analysis-container">
+                    <div class="relative-analysis-header">
+                        <h4><i class="fa-solid fa-scale-balanced" style="color: var(--accent-cyan);"></i> Relative PESTLE & Porter Risk Differential</h4>
+                        <div class="relative-legend-pills">
+                            <span class="pill-user"><span class="legend-dot dot-user"></span> Your CVP</span>
+                            <span class="pill-peer"><span class="legend-dot dot-peer"></span> Benchmark Company</span>
+                        </div>
+                    </div>
+
+                    <!-- PESTLE Comparison Bars -->
+                    <div class="radar-compare-bars">
+                        <div class="compare-group">
+                            <h5>PESTLE Macro Factors (Your CVP vs Company)</h5>
+                            <div id="compare-pestle-bars" class="compare-bars-list">
+                                <!-- Populated dynamically with User vs Company bars -->
+                            </div>
+                        </div>
+                        <div class="compare-group">
+                            <h5>Porter's 5 Forces Industry Dynamics (Your CVP vs Company)</h5>
+                            <div id="compare-porter-bars" class="compare-bars-list">
+                                <!-- Populated dynamically with User vs Company bars -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-outline-md" id="btn-modal-overlay-radar">
+                    <i class="fa-solid fa-chart-pie"></i> Overlay on Dual Radars
+                </button>
+                <button type="button" class="btn-primary-md" id="btn-modal-ask-ai">
+                    <i class="fa-solid fa-robot"></i> Ask AI to Compare Strategy
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Edit CVP Modal -->
+    <div class="modal-overlay" id="modal-quick-edit-cvp">
+        <div class="modal-box">
+            <div class="modal-header">
+                <h3><i class="fa-solid fa-pen-to-square" style="color: var(--accent-green);"></i> Modify Customer Value Proposition (CVP)</h3>
+                <button class="btn-close" id="btn-close-quick-cvp" type="button">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 12px; line-height: 1.5;">
+                    Modify your CVP statement below. Real-time embeddings will be recomputed and compared against all 500 benchmark companies instantly.
+                </p>
+                <div class="form-group">
+                    <label for="input-quick-cvp-text">Active CVP Statement:</label>
+                    <textarea id="input-quick-cvp-text" rows="4" style="width: 100%; border: 1px solid var(--border-color); background: var(--bg-dark); color: var(--text-main); padding: 10px; border-radius: var(--radius-sm); font-family: var(--font-main);"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-outline-md" id="btn-cancel-quick-cvp" type="button">Cancel</button>
+                <button class="btn-primary-md" id="btn-save-quick-cvp" type="button">
+                    <i class="fa-solid fa-wand-magic-sparkles"></i> Re-evaluate & Update CVP
+                </button>
             </div>
         </div>
     </div>

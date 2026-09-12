@@ -42,7 +42,7 @@ def get_cloud_text_embedding(text: str, hf_token: str = None, model: str = DEFAU
 
     try:
         req = urllib.request.Request(url, data=data, headers=headers)
-        with urllib.request.urlopen(req, timeout=12) as resp:
+        with urllib.request.urlopen(req, timeout=2.0) as resp:
             res_json = json.loads(resp.read().decode("utf-8"))
             
             # Feature extraction API returns list of floats or list of token embeddings
