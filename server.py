@@ -2585,6 +2585,7 @@ def get_company_profile():
 
 if __name__ == "__main__":
     WEB_DIR.mkdir(parents=True, exist_ok=True)
-    GDELT_DATA_DIR.mkdir(parents=True, exist_ok=True)
-    print("Starting AI Market Intelligence Dashboard Server on http://localhost:5000 ...")
-    app.run(host="0.0.0.0", port=5000, debug=False, use_reloader=False)
+    port = int(os.environ.get("PORT", 5000))
+    host = os.environ.get("HOST", "0.0.0.0")
+    print(f"Starting AI Market Intelligence Dashboard Server on http://{host}:{port} ...")
+    app.run(host=host, port=port, debug=False, use_reloader=False)

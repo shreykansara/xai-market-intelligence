@@ -1,0 +1,8 @@
+# Omniscope AI - Lightweight Production Deployment Dependencies
+# Footprint: < 80 MB Total (Zero local heavy deep learning / PyTorch packages)
+# Embeddings: Cloud REST APIs (OpenAI, Hugging Face, or built-in deterministic projection)
+Flask>=3.0.0
+numpy>=1.24.0
+psycopg2-binary>=2.9.9
+scikit-learn>=1.3.0
+gunicorn>=21.2.0

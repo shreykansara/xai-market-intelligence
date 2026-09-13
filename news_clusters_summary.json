@@ -1,0 +1,318 @@
+{
+  "total_news_analyzed": 10000,
+  "number_of_clusters": 12,
+  "metrics": {
+    "silhouette_score": 0.0761,
+    "calinski_harabasz_index": 152.05
+  },
+  "clusters": {
+    "cluster_0": {
+      "cluster_id": 0,
+      "total_news_items": 573,
+      "percentage_of_dataset": 5.73,
+      "average_impact_score": 0.65,
+      "top_strategic_drivers": [
+        {
+          "dimension": "legal",
+          "average_score": 0.76
+        },
+        {
+          "dimension": "social",
+          "average_score": 0.21
+        },
+        {
+          "dimension": "political",
+          "average_score": 0.14
+        }
+      ],
+      "sample_headlines": [
+        "Nagpur Class 12 girl's sexual assault by Instagram friend sparks shock and outrage",
+        "United Spirits and Associated Alcohol Challenge FSSAI's Flavoring Norms in High Court",
+        "Man Jailed for 11 Years for Abusing Neighbor's Five-Year-Old Granddaughter",
+        "Four men jailed for 20 years each after woman gang-raped while her husband was held hostage in India",
+        "Kanye West settles lawsuit with former assistant over alleged sexual abuse and harassment"
+      ]
+    },
+    "cluster_1": {
+      "cluster_id": 1,
+      "total_news_items": 7177,
+      "percentage_of_dataset": 71.77,
+      "average_impact_score": 0.722,
+      "top_strategic_drivers": [
+        {
+          "dimension": "political",
+          "average_score": 0.63
+        },
+        {
+          "dimension": "legal",
+          "average_score": 0.49
+        },
+        {
+          "dimension": "competitive_rivalry",
+          "average_score": 0.44
+        }
+      ],
+      "sample_headlines": [
+        "Pakistan reaffirms commitment to inclusive artificial intelligence",
+        "ONGC Plans 150 Deepwater Wells Under Rs 84,084-Crore Samudra Manthan Mission",
+        "China's Innovation Without Alliances: Lessons from India and China",
+        "China Approves Four New Nuclear Power Projects with Total Investment Exceeding $25 Billion",
+        "India's Data Protection Board: Established in Law, Absent in Fact"
+      ]
+    },
+    "cluster_2": {
+      "cluster_id": 2,
+      "total_news_items": 779,
+      "percentage_of_dataset": 7.79,
+      "average_impact_score": 0.542,
+      "top_strategic_drivers": [
+        {
+          "dimension": "technological",
+          "average_score": 0.6
+        },
+        {
+          "dimension": "competitive_rivalry",
+          "average_score": 0.19
+        },
+        {
+          "dimension": "political",
+          "average_score": 0.16
+        }
+      ],
+      "sample_headlines": [
+        "Farnborough International Airshow 2026 Sets New Records for Global Aerospace Industry",
+        "Hiroshima 1945: The Atomic Bombing that Transformed War, Peace, and Global Power Still Matters 80 Years Later",
+        "WhatsApp begins age verification tests in India ahead of DPDP Act rollout",
+        "Tech worker: I spent a decade being loyal to tech in Ireland. Then AI took my job",
+        "Google Announces Major AI Restructuring as Top Talent Depart"
+      ]
+    },
+    "cluster_3": {
+      "cluster_id": 3,
+      "total_news_items": 26,
+      "percentage_of_dataset": 0.26,
+      "average_impact_score": 0.438,
+      "top_strategic_drivers": [
+        {
+          "dimension": "bargaining_power_of_suppliers",
+          "average_score": 0.45
+        },
+        {
+          "dimension": "technological",
+          "average_score": 0.18
+        },
+        {
+          "dimension": "legal",
+          "average_score": 0.14
+        }
+      ],
+      "sample_headlines": [
+        "Victorian Politician's Stance on Union Deal Vindicated by Anti-Corruption Report",
+        "H&M and Inditex Face Union-Busting Claims at Turkish Supplier Ero\u011flu Giyim",
+        "Vestis Teamsters in Indianapolis Win Strike, Ratify Strong New Agreement",
+        "UNDP Invites Proposals for Digitization of Paper-Based Criminal Proceedings for GPO",
+        "Victorian firm secures $160 million helmet contract with Australian Defence Force"
+      ]
+    },
+    "cluster_4": {
+      "cluster_id": 4,
+      "total_news_items": 296,
+      "percentage_of_dataset": 2.96,
+      "average_impact_score": 0.61,
+      "top_strategic_drivers": [
+        {
+          "dimension": "social",
+          "average_score": 0.6
+        },
+        {
+          "dimension": "political",
+          "average_score": 0.36
+        },
+        {
+          "dimension": "competitive_rivalry",
+          "average_score": 0.24
+        }
+      ],
+      "sample_headlines": [
+        "World Bank Commends Vanuatu's Urban Development Plans",
+        "Ebola Outbreak Spreads in Democratic Republic of Congo's Displaced Persons Camps",
+        "Vietnam Launches National Action Plan to Combat Breast and Cervical Cancer",
+        "UNICEF seeks stronger enforcement of breast milk substitute regulations in Nigeria",
+        "Ending the Aids pandemic requires more than science, as Pepfar grant cuts arrive with new HIV prevention medicines"
+      ]
+    },
+    "cluster_5": {
+      "cluster_id": 5,
+      "total_news_items": 8,
+      "percentage_of_dataset": 0.08,
+      "average_impact_score": 0.614,
+      "top_strategic_drivers": [
+        {
+          "dimension": "social",
+          "average_score": 0.59
+        },
+        {
+          "dimension": "competitive_rivalry",
+          "average_score": 0.51
+        },
+        {
+          "dimension": "political",
+          "average_score": 0.23
+        }
+      ],
+      "sample_headlines": [
+        "Malaysian Influencer's Curse Sparks Family Tragedy After Using Insensitive Term to Describe a Man as a Pig",
+        "Perez Hilton's Disturbing Livestream Sparks Renewed Talk on Mental Health",
+        "Malaysians Frustrated with Tourists Who Expect Free Rides",
+        "Man Yells at Woman for Sleeping on Train Seat, Whips Out Belt in Mumbai",
+        "Shabjdeed's Saint Levant Diss Track Sparks Debate on Palestinian Identity and Representation"
+      ]
+    },
+    "cluster_6": {
+      "cluster_id": 6,
+      "total_news_items": 204,
+      "percentage_of_dataset": 2.04,
+      "average_impact_score": 0.658,
+      "top_strategic_drivers": [
+        {
+          "dimension": "competitive_rivalry",
+          "average_score": 0.75
+        },
+        {
+          "dimension": "technological",
+          "average_score": 0.23
+        },
+        {
+          "dimension": "bargaining_power_of_buyers",
+          "average_score": 0.15
+        }
+      ],
+      "sample_headlines": [
+        "Business of translations in India: Why contemporary hits are now a must for publishers",
+        "Fintechs Seek New Revenue Streams as Flipkart Launches Food Delivery Service",
+        "Jio Financial Services Partners with BlackRock and Allianz to Drive Growth",
+        "Croma Unveils Edge by Croma, a Digital-First Neighbourhood Retail Format",
+        "Tayal Corp Shapes Pune's Real Estate Market with Unique Living Experiences"
+      ]
+    },
+    "cluster_7": {
+      "cluster_id": 7,
+      "total_news_items": 1,
+      "percentage_of_dataset": 0.01,
+      "average_impact_score": 0.76,
+      "top_strategic_drivers": [
+        {
+          "dimension": "threat_of_substitutes",
+          "average_score": 0.8
+        },
+        {
+          "dimension": "social",
+          "average_score": 0.8
+        }
+      ],
+      "sample_headlines": [
+        "Americans Drinking Less as Alcohol Industry Sees Major Decline"
+      ]
+    },
+    "cluster_8": {
+      "cluster_id": 8,
+      "total_news_items": 1,
+      "percentage_of_dataset": 0.01,
+      "average_impact_score": 0.65,
+      "top_strategic_drivers": [
+        {
+          "dimension": "threat_of_new_entrants",
+          "average_score": 0.8
+        },
+        {
+          "dimension": "bargaining_power_of_buyers",
+          "average_score": 0.2
+        },
+        {
+          "dimension": "technological",
+          "average_score": 0.17
+        }
+      ],
+      "sample_headlines": [
+        "Bengaluru Man Quits Rs 11 LPA Job to Earn Rs 2.35 Lakh Monthly Profit from Simple Water Business"
+      ]
+    },
+    "cluster_9": {
+      "cluster_id": 9,
+      "total_news_items": 182,
+      "percentage_of_dataset": 1.82,
+      "average_impact_score": 0.65,
+      "top_strategic_drivers": [
+        {
+          "dimension": "economic",
+          "average_score": 0.75
+        },
+        {
+          "dimension": "competitive_rivalry",
+          "average_score": 0.15
+        },
+        {
+          "dimension": "political",
+          "average_score": 0.13
+        }
+      ],
+      "sample_headlines": [
+        "China Expands Economic Influence in Central Asia Through Uzbekistan",
+        "China Sees Record Electricity Demand as Economy Driven by AI, EV, and Renewable Energy",
+        "Israeli Exports Reach Historic $164 Billion Despite War and Boycott Efforts",
+        "Taiwan's Economy Grows by Almost 13% Due to Rising Demand for Artificial Intelligence",
+        "Bihar Should Lift Prohibition to Raise Revenue and Fund Development Push, NCAER Paper Suggests"
+      ]
+    },
+    "cluster_10": {
+      "cluster_id": 10,
+      "total_news_items": 752,
+      "percentage_of_dataset": 7.52,
+      "average_impact_score": 0.734,
+      "top_strategic_drivers": [
+        {
+          "dimension": "environmental",
+          "average_score": 0.8
+        },
+        {
+          "dimension": "political",
+          "average_score": 0.3
+        },
+        {
+          "dimension": "competitive_rivalry",
+          "average_score": 0.25
+        }
+      ],
+      "sample_headlines": [
+        "India Approves Rs 5070 Crore PM Surya Sarovar Yojana for 5000 MW Floating Solar Projects with 10,000 MWh Energy Storage",
+        "Space Experts Warn of Earth's Imminent Doom Due to Asteroid Impact",
+        "India Approves $531 Million Floating Solar and Storage Scheme to Deploy 5GW of Renewable Energy",
+        "El Ni\u00f1o to Intensify, Putting Millions at Risk in Eastern and Southern Africa",
+        "UN Scientists Warn of Devastating Effects of Upcoming El Ni\u00f1o Event"
+      ]
+    },
+    "cluster_11": {
+      "cluster_id": 11,
+      "total_news_items": 1,
+      "percentage_of_dataset": 0.01,
+      "average_impact_score": 0.405,
+      "top_strategic_drivers": [
+        {
+          "dimension": "threat_of_new_entrants",
+          "average_score": 0.4
+        },
+        {
+          "dimension": "legal",
+          "average_score": 0.3
+        },
+        {
+          "dimension": "economic",
+          "average_score": 0.3
+        }
+      ],
+      "sample_headlines": [
+        "Who Can Be Held Liable for a Truck Accident in Colorado?"
+      ]
+    }
+  }
+}

@@ -12,6 +12,10 @@
 *.tmp
 !package.json
 !mcp_config.json
+!500_companies_analysis.json
+!category_news_cache_11d.json
+!news_clusters_summary.json
+!strategic_projection_matrix.json
 
 # Python Virtual Environments & Caches
 __pycache__/

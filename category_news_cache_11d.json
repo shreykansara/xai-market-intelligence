@@ -1,0 +1,376 @@
+{
+  "political": [
+    {
+      "id": "gdelt_20260803_e1316581877",
+      "published_date": "2026-08-03",
+      "headline": "RoadGrid to Expand EV Charger Manufacturing with Government Backing",
+      "location_affected": "India",
+      "impact_score": 0.948,
+      "source_link": "https://economictimes.indiatimes.com/industry/renewables/roadgrid-gets-government-backing-to-expand-ev-charger-manufacturing/articleshow/132829848.cms"
+    },
+    {
+      "id": "gdelt_20260802_e1316505681",
+      "published_date": "2026-08-02",
+      "headline": "Trump DOJ Acts to Deport Afghan Alien Who Supported Her Family's Plans for Election-Day Shooting",
+      "location_affected": "World",
+      "impact_score": 0.948,
+      "source_link": "https://conservativehq.com/post/trump-doj-acts-to-deport-afghan-alien-who-supported-her-familys-plans-for-election-day-shooting"
+    },
+    {
+      "id": "gdelt_20260801_e1316397557",
+      "published_date": "2026-08-01",
+      "headline": "We The Leaders Release Policy Paper for Clean and Sustainable Tamil Nadu",
+      "location_affected": "India",
+      "impact_score": 0.948,
+      "source_link": "https://www.thehindu.com/news/national/tamil-nadu/we-the-leaders-release-a-policy-paper-for-a-clean-and-sustainable-tamil-nadu/article71295461.ece"
+    },
+    {
+      "id": "gdelt_20260715_e1313769003",
+      "published_date": "2026-07-15",
+      "headline": "How governments can work to protect themselves against the cybersecurity threats of today \u2013 and tomorrow",
+      "location_affected": "World",
+      "impact_score": 0.93,
+      "source_link": "https://www.globalgovernmentforum.com/adapt-and-survive-how-governments-can-work-to-protect-themselves-against-the-cybersecurity-threats-of-today-and-tomorrow/"
+    }
+  ],
+  "economic": [
+    {
+      "id": "gdelt_20260807_e1317206143",
+      "published_date": "2026-08-07",
+      "headline": "China's Trade Boom Continues as Global Demand for AI Tech Surges",
+      "location_affected": "World",
+      "impact_score": 0.948,
+      "source_link": "https://punchng.com/china-extends-trade-boom-as-global-ai-tech-demand-surges/"
+    },
+    {
+      "id": "gdelt_20260806_e1317073843",
+      "published_date": "2026-08-06",
+      "headline": "A Climate Damage Tax Could Hold Polluters Accountable for Emissions Damage",
+      "location_affected": "World",
+      "impact_score": 0.948,
+      "source_link": "https://www.thecable.ng/a-climate-damage-tax-will-stop-polluters-in-their-tracks/"
+    },
+    {
+      "id": "gdelt_20260803_e1316554112",
+      "published_date": "2026-08-03",
+      "headline": "India Must Move Quickly on Digital Trade: Its Agreement with the UK Could Play Catalyst",
+      "location_affected": "India",
+      "impact_score": 0.948,
+      "source_link": "https://www.livemint.com/opinion/online-views/india-digital-trade-ceta-economic-and-trade-agreement-paperless-technologies-11785575791081.html"
+    },
+    {
+      "id": "gdelt_20260810_e1317661242",
+      "published_date": "2026-08-10",
+      "headline": "India's Petroleum Trade Diversification Amid West Asia Conflict",
+      "location_affected": "India",
+      "impact_score": 0.91,
+      "source_link": "https://www.business-standard.com/economy/news/datanomics-west-asia-conflict-and-india-s-petroleum-trade-diversification-126081001095_1.html"
+    }
+  ],
+  "social": [
+    {
+      "id": "gdelt_20260805_e1316846805",
+      "published_date": "2026-08-05",
+      "headline": "China Unveils Plan to Digitalize and Better Integrate Legal Education",
+      "location_affected": "World",
+      "impact_score": 0.948,
+      "source_link": "http://global.chinadaily.com.cn/a/202608/05/WS6a728e9ca310986e2b469015.html"
+    },
+    {
+      "id": "gdelt_20260804_e1316787240",
+      "published_date": "2026-08-04",
+      "headline": "World Bank Urges Developing Countries to Adopt AI for Better Healthcare, Education, and Public Services",
+      "location_affected": "World",
+      "impact_score": 0.948,
+      "source_link": "https://www.rediff.com/news/report/world-bank-urges-developing-countries-to-speed-up-ai-adaptation/20260804.htm"
+    },
+    {
+      "id": "gdelt_20260806_e1317096954",
+      "published_date": "2026-08-06",
+      "headline": "Months-long strike disrupts disability care in Ontario, pushing families to the brink",
+      "location_affected": "World",
+      "impact_score": 0.91,
+      "source_link": "https://globalnews.ca/news/12011305/months-long-strike-disrupts-disability-care-pushing-ontario-families-to-the-brink/"
+    },
+    {
+      "id": "gdelt_20260806_e1317096779",
+      "published_date": "2026-08-06",
+      "headline": "Maharashtra Doctors' Strike: Bombay HC Asks if Dead Patients Can Be Brought Back to Life",
+      "location_affected": "India",
+      "impact_score": 0.91,
+      "source_link": "https://www.moneycontrol.com/city/can-they-bring-back-dead-patients-bombay-hc-on-maharashtra-doctors-strike-article-13996729.html"
+    }
+  ],
+  "technological": [
+    {
+      "id": "gdelt_20260807_e1317250309",
+      "published_date": "2026-08-07",
+      "headline": "Gujarat CM Bhupendra Patel Chairs Viksit Gujarat Summit 2026 to Boost Global Competitiveness",
+      "location_affected": "India",
+      "impact_score": 0.948,
+      "source_link": "https://www.newkerala.com/news/a/gujarat-cm-bhupendra-patel-chairs-viksit-gujarat-summit-384.htm"
+    },
+    {
+      "id": "gdelt_20260807_e1317206143",
+      "published_date": "2026-08-07",
+      "headline": "China's Trade Boom Continues as Global Demand for AI Tech Surges",
+      "location_affected": "World",
+      "impact_score": 0.948,
+      "source_link": "https://punchng.com/china-extends-trade-boom-as-global-ai-tech-demand-surges/"
+    },
+    {
+      "id": "gdelt_20260806_e1317120937",
+      "published_date": "2026-08-06",
+      "headline": "SAIC-GM Extends 20-Year Partnership to Drive Auto Innovation and Global Growth",
+      "location_affected": "World",
+      "impact_score": 0.948,
+      "source_link": "http://www.prnewswire.com/news-releases/global-times-saic-gms-20-year-renewal-highlights-chinas-key-role-in-auto-innovation-and-global-growth-302845217.html"
+    },
+    {
+      "id": "gdelt_20260806_e1317120933",
+      "published_date": "2026-08-06",
+      "headline": "China Gains Ground in Global Favorability Ratings, US Loses Out",
+      "location_affected": "India",
+      "impact_score": 0.948,
+      "source_link": "https://www.manilatimes.net/2026/08/07/opinion/editorial/us-loses-out-to-china-in-global-favorability-ratings/2400309"
+    }
+  ],
+  "legal": [
+    {
+      "id": "gdelt_20260804_e1316695632",
+      "published_date": "2026-08-04",
+      "headline": "Supreme Court Ruling: Man in Live-In Relationship Can Be Prosecuted for Cruelty Towards Woman",
+      "location_affected": "India",
+      "impact_score": 0.948,
+      "source_link": "https://www.hindustantimes.com/india-news/man-in-live-in-relationship-in-nature-of-marriage-can-be-prosecuted-for-cruelty-towards-woman-supreme-court-101785807326610.html"
+    },
+    {
+      "id": "gdelt_20260804_e1316733731",
+      "published_date": "2026-08-04",
+      "headline": "Supreme Court Extends 10 km Buffer for Mining to All Wetland Reserves",
+      "location_affected": "India",
+      "impact_score": 0.948,
+      "source_link": "https://www.thehindu.com/news/national/supreme-court-says-10-km-radius-buffer-for-mining-extends-to-all-wetland-reserves/article71304647.ece"
+    },
+    {
+      "id": "gdelt_20260803_e1316602529",
+      "published_date": "2026-08-03",
+      "headline": "Major Environment Orders Heard in Supreme Court, High Courts, and National Green Tribunal",
+      "location_affected": "India",
+      "impact_score": 0.948,
+      "source_link": "https://www.downtoearth.org.in/environment/daily-court-digest-major-environment-orders-july-31-2026"
+    },
+    {
+      "id": "gdelt_20260806_e1317063323",
+      "published_date": "2026-08-06",
+      "headline": "Meta Ran AI-Generated Child Abuse Ads Weeks After India Probe",
+      "location_affected": "India",
+      "impact_score": 0.91,
+      "source_link": "https://www.medianama.com/2026/08/223-meta-ai-generated-csam-ads-india-investigation/"
+    }
+  ],
+  "environmental": [
+    {
+      "id": "gdelt_20260804_e1316764002",
+      "published_date": "2026-08-04",
+      "headline": "India Approves $531 Million Floating Solar and Storage Scheme to Deploy 5GW of Renewable Energy",
+      "location_affected": "India",
+      "impact_score": 0.955,
+      "source_link": "https://www.pv-tech.org/india-approves-us532-million-floating-solar-and-storage-scheme-targeting-5gw-deployment/"
+    },
+    {
+      "id": "gdelt_20260802_e1316445090",
+      "published_date": "2026-08-02",
+      "headline": "India Approves Rs 5070 Crore PM Surya Sarovar Yojana for 5000 MW Floating Solar Projects with 10,000 MWh Energy Storage",
+      "location_affected": "India",
+      "impact_score": 0.955,
+      "source_link": "https://greentechlead.com/solar/india-approves-rs-5070-crore-pm-surya-sarovar-yojana-to-build-5000-mw-floating-solar-projects-with-10000-mwh-energy-storage-54517"
+    },
+    {
+      "id": "gdelt_20260806_e1317109179",
+      "published_date": "2026-08-06",
+      "headline": "Odisha Showcases Clean Energy Drive at CII Summit",
+      "location_affected": "India",
+      "impact_score": 0.948,
+      "source_link": "https://pragativadi.com/odisha-showcases-clean-energy-drive-at-cii-summit/"
+    },
+    {
+      "id": "gdelt_20260806_e1317073843",
+      "published_date": "2026-08-06",
+      "headline": "A Climate Damage Tax Could Hold Polluters Accountable for Emissions Damage",
+      "location_affected": "World",
+      "impact_score": 0.948,
+      "source_link": "https://www.thecable.ng/a-climate-damage-tax-will-stop-polluters-in-their-tracks/"
+    }
+  ],
+  "threat_of_new_entrants": [
+    {
+      "id": "gdelt_20260807_e1317174794",
+      "published_date": "2026-08-07",
+      "headline": "Environmental Groups Challenge FCC Approval of Startup's Plan to Beam Sunlight from Space to Earth",
+      "location_affected": "World",
+      "impact_score": 0.948,
+      "source_link": "https://www.yahoo.com/news/science/articles/environmental-groups-challenge-fcc-approval-212734910.html"
+    },
+    {
+      "id": "gdelt_20260806_e1317050966",
+      "published_date": "2026-08-06",
+      "headline": "Metro Phase II Stretch Nears Launch, 1000 e-Buses Planned, FM",
+      "location_affected": "India",
+      "impact_score": 0.948,
+      "source_link": "https://newstodaynet.com/2026/08/06/metro-phase-ii-stretch-nears-launch-1000-e-buses-planned-fm/"
+    },
+    {
+      "id": "gdelt_20260806_e1317160933",
+      "published_date": "2026-08-06",
+      "headline": "Environmental groups challenge FCC approval of startup's plan to beam on-demand sunlight from space",
+      "location_affected": "World",
+      "impact_score": 0.948,
+      "source_link": "https://www.nbcnews.com/science/space/environmental-groups-challenge-fcc-approval-startups-plan-beam-demand-rcna591041"
+    },
+    {
+      "id": "gdelt_20260805_e1316909531",
+      "published_date": "2026-08-05",
+      "headline": "Israel Launches National AI Initiatives to Boost Growth and Technological Sovereignty",
+      "location_affected": "World",
+      "impact_score": 0.948,
+      "source_link": "https://www.globalsecurity.org/wmd/library/news/israel/2026/08/israel-260804-israel-pm01.htm"
+    }
+  ],
+  "bargaining_power_of_buyers": [
+    {
+      "id": "gdelt_20260806_e1317079725",
+      "published_date": "2026-08-06",
+      "headline": "European Union Introduces 'Made in Europe' Procurement Policy Amid Global Protectionism",
+      "location_affected": "World",
+      "impact_score": 0.902,
+      "source_link": "https://slguardian.org/european-union-moves-towards-made-in-europe-procurement-as-global-protectionism-accelerates/"
+    },
+    {
+      "id": "gdelt_20260811_e1317832880",
+      "published_date": "2026-08-11",
+      "headline": "Sudan Launches Digital Public Procurement Platform",
+      "location_affected": "World",
+      "impact_score": 0.895,
+      "source_link": "https://www.developingtelecoms.com/telecom-technology/oss-service-management/20665-sudan-launches-digital-public-procurement-platform.html"
+    },
+    {
+      "id": "gdelt_20260805_e1316893871",
+      "published_date": "2026-08-05",
+      "headline": "Tamil Nadu Govt to Set Up Expenditure Reforms Committee to Review Welfare Spending",
+      "location_affected": "India",
+      "impact_score": 0.895,
+      "source_link": "https://timesofindia.indiatimes.com/city/chennai/tamil-nadugovt-to-set-up-expenditure-reforms-committee-to-review-welfare-spending/articleshow/132909698.cms"
+    },
+    {
+      "id": "gdelt_20260805_e1316960778",
+      "published_date": "2026-08-05",
+      "headline": "UK Government's Spending Review Sparks Concerns Over Austerity Measures",
+      "location_affected": "World",
+      "impact_score": 0.895,
+      "source_link": "https://www.newstatesman.com/politics/the-sketch/2026/08/abandon-all-hope-ye-who-examine-government-spending"
+    }
+  ],
+  "bargaining_power_of_suppliers": [
+    {
+      "id": "gdelt_20260807_e1317212490",
+      "published_date": "2026-08-07",
+      "headline": "Namibia Targets $250 Million in Green Industrialisation by 2026 with World Bank Support",
+      "location_affected": "World",
+      "impact_score": 0.948,
+      "source_link": "https://www.riotimesonline.com/namibia-targets-us250-million-green-industrialisation-2026/"
+    },
+    {
+      "id": "gdelt_20260805_e1316846020",
+      "published_date": "2026-08-05",
+      "headline": "Farmers in Maharashtra Demand Legal Guarantee of Minimum Support Price",
+      "location_affected": "India",
+      "impact_score": 0.948,
+      "source_link": "https://udaipurkiran.com/farmers-suicide-crisis-in-maharashtra-rakesh-tikait-demands-msp-law/"
+    },
+    {
+      "id": "gdelt_20260805_e1316869563",
+      "published_date": "2026-08-05",
+      "headline": "Global Human Development Report Team Turns to Jamaica for Insights on Climate Crisis",
+      "location_affected": "World",
+      "impact_score": 0.948,
+      "source_link": "https://www.jamaicaobserver.com/2026/08/05/global-human-development-report-team-looks-jamaica-climate-crisis-insights-following-melissa/"
+    },
+    {
+      "id": "gdelt_20260804_e1316717103",
+      "published_date": "2026-08-04",
+      "headline": "Nuclear-Powered Cargo Ships Offer Cleaner Shipping, but Raise Safety Concerns",
+      "location_affected": "World",
+      "impact_score": 0.948,
+      "source_link": "https://slguardian.org/nuclear-powered-cargo-ships-promise-cleaner-shipping-but-raise-new-global-safety-challenges/"
+    }
+  ],
+  "threat_of_substitutes": [
+    {
+      "id": "gdelt_20260804_e1316764002",
+      "published_date": "2026-08-04",
+      "headline": "India Approves $531 Million Floating Solar and Storage Scheme to Deploy 5GW of Renewable Energy",
+      "location_affected": "India",
+      "impact_score": 0.955,
+      "source_link": "https://www.pv-tech.org/india-approves-us532-million-floating-solar-and-storage-scheme-targeting-5gw-deployment/"
+    },
+    {
+      "id": "gdelt_20260804_e1316783163",
+      "published_date": "2026-08-04",
+      "headline": "United Nations Discusses Renewable Energy at TU07 Conference in Antalya, Turkey",
+      "location_affected": "World",
+      "impact_score": 0.948,
+      "source_link": "https://www.dailykos.com/stories/2026/8/4/800077600/community/renewable-tuesday/"
+    },
+    {
+      "id": "gdelt_20260804_e1316786882",
+      "published_date": "2026-08-04",
+      "headline": "China Sees Record Electricity Demand as Economy Driven by AI, EV, and Renewable Energy",
+      "location_affected": "World",
+      "impact_score": 0.915,
+      "source_link": "https://www.globaltimes.cn/page/202608/1367487.shtml"
+    },
+    {
+      "id": "gdelt_20260806_e1317137024",
+      "published_date": "2026-08-06",
+      "headline": "India's Ethanol Push Faces Lessons from Brazil's Proalcool Crisis",
+      "location_affected": "India",
+      "impact_score": 0.91,
+      "source_link": "https://economictimes.indiatimes.com/news/india/flex-reflections-from-brazil/articleshow/133013697.cms"
+    }
+  ],
+  "competitive_rivalry": [
+    {
+      "id": "gdelt_20260807_e1317256578",
+      "published_date": "2026-08-07",
+      "headline": "China's Polysilicon Producers Pledge to Avoid Below-Cost Sales Amid 'Anti-Involution' Push",
+      "location_affected": "World",
+      "impact_score": 0.91,
+      "source_link": "https://www.globaltimes.cn/page/202608/1367739.shtml"
+    },
+    {
+      "id": "gdelt_20260802_e1316444260",
+      "published_date": "2026-08-02",
+      "headline": "X-Bat VTOL CCA Offers India a Template for Contested Air Warfare",
+      "location_affected": "India",
+      "impact_score": 0.91,
+      "source_link": "https://idrw.org/from-sea-to-mountain-how-the-x-bat-vtol-cca-offers-india-a-template-for-contested-air-warfare/"
+    },
+    {
+      "id": "gdelt_20260806_e1317078056",
+      "published_date": "2026-08-06",
+      "headline": "Telangana CM Reddy meets with US envoy Gor, invites investment in AI and Life Sciences, discusses student welfare and visa issues",
+      "location_affected": "India",
+      "impact_score": 0.895,
+      "source_link": "https://aninews.in/news/national/general-news/telangana-cm-reddy-meets-with-us-envoy-gor-invites-investment-in-ai-and-life-sciences-discusses-student-welfare-visa-issues20260806155338/"
+    },
+    {
+      "id": "gdelt_20260805_e1316893871",
+      "published_date": "2026-08-05",
+      "headline": "Tamil Nadu Govt to Set Up Expenditure Reforms Committee to Review Welfare Spending",
+      "location_affected": "India",
+      "impact_score": 0.895,
+      "source_link": "https://timesofindia.indiatimes.com/city/chennai/tamil-nadugovt-to-set-up-expenditure-reforms-committee-to-review-welfare-spending/articleshow/132909698.cms"
+    }
+  ]
+}
