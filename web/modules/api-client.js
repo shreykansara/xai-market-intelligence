@@ -4,12 +4,43 @@
  */
 
 export class ApiClient {
+    static getAuthToken() {
+        return localStorage.getItem('omniscope_admin_token') || sessionStorage.getItem('omniscope_admin_token') || '';
+    }
+
+    static setAuthToken(token, remember = true) {
+        if (remember) {
+            localStorage.setItem('omniscope_admin_token', token);
+        } else {
+            sessionStorage.setItem('omniscope_admin_token', token);
+        }
+    }
+
+    static clearAuthToken() {
+        localStorage.removeItem('omniscope_admin_token');
+        sessionStorage.removeItem('omniscope_admin_token');
+    }
+
+    static getHeaders() {
+        const headers = { 'Content-Type': 'application/json' };
+        const token = ApiClient.getAuthToken();
+        if (token) {
+            headers['Authorization'] = `Bearer ${token}`;
+        }
+        return headers;
+    }
+
     static async get(url, params = {}) {
         const query = new URLSearchParams(params).toString();
         const fullUrl = query ? `${url}?${query}` : url;
-        const res = await fetch(fullUrl);
+        const res = await fetch(fullUrl, {
+            headers: ApiClient.getHeaders()
+        });
         if (!res.ok) {
             const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+            if (res.status === 401 && window.adminController?.handleUnauthorized) {
+                window.adminController.handleUnauthorized(err.error || 'Administrator session expired.');
+            }
             throw new Error(err.error || `HTTP ${res.status}`);
         }
         return res.json();
@@ -18,11 +49,14 @@ export class ApiClient {
     static async post(url, body = {}) {
         const res = await fetch(url, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: ApiClient.getHeaders(),
             body: JSON.stringify(body)
         });
         if (!res.ok) {
             const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+            if (res.status === 401 && window.adminController?.handleUnauthorized) {
+                window.adminController.handleUnauthorized(err.error || 'Administrator session expired.');
+            }
             throw new Error(err.error || `HTTP ${res.status}`);
         }
         return res.json();
@@ -50,6 +84,14 @@ export const CompanyApi = {
 };
 
 export const AdminApi = {
+    // Authentication & Session
+    login: (email, password) =>
+        ApiClient.post('/api/admin/login', { email, password }),
+    logout: () =>
+        ApiClient.post('/api/admin/logout'),
+    verifyAuth: () =>
+        ApiClient.get('/api/admin/verify'),
+
     // Stage 1
     ingestStage1: (startDate, endDate) => 
         ApiClient.post('/api/stage1/ingest', { start_date: startDate, end_date: endDate }),

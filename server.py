@@ -24,6 +24,11 @@ import urllib.request
 import urllib.parse
 from datetime import datetime, timedelta
 from pathlib import Path
+import functools
+import hmac
+import hashlib
+import time
+import secrets
 from flask import Flask, jsonify, request, send_from_directory, render_template_string
 import numpy as np
 
@@ -63,6 +68,74 @@ def get_db_connection():
     except Exception as err:
         print(f"[Server] Note: DB connection attempt failed: {err}")
         return None
+
+# ==========================================
+# PLATFORM ADMINISTRATOR AUTHENTICATION
+# ==========================================
+ADMIN_EMAIL = "admin@shreykansara.dev"
+ADMIN_PASSWORD = "C0nf!d3nt!41"
+ADMIN_AUTH_SECRET = os.environ.get("ADMIN_AUTH_SECRET", "omniscope_strategic_admin_secret_key_2026_shrey")
+ACTIVE_ADMIN_TOKENS = {}  # token -> {"email": email, "created_at": timestamp, "expires_at": timestamp}
+
+def generate_admin_token(email: str) -> str:
+    raw_token = secrets.token_urlsafe(32)
+    timestamp = int(time.time())
+    sig = hmac.new(ADMIN_AUTH_SECRET.encode(), f"{email}:{timestamp}:{raw_token}".encode(), hashlib.sha256).hexdigest()
+    token = f"{timestamp}.{raw_token}.{sig}"
+    ACTIVE_ADMIN_TOKENS[token] = {
+        "email": email,
+        "created_at": timestamp,
+        "expires_at": timestamp + (86400 * 7)
+    }
+    return token
+
+def verify_admin_token(token: str):
+    if not token:
+        return False, "Authentication token missing"
+    parts = str(token).split(".")
+    if len(parts) != 3:
+        return False, "Malformed token structure"
+    timestamp_str, raw_token, sig = parts
+    try:
+        timestamp = int(timestamp_str)
+    except ValueError:
+        return False, "Invalid token timestamp"
+
+    # 7-day expiration check
+    if time.time() - timestamp > (86400 * 7):
+        ACTIVE_ADMIN_TOKENS.pop(token, None)
+        return False, "Admin session has expired"
+
+    expected_sig = hmac.new(ADMIN_AUTH_SECRET.encode(), f"{ADMIN_EMAIL}:{timestamp}:{raw_token}".encode(), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(sig, expected_sig):
+        return False, "Invalid authentication signature"
+
+    return True, "Valid"
+
+def check_admin_auth():
+    auth_header = request.headers.get("Authorization", "")
+    token = None
+    if auth_header.startswith("Bearer "):
+        token = auth_header.split(" ", 1)[1].strip()
+    if not token:
+        token = request.cookies.get("omniscope_admin_session")
+    if not token:
+        token = request.args.get("admin_token")
+    return verify_admin_token(token)
+
+def require_admin(f):
+    @functools.wraps(f)
+    def decorated(*args, **kwargs):
+        is_valid, reason = check_admin_auth()
+        if not is_valid:
+            return jsonify({
+                "success": False,
+                "error": f"Unauthorized: {reason}. Administrator credentials required.",
+                "auth_required": True
+            }), 401
+        return f(*args, **kwargs)
+    return decorated
+
 
 # Load 500 Benchmark Companies strictly from Database for Microsecond Comparison
 COMPANIES_500_PATH = BASE_DIR / "500_companies_analysis.json"
@@ -159,9 +232,87 @@ def index():
 
 @app.route("/admin")
 @app.route("/admin/console")
+@app.route("/admin.html")
 def admin_console():
     """Dedicated Platform Administrator Stage Console UI."""
     return send_from_directory(str(WEB_DIR), "admin.html")
+
+
+# ==========================================
+# PLATFORM ADMINISTRATOR AUTH API ENDPOINTS
+# ==========================================
+@app.route("/api/admin/login", methods=["POST"])
+def admin_login():
+    """Authenticates administrator credentials and issues a signed session token."""
+    data = request.json or {}
+    email = (data.get("email") or "").strip().lower()
+    password = data.get("password") or ""
+
+    if email == ADMIN_EMAIL.lower() and password == ADMIN_PASSWORD:
+        token = generate_admin_token(ADMIN_EMAIL)
+        resp = jsonify({
+            "success": True,
+            "message": "Welcome, Administrator. Session authorized.",
+            "token": token,
+            "user": {
+                "email": ADMIN_EMAIL,
+                "name": "Shrey Kansara",
+                "role": "Super Administrator"
+            }
+        })
+        resp.set_cookie(
+            "omniscope_admin_session",
+            token,
+            max_age=86400 * 7,
+            httponly=False,
+            samesite="Lax",
+            path="/"
+        )
+        return resp
+    else:
+        return jsonify({
+            "success": False,
+            "error": "Invalid administrative email or password. Access denied."
+        }), 401
+
+
+@app.route("/api/admin/logout", methods=["POST"])
+def admin_logout():
+    """Revokes active administrator session token."""
+    token = None
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        token = auth_header.split(" ", 1)[1].strip()
+    if not token:
+        token = request.cookies.get("omniscope_admin_session")
+    if token:
+        ACTIVE_ADMIN_TOKENS.pop(token, None)
+
+    resp = jsonify({"success": True, "message": "Successfully logged out."})
+    resp.delete_cookie("omniscope_admin_session", path="/")
+    return resp
+
+
+@app.route("/api/admin/verify", methods=["GET"])
+def admin_verify():
+    """Validates session token and returns administrative user profile."""
+    is_valid, reason = check_admin_auth()
+    if is_valid:
+        return jsonify({
+            "success": True,
+            "authenticated": True,
+            "user": {
+                "email": ADMIN_EMAIL,
+                "name": "Shrey Kansara",
+                "role": "Super Administrator"
+            }
+        })
+    return jsonify({
+        "success": False,
+        "authenticated": False,
+        "error": reason
+    }), 401
+
 
 
 # ==========================================
@@ -875,6 +1026,7 @@ def run_stage3_processing_background(batch_size: int = 50, db_url: str = None, t
 # LEVEL 1 API: STAGE 1 RAW DATA
 # ==========================================
 @app.route("/api/stage1/files", methods=["GET"])
+@require_admin
 def get_stage1_files():
     db_url = request.args.get("db_url", DEFAULT_SUPABASE_URL)
     try:
@@ -928,6 +1080,7 @@ def get_stage1_files():
 
 
 @app.route("/api/stage1/next-date", methods=["GET"])
+@require_admin
 def get_stage1_next_date():
     db_url = request.args.get("db_url", DEFAULT_SUPABASE_URL)
     try:
@@ -958,6 +1111,7 @@ def get_stage1_next_date():
 
 
 @app.route("/api/stage1/files/delete", methods=["POST"])
+@require_admin
 def delete_stage1_files():
     data = request.json or {}
     dates = data.get("dates", [])
@@ -1000,6 +1154,7 @@ def delete_stage1_files():
 
 
 @app.route("/api/stage1/records/delete", methods=["POST"])
+@require_admin
 def delete_stage1_records():
     data = request.json or {}
     record_ids = data.get("ids", [])
@@ -1031,6 +1186,7 @@ def delete_stage1_records():
 
 
 @app.route("/api/stage2/records/delete", methods=["POST"])
+@require_admin
 def delete_stage2_records():
     data = request.json or {}
     record_ids = data.get("ids", [])
@@ -1064,6 +1220,7 @@ def delete_stage2_records():
 
 
 @app.route("/api/stage3/articles/delete", methods=["POST"])
+@require_admin
 def delete_stage3_articles():
     data = request.json or {}
     article_ids = data.get("ids", [])
@@ -1097,6 +1254,7 @@ def delete_stage3_articles():
 
 
 @app.route("/api/stage1/ingest", methods=["POST"])
+@require_admin
 def trigger_stage1_ingest():
     data = request.json or {}
     s_date = data.get("start_date")
@@ -1115,11 +1273,13 @@ def trigger_stage1_ingest():
 
 
 @app.route("/api/stage1/progress", methods=["GET"])
+@require_admin
 def get_stage1_progress():
     return jsonify(STAGE1_PROGRESS)
 
 
 @app.route("/api/stage1/records", methods=["GET"])
+@require_admin
 def get_stage1_records():
     page = int(request.args.get("page", 1))
     per_page = int(request.args.get("per_page", 20))
@@ -1175,6 +1335,7 @@ def get_stage1_records():
 
 
 @app.route("/api/stage1/trigger", methods=["POST"])
+@require_admin
 def trigger_stage1():
     data = request.json or {}
     s_date = data.get("start_date")
@@ -1197,6 +1358,7 @@ def trigger_stage1():
 # LEVEL 2 API: STAGE 2 FILTERED NEWS
 # ==========================================
 @app.route("/api/stage2/records", methods=["GET"])
+@require_admin
 def get_stage2_records():
     page = int(request.args.get("page", 1))
     per_page = int(request.args.get("per_page", 20))
@@ -1257,6 +1419,7 @@ def get_stage2_records():
 
 
 @app.route("/api/stage2/files", methods=["GET"])
+@require_admin
 def get_stage2_files():
     db_url = request.args.get("db_url", DEFAULT_SUPABASE_URL)
     try:
@@ -1293,6 +1456,7 @@ def get_stage2_files():
 
 
 @app.route("/api/stage2/process", methods=["POST"])
+@require_admin
 def trigger_stage2_process():
     data = request.json or {}
     batch_size = int(data.get("batch_size", 100))
@@ -1310,11 +1474,13 @@ def trigger_stage2_process():
 
 
 @app.route("/api/stage2/progress", methods=["GET"])
+@require_admin
 def get_stage2_progress():
     return jsonify(STAGE2_PROGRESS)
 
 
 @app.route("/api/stage2/trigger", methods=["POST"])
+@require_admin
 def trigger_stage2():
     data = request.json or {}
     batch_size = int(data.get("batch_size", 100))
@@ -1325,6 +1491,7 @@ def trigger_stage2():
 # LEVEL 3 API: STAGE 3 DB & 11-D VECTORS
 # ==========================================
 @app.route("/api/stage3/process", methods=["POST"])
+@require_admin
 def trigger_stage3_process():
     data = request.json or {}
     batch_size = int(data.get("batch_size", 50))
@@ -1342,11 +1509,13 @@ def trigger_stage3_process():
 
 
 @app.route("/api/stage3/progress", methods=["GET"])
+@require_admin
 def get_stage3_progress():
     return jsonify(STAGE3_PROGRESS)
 
 
 @app.route("/api/stage3/db-status", methods=["GET"])
+@require_admin
 def get_stage3_db_status():
     db_url = request.args.get("db_url", DEFAULT_SUPABASE_URL)
     try:
@@ -1387,6 +1556,7 @@ def get_stage3_db_status():
 
 
 @app.route("/api/stage3/companies", methods=["GET"])
+@require_admin
 def get_stage3_companies():
     db_url = request.args.get("db_url", DEFAULT_SUPABASE_URL)
     limit = int(request.args.get("limit", 20))
@@ -1433,6 +1603,7 @@ def get_stage3_companies():
 
 
 @app.route("/api/stage3/news", methods=["GET"])
+@require_admin
 def get_stage3_news():
     db_url = request.args.get("db_url", DEFAULT_SUPABASE_URL)
     limit = int(request.args.get("limit", 20))
@@ -1504,6 +1675,7 @@ def get_stage3_news():
 
 
 @app.route("/api/stage3/articles", methods=["GET"])
+@require_admin
 def get_stage3_articles():
     return get_stage3_news()
 
@@ -1511,6 +1683,7 @@ def get_stage3_articles():
 
 
 @app.route("/api/stage3/project-headline", methods=["POST"])
+@require_admin
 def project_headline_live():
     """Projects any custom headline live into 11-D PESTLE & Porter scores using Cloud API + Matrix Model."""
     data = request.json or {}
@@ -1554,6 +1727,7 @@ def project_headline_live():
 
 
 @app.route("/api/stage3/trigger", methods=["POST"])
+@require_admin
 def trigger_stage3():
     data = request.json or {}
     batch_size = int(data.get("batch_size", 50))
@@ -1564,6 +1738,7 @@ def trigger_stage3():
 # MASTER ORCHESTRATOR API
 # ==========================================
 @app.route("/api/orchestrator/run_all", methods=["POST"])
+@require_admin
 def trigger_orchestrator_run_all():
     data = request.json or {}
     batch_size = int(data.get("batch_size", 100))
@@ -1585,6 +1760,7 @@ def trigger_orchestrator_run_all():
 
 
 @app.route("/api/orchestrator/progress", methods=["GET"])
+@require_admin
 def get_orchestrator_progress():
     return jsonify(ORCHESTRATOR_PROGRESS)
 
@@ -2405,10 +2581,6 @@ def get_company_profile():
 
 
 
-@app.route("/admin")
-@app.route("/admin.html")
-def admin_page():
-    return send_from_directory(str(WEB_DIR), "admin.html")
 
 
 if __name__ == "__main__":

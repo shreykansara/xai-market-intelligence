@@ -3,7 +3,7 @@
  * Modular driver for Stage 1 Ingestion, Stage 2 NLP Filtering, Stage 3 11-D Projection, and Orchestrator.
  */
 
-import { AdminApi } from './api-client.js';
+import { AdminApi, ApiClient } from './api-client.js';
 
 export class AdminController {
     constructor() {
@@ -120,13 +120,171 @@ export class AdminController {
         window.deleteStage3Article = (id) => this.deleteStage3Article(id);
         window.deleteSelectedStage3Articles = () => this.deleteSelectedStage3Articles();
 
-        // Auto initialize
+        // Authentication DOM
+        this.authOverlay = document.getElementById('admin-auth-overlay');
+        this.authCard = document.getElementById('admin-auth-card');
+        this.authForm = document.getElementById('admin-login-form');
+        this.authEmailInput = document.getElementById('admin-email-input');
+        this.authPasswordInput = document.getElementById('admin-password-input');
+        this.authErrorBanner = document.getElementById('admin-login-error');
+        this.authErrorMsg = document.getElementById('admin-login-error-msg');
+        this.authRememberMe = document.getElementById('admin-remember-me');
+        this.authLoginBtn = document.getElementById('admin-login-btn');
+        this.btnTogglePassword = document.getElementById('btn-toggle-password');
+        this.userProfile = document.getElementById('admin-user-profile');
+        this.userEmailDisplay = document.getElementById('admin-user-email');
+        this.btnLogout = document.getElementById('btn-admin-logout');
+
+        // Auth listeners
+        this.authForm?.addEventListener('submit', (e) => this.handleSubmitLogin(e));
+        this.btnLogout?.addEventListener('click', () => this.handleLogout());
+        this.btnTogglePassword?.addEventListener('click', () => this.togglePasswordVisibility());
+
+        // Check authorization and initialize
+        this.checkAuthAndInitialize();
+    }
+
+    // ==========================================
+    // AUTHENTICATION & ACCESS CONTROL
+    // ==========================================
+    async checkAuthAndInitialize() {
+        const token = ApiClient.getAuthToken();
+        if (!token) {
+            this.lockConsole();
+            return;
+        }
+
+        try {
+            const res = await AdminApi.verifyAuth();
+            if (res.success && res.authenticated) {
+                this.unlockConsole(res.user);
+                this.initializeDashboardData();
+            } else {
+                this.lockConsole();
+            }
+        } catch (e) {
+            ApiClient.clearAuthToken();
+            this.lockConsole();
+        }
+    }
+
+    initializeDashboardData() {
         this.loadDbStatus();
         this.syncNextIngestionDates();
         this.loadStage1Files();
         this.loadStage1Records();
         this.loadStage1FilesForStage2();
         this.loadStage2FilesForStage3();
+    }
+
+    unlockConsole(user) {
+        if (this.authOverlay) {
+            this.authOverlay.classList.add('unlocked');
+        }
+        if (this.userProfile) {
+            this.userProfile.style.display = 'flex';
+        }
+        if (this.userEmailDisplay && user?.email) {
+            this.userEmailDisplay.textContent = user.email;
+        }
+        this.hideAuthError();
+    }
+
+    lockConsole(errorMsg = null) {
+        if (this.authOverlay) {
+            this.authOverlay.classList.remove('unlocked');
+        }
+        if (this.userProfile) {
+            this.userProfile.style.display = 'none';
+        }
+        if (errorMsg) {
+            this.showAuthError(errorMsg);
+        } else {
+            this.hideAuthError();
+        }
+        if (this.authPasswordInput) {
+            this.authPasswordInput.value = '';
+            setTimeout(() => this.authPasswordInput?.focus(), 120);
+        }
+    }
+
+    togglePasswordVisibility() {
+        if (!this.authPasswordInput) return;
+        const isPwd = this.authPasswordInput.type === 'password';
+        this.authPasswordInput.type = isPwd ? 'text' : 'password';
+        const icon = this.btnTogglePassword?.querySelector('i');
+        if (icon) {
+            icon.className = isPwd ? 'fa-solid fa-eye-slash' : 'fa-solid fa-eye';
+        }
+    }
+
+    showAuthError(msg) {
+        if (this.authErrorBanner && this.authErrorMsg) {
+            this.authErrorMsg.textContent = msg;
+            this.authErrorBanner.style.display = 'flex';
+        }
+    }
+
+    hideAuthError() {
+        if (this.authErrorBanner) {
+            this.authErrorBanner.style.display = 'none';
+        }
+    }
+
+    async handleSubmitLogin(e) {
+        if (e) e.preventDefault();
+        const email = this.authEmailInput?.value.trim() || '';
+        const password = this.authPasswordInput?.value || '';
+        const remember = this.authRememberMe?.checked ?? true;
+
+        if (!email || !password) {
+            this.showAuthError('Email and confidential password are required.');
+            return;
+        }
+
+        const btnText = this.authLoginBtn?.querySelector('.btn-text');
+        const btnSpinner = this.authLoginBtn?.querySelector('.btn-spinner');
+        if (btnText) btnText.style.display = 'none';
+        if (btnSpinner) btnSpinner.style.display = 'inline-flex';
+        if (this.authLoginBtn) this.authLoginBtn.disabled = true;
+        this.hideAuthError();
+
+        try {
+            const res = await AdminApi.login(email, password);
+            if (res.success && res.token) {
+                ApiClient.setAuthToken(res.token, remember);
+                this.unlockConsole(res.user);
+                this.initializeDashboardData();
+            } else {
+                throw new Error(res.error || 'Authentication failed');
+            }
+        } catch (err) {
+            this.showAuthError(err.message || 'Invalid administrator email or password. Access denied.');
+            if (this.authCard) {
+                this.authCard.classList.remove('shake');
+                void this.authCard.offsetWidth;
+                this.authCard.classList.add('shake');
+            }
+        } finally {
+            if (btnText) btnText.style.display = 'inline-flex';
+            if (btnSpinner) btnSpinner.style.display = 'none';
+            if (this.authLoginBtn) this.authLoginBtn.disabled = false;
+        }
+    }
+
+    async handleLogout() {
+        try {
+            await AdminApi.logout();
+        } catch (e) {
+            // ignore network errors on logout
+        }
+        ApiClient.clearAuthToken();
+        this.lockConsole('Session logged out successfully.');
+    }
+
+    handleUnauthorized(msg = 'Session expired or unauthorized. Please re-authenticate.') {
+        ApiClient.clearAuthToken();
+        this.lockConsole(msg);
     }
 
     // ==========================================
