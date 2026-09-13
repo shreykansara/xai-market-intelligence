@@ -21,6 +21,7 @@ import sys
 import subprocess
 import threading
 import urllib.request
+import urllib.parse
 from datetime import datetime, timedelta
 from pathlib import Path
 from flask import Flask, jsonify, request, send_from_directory, render_template_string
@@ -97,7 +98,9 @@ def load_benchmark_companies():
                     "product_category": r[6],
                     "statement_of_key_benefit": r[7],
                     "cvp": r[8],
+                    "pestle": p_json,
                     "pestle_analysis": p_json,
+                    "porters": po_json,
                     "porters_five_forces": po_json,
                     "strategic_embedding_11d": s11,
                     "pestle_vector": s11[:6],
@@ -187,7 +190,7 @@ def chat():
         return jsonify({"error": str(e)}), 500
 
 
-# Global Ingestion Progress State for Level 1
+# Global Pipeline Progress States
 STAGE1_PROGRESS = {
     "status": "idle",
     "progress_pct": 0,
@@ -199,6 +202,150 @@ STAGE1_PROGRESS = {
     "message": ""
 }
 
+STAGE2_PROGRESS = {
+    "status": "idle",
+    "progress_pct": 0,
+    "processed_count": 0,
+    "promoted_count": 0,
+    "discarded_count": 0,
+    "remaining_raw": 0,
+    "message": ""
+}
+
+STAGE3_PROGRESS = {
+    "status": "idle",
+    "progress_pct": 0,
+    "processed_count": 0,
+    "promoted_count": 0,
+    "remaining_stage2": 0,
+    "total_master_count": 0,
+    "message": ""
+}
+
+ORCHESTRATOR_PROGRESS = {
+    "status": "idle",
+    "current_stage": 0,
+    "progress_pct": 0,
+    "message": ""
+}
+
+# NLP Classification & Filtering Rules
+CATEGORIES_NLP_RULES = [
+    {
+        "category": "PESTLE: Technological Velocity",
+        "keywords": ["ai", "tech", "software", "semiconductor", "chip", "cloud", "digital", "data center", "cyber", "thruster", "orbit", "robot", "quantum", "space", "telecom", "supercomputer", "automation"]
+    },
+    {
+        "category": "PESTLE: Economic Pressure",
+        "keywords": ["tariff", "trade", "inflation", "tax", "dollar", "currency", "gdp", "recession", "revenue", "spending", "budget", "finance", "bank", "interest rate", "funding", "investor", "stock", "ipo", "profit", "fiscal", "debt", "wage"]
+    },
+    {
+        "category": "PESTLE: Political Risk",
+        "keywords": ["government", "policy", "election", "parliament", "sanctions", "senate", "minister", "president", "diplomatic", "treaty", "geopolitical", "state department", "legislation", "administration", "congress"]
+    },
+    {
+        "category": "PESTLE: Legal Compliance",
+        "keywords": ["court", "investigation", "probe", "verdict", "customs", "lawsuit", "antitrust", "justice", "prosecut", "amendment", "statute", "ruling", "judge", "attorney", "regulatory", "litigation"]
+    },
+    {
+        "category": "PESTLE: Environmental Impact",
+        "keywords": ["flood", "climate", "solar", "energy", "pollution", "carbon", "emissions", "renewable", "waste", "clean energy", "green", "drought", "biodiversity", "net-zero", "recycling", "environmental"]
+    },
+    {
+        "category": "PESTLE: Sociocultural Shift",
+        "keywords": ["consumer", "protest", "strike", "youth", "education", "lifestyle", "demographic", "workforce", "healthcare", "public services", "culture", "population", "welfare", "union"]
+    },
+    {
+        "category": "Porter: Threat of New Entrants",
+        "keywords": ["startup", "unveil", "format", "launch", "entry", "raises", "funding round", "incubator", "venture", "new entrant", "disruptor", "spin-off"]
+    },
+    {
+        "category": "Porter: Competitive Rivalry",
+        "keywords": ["competitor", "pricing", "rival", "below-cost", "fare", "market share", "price cut", "warfare", "undercut", "compete", "slugfest", "price war"]
+    },
+    {
+        "category": "Porter: Bargaining Power of Buyers",
+        "keywords": ["buyers", "procurement", "freeze", "discretionary", "purchasing", "rfp", "contract tender", "customer demand", "buyer power", "enterprise contract"]
+    },
+    {
+        "category": "Porter: Bargaining Power of Suppliers",
+        "keywords": ["supply", "freight", "port", "shipping", "shortage", "logistics", "raw materials", "input cost", "msp", "semiconductor shortage", "bottleneck", "vendor"]
+    },
+    {
+        "category": "Porter: Threat of Substitutes",
+        "keywords": ["alternative", "substitute", "replacement", "disrupt", "synthetic", "electric vehicle", "ev swap", "ethanol blend", "hydrogen", "substitute product"]
+    }
+]
+
+UNWANTED_KEYWORDS = [
+    "lottery", "horoscope", "astrology", "crossword", "sudoku",
+    "kardashian", "celebrity gossip", "premier league", "cricket score", "football score",
+    "nba score", "match highlights", "obituary", "funeral service", "recipe", "horoscopes",
+    "hollywood", "box office", "trailer breakdown", "tv show recap"
+]
+
+
+def extract_headline_from_url(url: str, actor1: str = "", actor2: str = "") -> str:
+    """Extracts and normalizes a human-readable headline from a news article URL or GDELT actors."""
+    try:
+        parsed = urllib.parse.urlparse(url)
+        path = parsed.path.rstrip('/')
+        segments = [s for s in path.split('/') if s and not s.endswith('.html') and not s.endswith('.php')]
+        if not segments:
+            segments = [s for s in path.split('/') if s]
+
+        slug = segments[-1] if segments else ""
+        slug = re.sub(r'\.(html?|php|ece|aspx?|cms)$', '', slug, flags=re.IGNORECASE)
+        slug = re.sub(r'^[0-9_-]+', '', slug)
+        slug = re.sub(r'[-_][0-9a-f]{8,}[-_]?', '', slug)
+        slug = re.sub(r'[-_][0-9]{5,}$', '', slug)
+
+        title = re.sub(r'[-_+%]+', ' ', slug).strip()
+        title = urllib.parse.unquote(title)
+
+        if len(title) < 15 or len(title.split()) < 3:
+            if actor1 and actor2:
+                title = f"{actor1.title()} Strategic Operations with {actor2.title()}"
+            elif actor1:
+                title = f"{actor1.title()} Strategic Industry Developments"
+            else:
+                title = f"Global Market Event on {parsed.netloc}"
+        else:
+            title = ' '.join(w.capitalize() if not w.isupper() else w for w in title.split())
+
+        title = re.sub(r'\s+', ' ', title).strip()
+        return title[:250]
+    except Exception:
+        return (actor1 or "Global News") + " Strategic Industry Development"
+
+
+def classify_nlp(headline: str, country: str = ""):
+    """Basic NLP classifier to determine PESTLE/Porter dimension and filter out unwanted noise."""
+    hl_lower = headline.lower()
+
+    # 1. Discard noise, sports, gossip
+    for w in UNWANTED_KEYWORDS:
+        if w in hl_lower:
+            return None, "Discarded (Noise/Gossip/Sports)"
+
+    # 2. Match against strategic PESTLE / Porter dimensions
+    best_cat = None
+    best_count = 0
+    for rule in CATEGORIES_NLP_RULES:
+        count = sum(1 for kw in rule["keywords"] if re.search(r'\b' + re.escape(kw) + r'\b', hl_lower))
+        if count > best_count:
+            best_count = count
+            best_cat = rule["category"]
+
+    if not best_cat:
+        if any(w in hl_lower for w in ["business", "company", "firm", "industry", "economy", "market", "sector", "corporate"]):
+            best_cat = "PESTLE: Economic Pressure"
+        else:
+            return None, "Discarded (No strategic category match)"
+
+    location = "India" if country in ["IN", "India", "IND"] or "india" in hl_lower else "World"
+    return best_cat, location
+
 
 def run_stage1_ingestion_background(s_date_str: str, e_date_str: str, db_url: str):
     global STAGE1_PROGRESS
@@ -207,13 +354,13 @@ def run_stage1_ingestion_background(s_date_str: str, e_date_str: str, db_url: st
         e_clean = e_date_str.replace("-", "").strip()
         start_dt = datetime.strptime(s_clean, "%Y%m%d")
         end_dt = datetime.strptime(e_clean, "%Y%m%d")
-        
+
         dates = []
         curr = start_dt
         while curr <= end_dt:
             dates.append(curr)
             curr += timedelta(days=1)
-            
+
         total_days = len(dates)
         STAGE1_PROGRESS = {
             "status": "running",
@@ -225,18 +372,17 @@ def run_stage1_ingestion_background(s_date_str: str, e_date_str: str, db_url: st
             "total_raw_articles": 0,
             "message": f"Starting zero-disk in-memory stream ingestion for {total_days} date(s)..."
         }
-        
+
         total_size_bytes = 0
         total_raw_count = 0
 
-        # Connect to Supabase PostgreSQL database
         import psycopg2
         import psycopg2.extras
         db_conn = psycopg2.connect(db_url or DEFAULT_SUPABASE_URL, connect_timeout=15)
         db_conn.autocommit = True
         db_cur = db_conn.cursor()
 
-        # Ensure schema tables exist in Supabase
+        # Ensure all stage tables exist in Supabase
         db_cur.execute("""
             CREATE TABLE IF NOT EXISTS raw_gdelt_exports (
                 id VARCHAR(255) PRIMARY KEY,
@@ -262,6 +408,21 @@ def run_stage1_ingestion_background(s_date_str: str, e_date_str: str, db_url: st
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             );
             CREATE INDEX IF NOT EXISTS idx_raw_news_date ON raw_gdelt_news (published_date DESC);
+            CREATE INDEX IF NOT EXISTS idx_raw_news_url ON raw_gdelt_news (source_url);
+
+            CREATE TABLE IF NOT EXISTS stage2_filtered_news (
+                id VARCHAR(255) PRIMARY KEY,
+                published_date DATE NOT NULL,
+                headline TEXT NOT NULL,
+                source_link TEXT NOT NULL,
+                location_affected VARCHAR(50) NOT NULL DEFAULT 'World',
+                category VARCHAR(100) DEFAULT 'General Market',
+                status VARCHAR(50) DEFAULT 'FILTERED',
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_stage2_news_date ON stage2_filtered_news (published_date DESC);
+            CREATE INDEX IF NOT EXISTS idx_stage2_news_headline ON stage2_filtered_news (headline);
+            CREATE INDEX IF NOT EXISTS idx_stage2_news_link ON stage2_filtered_news (source_link);
         """)
 
         headers = {
@@ -279,8 +440,7 @@ def run_stage1_ingestion_background(s_date_str: str, e_date_str: str, db_url: st
 
             STAGE1_PROGRESS["current_date"] = date_fmt
             STAGE1_PROGRESS["message"] = f"Streaming & unzipping GDELT export for {date_fmt} in-memory..."
-            
-            # Fetch zip file directly into RAM buffer
+
             req = urllib.request.Request(download_url, headers=headers)
             with urllib.request.urlopen(req, timeout=60) as resp:
                 zip_bytes = resp.read()
@@ -288,8 +448,10 @@ def run_stage1_ingestion_background(s_date_str: str, e_date_str: str, db_url: st
             file_size = len(zip_bytes)
             total_size_bytes += file_size
 
-            # Unzip and parse CSV rows in RAM
+            # Unzip and parse CSV rows in RAM with in-memory URL deduplication
             raw_tuples = []
+            seen_urls = set()
+
             with zipfile.ZipFile(io.BytesIO(zip_bytes)) as z:
                 for fname in z.namelist():
                     with z.open(fname) as f:
@@ -303,8 +465,9 @@ def run_stage1_ingestion_background(s_date_str: str, e_date_str: str, db_url: st
                                 event_code = row[26].strip()[:50] if row[26] else ""
                                 geo_country = (row[52] or row[53] or "").strip()[:100]
                                 source_url = row[57].strip() if row[57] else ""
-                                
-                                if source_url.startswith("http") and global_event_id:
+
+                                if source_url.startswith("http") and global_event_id and source_url not in seen_urls:
+                                    seen_urls.add(source_url)
                                     raw_tuples.append((
                                         f"gdelt_raw_{global_event_id}",
                                         global_event_id,
@@ -317,7 +480,7 @@ def run_stage1_ingestion_background(s_date_str: str, e_date_str: str, db_url: st
                                         "RAW"
                                     ))
 
-            # Direct Batch Insert into Supabase raw_gdelt_news table
+            # Batch Insert with Deduplication (ON CONFLICT DO NOTHING)
             if raw_tuples:
                 insert_query = """
                     INSERT INTO raw_gdelt_news 
@@ -328,7 +491,6 @@ def run_stage1_ingestion_background(s_date_str: str, e_date_str: str, db_url: st
                 psycopg2.extras.execute_values(db_cur, insert_query, raw_tuples, page_size=2000)
                 total_raw_count += len(raw_tuples)
 
-            # Record Ingestion Export Log in Supabase
             db_cur.execute("""
                 INSERT INTO raw_gdelt_exports (id, export_date, filename, file_size_bytes, raw_articles_count, status)
                 VALUES (%s, %s, %s, %s, %s, %s)
@@ -349,7 +511,7 @@ def run_stage1_ingestion_background(s_date_str: str, e_date_str: str, db_url: st
             STAGE1_PROGRESS["total_size_mb"] = round(total_size_bytes / (1024 * 1024), 2)
             STAGE1_PROGRESS["total_raw_articles"] = total_raw_count
             STAGE1_PROGRESS["progress_pct"] = int(((idx + 1) / total_days) * 100)
-            STAGE1_PROGRESS["message"] = f"Ingested {len(raw_tuples):,} raw news events for {date_fmt} directly into database."
+            STAGE1_PROGRESS["message"] = f"Ingested {len(raw_tuples):,} deduplicated raw news events for {date_fmt} into database."
 
         db_cur.close()
         db_conn.close()
@@ -357,29 +519,581 @@ def run_stage1_ingestion_background(s_date_str: str, e_date_str: str, db_url: st
         STAGE1_PROGRESS["status"] = "completed"
         STAGE1_PROGRESS["progress_pct"] = 100
         STAGE1_PROGRESS["message"] = (
-            f"Zero-Disk Ingestion Complete! Fetched {total_days} GDELT archive(s) ({STAGE1_PROGRESS['total_size_mb']} MB) "
-            f"and appended {total_raw_count:,} raw news events directly into Supabase database."
+            f"Stage 1 Complete! Fetched {total_days} GDELT archive(s) ({STAGE1_PROGRESS['total_size_mb']} MB) "
+            f"and ingested {total_raw_count:,} deduplicated raw events into Supabase database."
         )
     except Exception as e:
         STAGE1_PROGRESS["status"] = "error"
         STAGE1_PROGRESS["message"] = f"Ingestion Error: {str(e)}"
 
 
+def run_stage2_processing_background(batch_size: int = 100, db_url: str = None, target_date: str = None):
+    global STAGE2_PROGRESS
+    try:
+        STAGE2_PROGRESS = {
+            "status": "running",
+            "progress_pct": 10,
+            "target_date": target_date,
+            "processed_count": 0,
+            "promoted_count": 0,
+            "discarded_count": 0,
+            "remaining_raw": 0,
+            "message": f"Selecting items from database" + (f" for {target_date}..." if target_date else "...")
+        }
+
+        import psycopg2
+        import psycopg2.extras
+        conn = psycopg2.connect(db_url or DEFAULT_SUPABASE_URL, connect_timeout=15)
+        conn.autocommit = True
+        cur = conn.cursor()
+
+        # Ensure stage2 table exists
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS stage2_filtered_news (
+                id VARCHAR(255) PRIMARY KEY,
+                published_date DATE NOT NULL,
+                headline TEXT NOT NULL,
+                source_link TEXT NOT NULL,
+                location_affected VARCHAR(50) NOT NULL DEFAULT 'World',
+                category VARCHAR(100) DEFAULT 'General Market',
+                status VARCHAR(50) DEFAULT 'FILTERED',
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE INDEX IF NOT EXISTS idx_stage2_news_date ON stage2_filtered_news (published_date DESC);
+            CREATE INDEX IF NOT EXISTS idx_stage2_news_headline ON stage2_filtered_news (headline);
+            CREATE INDEX IF NOT EXISTS idx_stage2_news_link ON stage2_filtered_news (source_link);
+        """)
+
+        # Query with optional target_date/dates filter
+        dates_filter = []
+        if target_date and target_date != 'all':
+            if isinstance(target_date, list):
+                dates_filter = [str(d) for d in target_date if str(d).strip()]
+            elif "," in str(target_date):
+                dates_filter = [d.strip() for d in str(target_date).split(",") if d.strip()]
+            else:
+                dates_filter = [str(target_date).strip()]
+
+        if dates_filter:
+            if batch_size > 0:
+                cur.execute("""
+                    SELECT id, published_date, actor1_name, actor2_name, source_url, action_geo_country
+                    FROM raw_gdelt_news
+                    WHERE published_date::text = ANY(%s)
+                    ORDER BY published_date DESC
+                    LIMIT %s;
+                """, (dates_filter, batch_size))
+            else:
+                cur.execute("""
+                    SELECT id, published_date, actor1_name, actor2_name, source_url, action_geo_country
+                    FROM raw_gdelt_news
+                    WHERE published_date::text = ANY(%s)
+                    ORDER BY published_date DESC;
+                """, (dates_filter,))
+        else:
+            if batch_size > 0:
+                cur.execute("""
+                    SELECT id, published_date, actor1_name, actor2_name, source_url, action_geo_country
+                    FROM raw_gdelt_news
+                    ORDER BY published_date DESC
+                    LIMIT %s;
+                """, (batch_size,))
+            else:
+                cur.execute("""
+                    SELECT id, published_date, actor1_name, actor2_name, source_url, action_geo_country
+                    FROM raw_gdelt_news
+                    ORDER BY published_date DESC;
+                """)
+        rows = cur.fetchall()
+
+        if not rows:
+            cur.close()
+            conn.close()
+            STAGE2_PROGRESS["status"] = "completed"
+            STAGE2_PROGRESS["progress_pct"] = 100
+            target_info = f" for date(s) {dates_filter}" if dates_filter else ""
+            STAGE2_PROGRESS["message"] = f"No raw news items available in Stage 1 database to process{target_info}."
+            return
+
+        total = len(rows)
+        STAGE2_PROGRESS["message"] = f"Running basic NLP classification & filtering on {total} raw items..."
+
+        # Fetch existing headlines / links in stage2 and news_articles for deduplication
+        cur.execute("SELECT headline, source_link FROM stage2_filtered_news LIMIT 50000;")
+        existing_s2 = {(r[0].lower().strip(), (r[1] or '').strip()) for r in cur.fetchall()}
+
+        cur.execute("SELECT headline, source_link FROM news_articles LIMIT 50000;")
+        existing_s3 = {(r[0].lower().strip(), (r[1] or '').strip()) for r in cur.fetchall()}
+
+        promoted_records = []
+        processed_raw_ids = []
+        promoted_count = 0
+        discarded_count = 0
+        seen_in_batch = set()
+
+        for idx, (raw_id, pub_date, actor1, actor2, url, country) in enumerate(rows):
+            processed_raw_ids.append(raw_id)
+
+            headline = extract_headline_from_url(url, actor1, actor2)
+            hl_key = headline.lower().strip()
+            url_key = (url or '').strip()
+
+            # Deduplication check
+            if hl_key in seen_in_batch or any(hl_key == s[0] or (url_key and url_key == s[1]) for s in existing_s2) or any(hl_key == s[0] or (url_key and url_key == s[1]) for s in existing_s3):
+                discarded_count += 1
+                continue
+
+            # NLP Categorization & Filtering
+            cat, loc_or_reason = classify_nlp(headline, country)
+            if cat:
+                stage2_id = f"s2_{raw_id.replace('gdelt_raw_', '')}"
+                promoted_records.append((
+                    stage2_id,
+                    pub_date,
+                    headline,
+                    url,
+                    loc_or_reason,
+                    cat,
+                    "FILTERED"
+                ))
+                seen_in_batch.add(hl_key)
+                promoted_count += 1
+            else:
+                discarded_count += 1
+
+            if (idx + 1) % 10 == 0 or idx == total - 1:
+                STAGE2_PROGRESS["progress_pct"] = int(10 + ((idx + 1) / total) * 60)
+                STAGE2_PROGRESS["processed_count"] = idx + 1
+                STAGE2_PROGRESS["promoted_count"] = promoted_count
+                STAGE2_PROGRESS["discarded_count"] = discarded_count
+
+        # Insert promoted items into stage2_filtered_news
+        if promoted_records:
+            insert_query = """
+                INSERT INTO stage2_filtered_news (id, published_date, headline, source_link, location_affected, category, status)
+                VALUES %s
+                ON CONFLICT (id) DO NOTHING;
+            """
+            psycopg2.extras.execute_values(cur, insert_query, promoted_records, page_size=500)
+
+        # PURGE PROCESSED ROWS FROM STAGE 1 (Delete from previous state)
+        STAGE2_PROGRESS["message"] = f"Purging {len(processed_raw_ids)} processed records from Stage 1 database..."
+        cur.execute("DELETE FROM raw_gdelt_news WHERE id = ANY(%s);", (processed_raw_ids,))
+
+        # Requirement 2: Delete completed files immediately from raw_gdelt_exports when all their items have moved!
+        cur.execute("""
+            DELETE FROM raw_gdelt_exports 
+            WHERE export_date NOT IN (SELECT DISTINCT published_date FROM raw_gdelt_news);
+        """)
+
+        # Count remaining in raw_gdelt_news
+        cur.execute("SELECT COUNT(*) FROM raw_gdelt_news;")
+        remaining_raw = cur.fetchone()[0]
+
+        cur.close()
+        conn.close()
+
+        STAGE2_PROGRESS["status"] = "completed"
+        STAGE2_PROGRESS["progress_pct"] = 100
+        STAGE2_PROGRESS["remaining_raw"] = remaining_raw
+        file_desc = f" for date(s) {dates_filter}" if dates_filter else ""
+        STAGE2_PROGRESS["message"] = (
+            f"Stage 2 Complete! Processed {total} raw items{file_desc}: {promoted_count} promoted to Stage 2, "
+            f"{discarded_count} discarded as noise/duplicate. Successfully purged {len(processed_raw_ids)} items from Stage 1 database ({remaining_raw:,} remaining)."
+        )
+    except Exception as e:
+        STAGE2_PROGRESS["status"] = "error"
+        STAGE2_PROGRESS["message"] = f"Stage 2 Error: {str(e)}"
+
+
+def run_stage3_processing_background(batch_size: int = 50, db_url: str = None, target_date: str = None):
+    global STAGE3_PROGRESS
+    try:
+        STAGE3_PROGRESS = {
+            "status": "running",
+            "progress_pct": 10,
+            "target_date": target_date,
+            "processed_count": 0,
+            "promoted_count": 0,
+            "remaining_stage2": 0,
+            "total_master_count": 0,
+            "message": f"Selecting filtered items from Stage 2" + (f" for {target_date}..." if target_date else "...")
+        }
+
+        import psycopg2
+        import psycopg2.extras
+        conn = psycopg2.connect(db_url or DEFAULT_SUPABASE_URL, connect_timeout=15)
+        conn.autocommit = True
+        cur = conn.cursor()
+
+        # Query with optional target_date/dates filter
+        dates_filter = []
+        if target_date and target_date != 'all':
+            if isinstance(target_date, list):
+                dates_filter = [str(d) for d in target_date if str(d).strip()]
+            elif "," in str(target_date):
+                dates_filter = [d.strip() for d in str(target_date).split(",") if d.strip()]
+            else:
+                dates_filter = [str(target_date).strip()]
+
+        if dates_filter:
+            if batch_size > 0:
+                cur.execute("""
+                    SELECT id, published_date, headline, source_link, location_affected, category
+                    FROM stage2_filtered_news
+                    WHERE published_date::text = ANY(%s)
+                    ORDER BY published_date DESC
+                    LIMIT %s;
+                """, (dates_filter, batch_size))
+            else:
+                cur.execute("""
+                    SELECT id, published_date, headline, source_link, location_affected, category
+                    FROM stage2_filtered_news
+                    WHERE published_date::text = ANY(%s)
+                    ORDER BY published_date DESC;
+                """, (dates_filter,))
+        else:
+            if batch_size > 0:
+                cur.execute("""
+                    SELECT id, published_date, headline, source_link, location_affected, category
+                    FROM stage2_filtered_news
+                    ORDER BY published_date DESC
+                    LIMIT %s;
+                """, (batch_size,))
+            else:
+                cur.execute("""
+                    SELECT id, published_date, headline, source_link, location_affected, category
+                    FROM stage2_filtered_news
+                    ORDER BY published_date DESC;
+                """)
+        rows = cur.fetchall()
+
+        if not rows:
+            cur.close()
+            conn.close()
+            STAGE3_PROGRESS["status"] = "completed"
+            STAGE3_PROGRESS["progress_pct"] = 100
+            target_info = f" for date {target_date}" if target_date else ""
+            STAGE3_PROGRESS["message"] = f"No filtered items available in Stage 2 database to project{target_info}."
+            return
+
+        total = len(rows)
+        STAGE3_PROGRESS["message"] = f"Generating 768-D embeddings & projecting 11-D vectors for {total} items..."
+
+        # Deduplication against existing headlines in news_articles
+        cur.execute("SELECT headline FROM news_articles LIMIT 50000;")
+        existing_headlines = {r[0].lower().strip() for r in cur.fetchall()}
+
+        stage3_records = []
+        promoted_s2_ids = []
+        promoted_count = 0
+
+        for idx, (s2_id, pub_date, headline, source_link, location_affected, category) in enumerate(rows):
+            promoted_s2_ids.append(s2_id)
+            hl_key = headline.lower().strip()
+
+            # Deduplication
+            if hl_key in existing_headlines:
+                continue
+
+            # 1. 768-D Cloud Embedding
+            c_emb_768d = get_cloud_text_embedding(headline)
+
+            # 2. 11-D Projection via W_MATRIX & B_BIAS
+            if W_MATRIX is not None and B_BIAS is not None:
+                x = np.array(c_emb_768d, dtype=np.float32)
+                if x.shape[0] != W_MATRIX.shape[0]:
+                    if x.shape[0] < W_MATRIX.shape[0]:
+                        x = np.pad(x, (0, W_MATRIX.shape[0] - x.shape[0]))
+                    else:
+                        x = x[:W_MATRIX.shape[0]]
+                y_raw = np.dot(x, W_MATRIX) + B_BIAS
+                y_clipped = np.clip(y_raw, 0.05, 0.95)
+                vector_11d = [round(float(v), 4) for v in y_clipped]
+            else:
+                vector_11d = [0.05] * 11
+
+            sorted_s = sorted(vector_11d, reverse=True)
+            peak = sorted_s[0]
+            top2 = sum(sorted_s[:2]) / 2.0
+            impact_score = round(float((peak * 0.60) + (top2 * 0.40)), 3)
+
+            final_id = f"art_{s2_id.replace('s2_', '')}"
+            stage3_records.append((
+                final_id,
+                pub_date,
+                headline,
+                json.dumps(vector_11d),
+                source_link,
+                location_affected or "World",
+                impact_score
+            ))
+            existing_headlines.add(hl_key)
+            promoted_count += 1
+
+            STAGE3_PROGRESS["progress_pct"] = int(10 + ((idx + 1) / total) * 75)
+            STAGE3_PROGRESS["processed_count"] = idx + 1
+            STAGE3_PROGRESS["promoted_count"] = promoted_count
+
+        # Insert into news_articles
+        if stage3_records:
+            insert_query = """
+                INSERT INTO news_articles (id, published_date, headline, strategic_embedding_11d, source_link, location_affected, impact_score)
+                VALUES %s
+                ON CONFLICT (id) DO NOTHING;
+            """
+            psycopg2.extras.execute_values(cur, insert_query, stage3_records, page_size=500)
+
+        # PURGE PROCESSED ROWS FROM STAGE 2 (Delete from previous state)
+        STAGE3_PROGRESS["message"] = f"Purging {len(promoted_s2_ids)} promoted records from Stage 2 database..."
+        cur.execute("DELETE FROM stage2_filtered_news WHERE id = ANY(%s);", (promoted_s2_ids,))
+
+        # Get remaining count in stage2_filtered_news and total in news_articles
+        cur.execute("SELECT COUNT(*) FROM stage2_filtered_news;")
+        rem_s2 = cur.fetchone()[0]
+        cur.execute("SELECT COUNT(*) FROM news_articles;")
+        tot_news = cur.fetchone()[0]
+
+        cur.close()
+        conn.close()
+
+        STAGE3_PROGRESS["status"] = "completed"
+        STAGE3_PROGRESS["progress_pct"] = 100
+        STAGE3_PROGRESS["remaining_stage2"] = rem_s2
+        STAGE3_PROGRESS["total_master_count"] = tot_news
+        file_desc = f" for date {target_date}" if target_date else ""
+        STAGE3_PROGRESS["message"] = (
+            f"Stage 3 Complete! Projected 11-D vectors and ingested {promoted_count} articles{file_desc} into Master News Database (Total Live: {tot_news:,}). "
+            f"Successfully purged {len(promoted_s2_ids)} promoted items from Stage 2 database ({rem_s2:,} remaining)."
+        )
+    except Exception as e:
+        STAGE3_PROGRESS["status"] = "error"
+        STAGE3_PROGRESS["message"] = f"Stage 3 Error: {str(e)}"
+
+
 # ==========================================
-# LEVEL 1 API: STAGE 1 RAW DATA INSPECTOR
+# LEVEL 1 API: STAGE 1 RAW DATA
 # ==========================================
 @app.route("/api/stage1/files", methods=["GET"])
 def get_stage1_files():
-    files = []
-    if GDELT_DATA_DIR.exists():
-        for p in sorted(GDELT_DATA_DIR.glob("*"), reverse=True):
-            if p.is_file():
-                files.append({
-                    "filename": p.name,
-                    "size_mb": round(p.stat().st_size / (1024 * 1024), 2),
-                    "modified": p.stat().st_mtime
-                })
-    return jsonify({"success": True, "files": files, "count": len(files)})
+    db_url = request.args.get("db_url", DEFAULT_SUPABASE_URL)
+    try:
+        import psycopg2
+        conn = psycopg2.connect(db_url, connect_timeout=8)
+        cur = conn.cursor()
+
+        # Requirement 2: Clean up any exports that have 0 remaining raw records (already processed/moved to next stage)
+        cur.execute("""
+            DELETE FROM raw_gdelt_exports 
+            WHERE export_date NOT IN (SELECT DISTINCT published_date FROM raw_gdelt_news);
+        """)
+        conn.commit()
+
+        # Requirement 1: Query ONLY and ONLY files present in raw_gdelt_exports that have remaining raw records
+        cur.execute("""
+            SELECT e.id, e.export_date, e.filename, e.file_size_bytes, e.raw_articles_count, e.status,
+                   r.remaining_count
+            FROM raw_gdelt_exports e
+            JOIN (
+                SELECT published_date, COUNT(*) as remaining_count 
+                FROM raw_gdelt_news 
+                GROUP BY published_date
+            ) r ON e.export_date = r.published_date
+            WHERE r.remaining_count > 0
+            ORDER BY e.export_date DESC;
+        """)
+        rows = cur.fetchall()
+
+        files = []
+        for r in rows:
+            dt_str = str(r[1])
+            raw_cnt = int(r[4] or 0)
+            rem_cnt = int(r[6] or 0)
+
+            files.append({
+                "id": r[0],
+                "date": dt_str,
+                "filename": r[2],
+                "size_mb": round(float(r[3] or 0) / (1024 * 1024), 2),
+                "raw_count": raw_cnt,
+                "remaining_count": rem_cnt,
+                "status": "INGESTED (READY)"
+            })
+
+        cur.close()
+        conn.close()
+        return jsonify({"success": True, "files": files, "count": len(files)})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e), "files": []})
+
+
+@app.route("/api/stage1/next-date", methods=["GET"])
+def get_stage1_next_date():
+    db_url = request.args.get("db_url", DEFAULT_SUPABASE_URL)
+    try:
+        import psycopg2, datetime
+        conn = psycopg2.connect(db_url, connect_timeout=8)
+        cur = conn.cursor()
+        cur.execute("SELECT MAX(published_date) FROM news_articles;")
+        row = cur.fetchone()
+        cur.close()
+        conn.close()
+
+        latest_date_str = None
+        next_date_str = None
+        if row and row[0]:
+            d = row[0]
+            if not isinstance(d, datetime.date):
+                d = datetime.datetime.strptime(str(d), "%Y-%m-%d").date()
+            latest_date_str = str(d)
+            next_date_str = str(d + datetime.timedelta(days=1))
+
+        return jsonify({
+            "success": True,
+            "latest_date": latest_date_str,
+            "next_date": next_date_str
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e), "next_date": None})
+
+
+@app.route("/api/stage1/files/delete", methods=["POST"])
+def delete_stage1_files():
+    data = request.json or {}
+    dates = data.get("dates", [])
+    file_ids = data.get("ids", [])
+    db_url = data.get("db_url", DEFAULT_SUPABASE_URL)
+
+    if not dates and not file_ids:
+        return jsonify({"success": False, "error": "No file IDs or dates specified"}), 400
+
+    try:
+        import psycopg2
+        conn = psycopg2.connect(db_url, connect_timeout=8)
+        cur = conn.cursor()
+
+        if file_ids and not dates:
+            cur.execute("SELECT export_date::text FROM raw_gdelt_exports WHERE id = ANY(%s);", (file_ids,))
+            dates = [str(r[0]) for r in cur.fetchall()]
+
+        deleted_raw = 0
+        if dates:
+            cur.execute("DELETE FROM raw_gdelt_news WHERE published_date::text = ANY(%s);", (dates,))
+            deleted_raw = cur.rowcount
+            cur.execute("DELETE FROM raw_gdelt_exports WHERE export_date::text = ANY(%s);", (dates,))
+            deleted_exports = cur.rowcount
+        else:
+            cur.execute("DELETE FROM raw_gdelt_exports WHERE id = ANY(%s);", (file_ids,))
+            deleted_exports = cur.rowcount
+
+        conn.commit()
+        cur.close()
+        conn.close()
+        return jsonify({
+            "success": True, 
+            "deleted_exports": deleted_exports, 
+            "deleted_raw_records": deleted_raw,
+            "message": f"Deleted {deleted_exports} file(s) and {deleted_raw:,} raw news records."
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+
+@app.route("/api/stage1/records/delete", methods=["POST"])
+def delete_stage1_records():
+    data = request.json or {}
+    record_ids = data.get("ids", [])
+    delete_all = data.get("all", False)
+    db_url = data.get("db_url", DEFAULT_SUPABASE_URL)
+
+    try:
+        import psycopg2
+        conn = psycopg2.connect(db_url, connect_timeout=8)
+        cur = conn.cursor()
+
+        if delete_all:
+            cur.execute("DELETE FROM raw_gdelt_news;")
+            deleted_cnt = cur.rowcount
+            cur.execute("DELETE FROM raw_gdelt_exports;")
+        elif record_ids:
+            cur.execute("DELETE FROM raw_gdelt_news WHERE id = ANY(%s);", (record_ids,))
+            deleted_cnt = cur.rowcount
+            cur.execute("DELETE FROM raw_gdelt_exports WHERE export_date NOT IN (SELECT DISTINCT published_date FROM raw_gdelt_news);")
+        else:
+            return jsonify({"success": False, "error": "No records specified"}), 400
+
+        conn.commit()
+        cur.close()
+        conn.close()
+        return jsonify({"success": True, "deleted_count": deleted_cnt})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+
+@app.route("/api/stage2/records/delete", methods=["POST"])
+def delete_stage2_records():
+    data = request.json or {}
+    record_ids = data.get("ids", [])
+    dates = data.get("dates", [])
+    delete_all = data.get("all", False)
+    db_url = data.get("db_url", DEFAULT_SUPABASE_URL)
+
+    try:
+        import psycopg2
+        conn = psycopg2.connect(db_url, connect_timeout=8)
+        cur = conn.cursor()
+
+        if delete_all:
+            cur.execute("DELETE FROM stage2_filtered_news;")
+            deleted_cnt = cur.rowcount
+        elif dates:
+            cur.execute("DELETE FROM stage2_filtered_news WHERE published_date::text = ANY(%s);", (dates,))
+            deleted_cnt = cur.rowcount
+        elif record_ids:
+            cur.execute("DELETE FROM stage2_filtered_news WHERE id = ANY(%s);", (record_ids,))
+            deleted_cnt = cur.rowcount
+        else:
+            return jsonify({"success": False, "error": "No records or dates specified"}), 400
+
+        conn.commit()
+        cur.close()
+        conn.close()
+        return jsonify({"success": True, "deleted_count": deleted_cnt})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+
+@app.route("/api/stage3/articles/delete", methods=["POST"])
+def delete_stage3_articles():
+    data = request.json or {}
+    article_ids = data.get("ids", [])
+    dates = data.get("dates", [])
+    delete_all = data.get("all", False)
+    db_url = data.get("db_url", DEFAULT_SUPABASE_URL)
+
+    try:
+        import psycopg2
+        conn = psycopg2.connect(db_url, connect_timeout=8)
+        cur = conn.cursor()
+
+        if delete_all:
+            cur.execute("DELETE FROM news_articles;")
+            deleted_cnt = cur.rowcount
+        elif dates:
+            cur.execute("DELETE FROM news_articles WHERE published_date::text = ANY(%s);", (dates,))
+            deleted_cnt = cur.rowcount
+        elif article_ids:
+            cur.execute("DELETE FROM news_articles WHERE id = ANY(%s);", (article_ids,))
+            deleted_cnt = cur.rowcount
+        else:
+            return jsonify({"success": False, "error": "No articles or dates specified"}), 400
+
+        conn.commit()
+        cur.close()
+        conn.close()
+        return jsonify({"success": True, "deleted_count": deleted_cnt})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
 
 
 @app.route("/api/stage1/ingest", methods=["POST"])
@@ -405,6 +1119,61 @@ def get_stage1_progress():
     return jsonify(STAGE1_PROGRESS)
 
 
+@app.route("/api/stage1/records", methods=["GET"])
+def get_stage1_records():
+    page = int(request.args.get("page", 1))
+    per_page = int(request.args.get("per_page", 20))
+    search = request.args.get("search", "").lower()
+
+    try:
+        import psycopg2
+        conn = psycopg2.connect(DEFAULT_SUPABASE_URL, connect_timeout=8)
+        cur = conn.cursor()
+
+        cur.execute("SELECT COUNT(*) FROM raw_gdelt_news;")
+        total = cur.fetchone()[0]
+
+        offset = (page - 1) * per_page
+        if search:
+            cur.execute("""
+                SELECT id, published_date, actor1_name, actor2_name, source_url, action_geo_country, status
+                FROM raw_gdelt_news
+                WHERE LOWER(source_url) LIKE %s OR LOWER(actor1_name) LIKE %s
+                ORDER BY published_date DESC LIMIT %s OFFSET %s;
+            """, (f"%{search}%", f"%{search}%", per_page, offset))
+        else:
+            cur.execute("""
+                SELECT id, published_date, actor1_name, actor2_name, source_url, action_geo_country, status
+                FROM raw_gdelt_news
+                ORDER BY published_date DESC LIMIT %s OFFSET %s;
+            """, (per_page, offset))
+
+        rows = cur.fetchall()
+        records = [
+            {
+                "id": r[0],
+                "date": str(r[1]),
+                "actor1": r[2],
+                "actor2": r[3],
+                "source_url": r[4],
+                "country": r[5],
+                "status": r[6]
+            }
+            for r in rows
+        ]
+        cur.close()
+        conn.close()
+        return jsonify({
+            "success": True,
+            "records": records,
+            "total": total,
+            "page": page,
+            "pages": max(1, (total + per_page - 1) // per_page)
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+
 @app.route("/api/stage1/trigger", methods=["POST"])
 def trigger_stage1():
     data = request.json or {}
@@ -425,7 +1194,7 @@ def trigger_stage1():
 
 
 # ==========================================
-# LEVEL 2 API: STAGE 2 FILTERED NEWS INSPECTOR
+# LEVEL 2 API: STAGE 2 FILTERED NEWS
 # ==========================================
 @app.route("/api/stage2/records", methods=["GET"])
 def get_stage2_records():
@@ -434,86 +1203,179 @@ def get_stage2_records():
     search = request.args.get("search", "").lower()
     location_filter = request.args.get("location", "")
 
-    csv_candidates = list(STAGE2_DIR.glob("*.csv")) + [BASE_DIR / "filtered_news.csv"]
-    records = []
-    
-    for csv_file in csv_candidates:
-        if csv_file.exists():
-            try:
-                with open(csv_file, "r", encoding="utf-8") as f:
-                    reader = csv.DictReader(f)
-                    for r in reader:
-                        headline = r.get("headline", "")
-                        loc = r.get("location_affected", "")
-                        
-                        if search and search not in headline.lower():
-                            continue
-                        if location_filter and location_filter != loc:
-                            continue
-                            
-                        records.append({
-                            "id": r.get("id"),
-                            "date": r.get("date"),
-                            "headline": headline,
-                            "text_snippet": r.get("text", "")[:300],
-                            "source_link": r.get("source_link"),
-                            "location_affected": loc
-                        })
-            except Exception:
-                pass
+    try:
+        import psycopg2
+        conn = psycopg2.connect(DEFAULT_SUPABASE_URL, connect_timeout=8)
+        cur = conn.cursor()
 
-    total = len(records)
-    start_idx = (page - 1) * per_page
-    end_idx = start_idx + per_page
-    paginated = records[start_idx:end_idx]
+        cur.execute("SELECT COUNT(*) FROM stage2_filtered_news;")
+        total = cur.fetchone()[0]
 
-    return jsonify({
-        "success": True,
-        "records": paginated,
-        "total": total,
-        "page": page,
-        "pages": max(1, (total + per_page - 1) // per_page)
-    })
+        offset = (page - 1) * per_page
+        query = "SELECT id, published_date, headline, source_link, location_affected, category, status FROM stage2_filtered_news "
+        conditions = []
+        params = []
+
+        if search:
+            conditions.append("(LOWER(headline) LIKE %s OR LOWER(category) LIKE %s)")
+            params.extend([f"%{search}%", f"%{search}%"])
+        if location_filter:
+            conditions.append("location_affected = %s")
+            params.append(location_filter)
+
+        if conditions:
+            query += "WHERE " + " AND ".join(conditions) + " "
+
+        query += "ORDER BY published_date DESC LIMIT %s OFFSET %s;"
+        params.extend([per_page, offset])
+
+        cur.execute(query, tuple(params))
+        rows = cur.fetchall()
+        records = [
+            {
+                "id": r[0],
+                "date": str(r[1]),
+                "headline": r[2],
+                "source_link": r[3],
+                "location_affected": r[4],
+                "category": r[5],
+                "status": r[6]
+            }
+            for r in rows
+        ]
+        cur.close()
+        conn.close()
+        return jsonify({
+            "success": True,
+            "records": records,
+            "total": total,
+            "page": page,
+            "pages": max(1, (total + per_page - 1) // per_page)
+        })
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
+
+
+@app.route("/api/stage2/files", methods=["GET"])
+def get_stage2_files():
+    db_url = request.args.get("db_url", DEFAULT_SUPABASE_URL)
+    try:
+        import psycopg2
+        conn = psycopg2.connect(db_url, connect_timeout=8)
+        cur = conn.cursor()
+
+        cur.execute("""
+            SELECT published_date, COUNT(*) as item_count,
+                   array_remove(array_agg(DISTINCT category), NULL) as categories
+            FROM stage2_filtered_news
+            GROUP BY published_date
+            ORDER BY published_date DESC;
+        """)
+        rows = cur.fetchall()
+
+        files = []
+        for r in rows:
+            dt_str = str(r[0])
+            files.append({
+                "id": f"s2_batch_{dt_str.replace('-', '')}",
+                "date": dt_str,
+                "filename": f"stage2_filtered_{dt_str}.batch",
+                "item_count": int(r[1]),
+                "categories": r[2] if r[2] else [],
+                "status": "FILTERED_READY_FOR_S3"
+            })
+
+        cur.close()
+        conn.close()
+        return jsonify({"success": True, "files": files, "count": len(files)})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e), "files": []})
+
+
+@app.route("/api/stage2/process", methods=["POST"])
+def trigger_stage2_process():
+    data = request.json or {}
+    batch_size = int(data.get("batch_size", 100))
+    target_date = data.get("dates") or data.get("date") or data.get("target_date")
+    db_url = data.get("db_url", DEFAULT_SUPABASE_URL)
+
+    if STAGE2_PROGRESS["status"] == "running":
+        return jsonify({"success": False, "error": "Stage 2 processing is already running."}), 400
+
+    t = threading.Thread(target=run_stage2_processing_background, args=(batch_size, db_url, target_date), daemon=True)
+    t.start()
+    date_desc = f" for date(s) {target_date}" if target_date else ""
+    batch_desc = "all items" if batch_size <= 0 else f"{batch_size} items"
+    return jsonify({"success": True, "message": f"Stage 2 NLP filtering started{date_desc} ({batch_desc})."})
+
+
+@app.route("/api/stage2/progress", methods=["GET"])
+def get_stage2_progress():
+    return jsonify(STAGE2_PROGRESS)
 
 
 @app.route("/api/stage2/trigger", methods=["POST"])
 def trigger_stage2():
-    cmd = [
-        sys.executable, str(BASE_DIR / "pipeline_controller.py"),
-        "--stage", "2", "--auto-purge"
-    ]
-    try:
-        subprocess.Popen(cmd)
-        return jsonify({"success": True, "message": "Stage 2 Irrelevant News Filtering triggered with Auto-Purge."})
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
+    data = request.json or {}
+    batch_size = int(data.get("batch_size", 100))
+    return trigger_stage2_process()
 
 
 # ==========================================
-# LEVEL 3 API: STAGE 3 DB & 11-D VECTOR INSPECTOR
+# LEVEL 3 API: STAGE 3 DB & 11-D VECTORS
 # ==========================================
+@app.route("/api/stage3/process", methods=["POST"])
+def trigger_stage3_process():
+    data = request.json or {}
+    batch_size = int(data.get("batch_size", 50))
+    target_date = data.get("dates") or data.get("date") or data.get("target_date")
+    db_url = data.get("db_url", DEFAULT_SUPABASE_URL)
+
+    if STAGE3_PROGRESS["status"] == "running":
+        return jsonify({"success": False, "error": "Stage 3 processing is already running."}), 400
+
+    t = threading.Thread(target=run_stage3_processing_background, args=(batch_size, db_url, target_date), daemon=True)
+    t.start()
+    date_desc = f" for date(s) {target_date}" if target_date else ""
+    batch_desc = "all items" if batch_size <= 0 else f"{batch_size} items"
+    return jsonify({"success": True, "message": f"Stage 3 11-D projection started{date_desc} ({batch_desc})."})
+
+
+@app.route("/api/stage3/progress", methods=["GET"])
+def get_stage3_progress():
+    return jsonify(STAGE3_PROGRESS)
+
+
 @app.route("/api/stage3/db-status", methods=["GET"])
 def get_stage3_db_status():
     db_url = request.args.get("db_url", DEFAULT_SUPABASE_URL)
     try:
         import psycopg2
-        conn = psycopg2.connect(db_url, connect_timeout=5)
+        conn = psycopg2.connect(db_url, connect_timeout=8)
         cur = conn.cursor()
-        
-        cur.execute("SELECT COUNT(*) FROM benchmark_companies;")
-        comp_count = cur.fetchone()[0]
-        
+
+        cur.execute("SELECT COUNT(*) FROM raw_gdelt_news;")
+        s1_count = cur.fetchone()[0]
+
+        cur.execute("SELECT COUNT(*) FROM stage2_filtered_news;")
+        s2_count = cur.fetchone()[0]
+
         cur.execute("SELECT COUNT(*) FROM news_articles;")
         news_count = cur.fetchone()[0]
-        
+
+        cur.execute("SELECT COUNT(*) FROM benchmark_companies;")
+        comp_count = cur.fetchone()[0]
+
         cur.close()
         conn.close()
-        
+
         return jsonify({
             "success": True,
             "connected": True,
-            "benchmark_companies_count": comp_count,
+            "stage1_raw_count": s1_count,
+            "stage2_filtered_count": s2_count,
             "news_articles_count": news_count,
+            "benchmark_companies_count": comp_count,
             "db_provider": "Supabase PostgreSQL (pgvector)"
         })
     except Exception as e:
@@ -529,12 +1391,12 @@ def get_stage3_companies():
     db_url = request.args.get("db_url", DEFAULT_SUPABASE_URL)
     limit = int(request.args.get("limit", 20))
     search = request.args.get("search", "").lower()
-    
+
     try:
         import psycopg2
-        conn = psycopg2.connect(db_url, connect_timeout=5)
+        conn = psycopg2.connect(db_url, connect_timeout=8)
         cur = conn.cursor()
-        
+
         query = "SELECT id, company, sector, product_name, cvp, strategic_embedding_11d::text FROM benchmark_companies "
         params = []
         if search:
@@ -542,10 +1404,10 @@ def get_stage3_companies():
             params.extend([f"%{search}%", f"%{search}%"])
         query += "LIMIT %s;"
         params.append(limit)
-        
+
         cur.execute(query, params)
         rows = cur.fetchall()
-        
+
         companies = []
         for r in rows:
             vec_11d = []
@@ -553,7 +1415,7 @@ def get_stage3_companies():
                 vec_11d = json.loads(r[5])
             except Exception:
                 pass
-                
+
             companies.append({
                 "id": r[0],
                 "company": r[1],
@@ -562,7 +1424,7 @@ def get_stage3_companies():
                 "cvp": r[4],
                 "strategic_11d": vec_11d
             })
-            
+
         cur.close()
         conn.close()
         return jsonify({"success": True, "companies": companies, "count": len(companies)})
@@ -576,25 +1438,38 @@ def get_stage3_news():
     limit = int(request.args.get("limit", 20))
     location = request.args.get("location", "")
     min_impact = float(request.args.get("min_impact", 0.20))
-    
+
     try:
         import psycopg2
-        conn = psycopg2.connect(db_url, connect_timeout=5)
+        conn = psycopg2.connect(db_url, connect_timeout=8)
         cur = conn.cursor()
-        
+
         query = "SELECT id, published_date, headline, location_affected, impact_score, strategic_embedding_11d::text, source_link FROM news_articles WHERE impact_score >= %s "
         params = [min_impact]
-        
+
+        search = request.args.get("search", "").strip().lower()
+        if search:
+            query += "AND LOWER(headline) LIKE %s "
+            params.append(f"%{search}%")
+
         if location:
             query += "AND location_affected = %s "
             params.append(location)
-            
+
         query += "ORDER BY published_date DESC, impact_score DESC LIMIT %s;"
         params.append(limit)
-        
+
         cur.execute(query, params)
         rows = cur.fetchall()
-        
+
+        labels = [
+            "PESTLE: Political Risk", "PESTLE: Economic Pressure", "PESTLE: Sociocultural Shift",
+            "PESTLE: Technological Velocity", "PESTLE: Legal Compliance", "PESTLE: Environmental Impact",
+            "Porter: Threat of New Entrants", "Porter: Bargaining Power of Buyers",
+            "Porter: Bargaining Power of Suppliers", "Porter: Threat of Substitutes",
+            "Porter: Competitive Rivalry"
+        ]
+
         news_items = []
         for r in rows:
             vec_11d = []
@@ -602,22 +1477,37 @@ def get_stage3_news():
                 vec_11d = json.loads(r[5])
             except Exception:
                 pass
-                
+
+            driver = "Market Dynamics"
+            if vec_11d and len(vec_11d) == 11:
+                max_idx = int(np.argmax(vec_11d))
+                driver = labels[max_idx]
+
             news_items.append({
                 "id": r[0],
                 "date": str(r[1]),
+                "published_date": str(r[1]),
                 "headline": r[2],
                 "location_affected": r[3],
-                "impact_score": r[4],
+                "impact_score": float(r[4]) if r[4] is not None else 0.0,
                 "strategic_11d": vec_11d,
-                "source_link": r[6]
+                "strategic_embedding_11d": vec_11d,
+                "source_link": r[6],
+                "primary_driver": driver
             })
-            
+
         cur.close()
         conn.close()
-        return jsonify({"success": True, "news_items": news_items, "count": len(news_items)})
+        return jsonify({"success": True, "news_items": news_items, "articles": news_items, "count": len(news_items)})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)})
+
+
+@app.route("/api/stage3/articles", methods=["GET"])
+def get_stage3_articles():
+    return get_stage3_news()
+
+
 
 
 @app.route("/api/stage3/project-headline", methods=["POST"])
@@ -628,10 +1518,8 @@ def project_headline_live():
     if not headline:
         return jsonify({"success": False, "error": "Headline text required"}), 400
 
-    # Step 1: Fetch Cloud 768-D Vector via Hugging Face API
     c_emb_768d = get_cloud_text_embedding(headline)
 
-    # Step 2: Apply Matrix Multiplication
     if W_MATRIX is not None and B_BIAS is not None:
         x = np.array(c_emb_768d, dtype=np.float32)
         if x.shape[0] != W_MATRIX.shape[0]:
@@ -650,7 +1538,7 @@ def project_headline_live():
         "Political", "Economic", "Social", "Technological", "Legal", "Environmental",
         "Threat of Entrants", "Buyer Power", "Supplier Power", "Threat of Substitutes", "Rivalry"
     ]
-    
+
     sorted_s = sorted(vector_11d, reverse=True)
     peak = sorted_s[0]
     top2 = sum(sorted_s[:2]) / 2.0
@@ -668,16 +1556,37 @@ def project_headline_live():
 @app.route("/api/stage3/trigger", methods=["POST"])
 def trigger_stage3():
     data = request.json or {}
+    batch_size = int(data.get("batch_size", 50))
+    return trigger_stage3_process()
+
+
+# ==========================================
+# MASTER ORCHESTRATOR API
+# ==========================================
+@app.route("/api/orchestrator/run_all", methods=["POST"])
+def trigger_orchestrator_run_all():
+    data = request.json or {}
+    batch_size = int(data.get("batch_size", 100))
     db_url = data.get("db_url", DEFAULT_SUPABASE_URL)
-    cmd = [
-        sys.executable, str(BASE_DIR / "pipeline_controller.py"),
-        "--stage", "3", "--db-url", db_url, "--auto-purge"
-    ]
-    try:
-        subprocess.Popen(cmd)
-        return jsonify({"success": True, "message": "Stage 3 11-D Matrix Projection & DB Export triggered with Auto-Purge."})
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
+
+    def run_all_stages():
+        global ORCHESTRATOR_PROGRESS
+        ORCHESTRATOR_PROGRESS = {"status": "running", "current_stage": 2, "progress_pct": 20, "message": "Executing Stage 2: Basic NLP Filtering & Categorization..."}
+        run_stage2_processing_background(batch_size=batch_size, db_url=db_url)
+        
+        ORCHESTRATOR_PROGRESS = {"status": "running", "current_stage": 3, "progress_pct": 60, "message": "Executing Stage 3: 11-D Projection & Final Database Ingestion..."}
+        run_stage3_processing_background(batch_size=batch_size, db_url=db_url)
+        
+        ORCHESTRATOR_PROGRESS = {"status": "completed", "current_stage": 3, "progress_pct": 100, "message": "All pipeline stages completed successfully with automatic stage-to-stage purging and deduplication."}
+
+    t = threading.Thread(target=run_all_stages, daemon=True)
+    t.start()
+    return jsonify({"success": True, "message": "End-to-End Orchestrator started (Stage 2 NLP -> Stage 3 11-D Ingestion with Purging)."})
+
+
+@app.route("/api/orchestrator/progress", methods=["GET"])
+def get_orchestrator_progress():
+    return jsonify(ORCHESTRATOR_PROGRESS)
 
 
 def parse_period_cutoff(period_str):
@@ -1235,7 +2144,7 @@ def evaluate_cvp():
     """Evaluates a Customer Value Proposition (CVP) statement, computes real-time embeddings,
     performs distance-based comparison across 500 benchmark companies, and returns relative PESTLE & Porter analysis."""
     data = request.json or {}
-    cvp_text = data.get("cvp_text", "").strip()
+    cvp_text = (data.get("cvp_text", "") or data.get("cvp", "")).strip()
     if not cvp_text:
         return jsonify({"success": False, "error": "cvp_text statement is required"}), 400
 
@@ -1440,23 +2349,23 @@ def get_company_profile():
                 "product_category": row[6],
                 "statement_of_key_benefit": row[7],
                 "cvp": row[8],
-                "pestle": row[9] if isinstance(row[9], dict) else {},
-                "porters": row[10] if isinstance(row[10], dict) else {},
-                "strategic_11d": [float(v) for v in row[11]] if row[11] else [],
+                "pestle": row[9] if isinstance(row[9], dict) else (json.loads(row[9]) if row[9] else {}),
+                "porters": row[10] if isinstance(row[10], dict) else (json.loads(row[10]) if row[10] else {}),
+                "strategic_11d": (json.loads(row[11]) if isinstance(row[11], str) else [float(v) for v in row[11]]) if row[11] else [],
                 "source": "supabase_postgresql"
             }
         cur.close()
         conn.close()
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[Server] Note: DB record lookup fallback: {e}")
 
-    final_profile = db_record or target
+    final_profile = target or db_record
     if not final_profile:
         return jsonify({"success": False, "error": f"Company '{name or comp_id}' not found in database."}), 404
 
     # Format uniform response
-    p_dict = final_profile.get("pestle", {}) or {}
-    f_dict = final_profile.get("porters", {}) or {}
+    p_dict = final_profile.get("pestle") or final_profile.get("pestle_analysis") or {}
+    f_dict = final_profile.get("porters") or final_profile.get("porters_five_forces") or {}
     pestle_vec = [
         float(p_dict.get("political", 0.3)),
         float(p_dict.get("economic", 0.3)),
@@ -1494,6 +2403,12 @@ def get_company_profile():
         }
     })
 
+
+
+@app.route("/admin")
+@app.route("/admin.html")
+def admin_page():
+    return send_from_directory(str(WEB_DIR), "admin.html")
 
 
 if __name__ == "__main__":

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Omniscope AI | Admin Stage Console</title>
+  <title>Omniscope AI | 3-Stage Strategic Ingestion Pipeline Admin</title>
   <!-- Favicon -->
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <link rel="icon" type="image/png" sizes="64x64" href="favicon.png">
@@ -39,7 +39,7 @@
 
       --radius-sm: 4px;
       --radius-md: 6px;
-      --radius-lg: 8px;
+      --radius-lg: 10px;
 
       --shadow-main: 0 4px 20px rgba(0, 255, 102, 0.15);
       --shadow-card: 0 2px 10px rgba(0, 0, 0, 0.6);
@@ -65,7 +65,7 @@
 
     /* Omniscope Admin Header */
     .admin-header {
-      background: rgba(14, 14, 17, 0.92);
+      background: rgba(14, 14, 17, 0.95);
       backdrop-filter: blur(12px);
       border-bottom: 1px solid var(--border-color);
       padding: 1rem 2rem;
@@ -138,12 +138,64 @@
     }
     .user-app-link:hover { color: #80FF99; text-shadow: 0 0 10px rgba(0, 255, 102, 0.4); }
 
-    /* Admin Container & Tabs */
+    /* Admin Container */
     .admin-container {
-      max-width: 1300px;
+      max-width: 1350px;
       margin: 0 auto;
-      padding: 2.5rem 1.5rem;
+      padding: 2rem 1.5rem;
     }
+
+    /* Lifecycle Overview Stats Banner */
+    .lifecycle-banner {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 1rem;
+      margin-bottom: 2rem;
+    }
+    .stage-stat-card {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      padding: 1.25rem;
+      position: relative;
+      overflow: hidden;
+    }
+    .stage-stat-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 3px;
+    }
+    .stage-stat-card.s1::before { background: var(--accent-cyan); }
+    .stage-stat-card.s2::before { background: var(--accent-purple); }
+    .stage-stat-card.s3::before { background: var(--accent-green); }
+    .stage-stat-card.s4::before { background: var(--accent-amber); }
+    .stat-label {
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      font-family: var(--font-heading);
+      font-weight: 700;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 0.4rem;
+    }
+    .stat-num {
+      font-size: 2.1rem;
+      font-weight: 800;
+      font-family: var(--font-heading);
+      color: var(--text-main);
+      line-height: 1.1;
+    }
+    .stat-desc {
+      font-size: 0.8rem;
+      color: var(--text-dim);
+      margin-top: 0.35rem;
+    }
+
+    /* Navigation Tabs */
     .tabs-bar {
       display: flex;
       gap: 0.5rem;
@@ -184,33 +236,39 @@
     @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
 
     /* Cards & Grids */
-    .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem; margin-bottom: 2rem; }
     .card {
       background-color: var(--bg-card);
       border: 1px solid var(--border-color);
       border-radius: var(--radius-lg);
       padding: 1.75rem;
       box-shadow: var(--shadow-card);
+      margin-bottom: 1.5rem;
     }
     .card h3 {
       font-family: var(--font-heading);
-      font-size: 1.2rem;
+      font-size: 1.25rem;
       font-weight: 700;
       color: var(--text-main);
     }
-    .card-header-title {
-      font-size: 0.82rem;
-      font-family: var(--font-heading);
-      text-transform: uppercase;
-      color: var(--text-muted);
-      letter-spacing: 0.05em;
-      margin-bottom: 0.5rem;
+
+    /* Action Toolbar */
+    .action-toolbar {
+      background: var(--bg-surface);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      padding: 1.25rem;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 1.5rem;
     }
-    .card-big-value {
-      font-size: 2.4rem;
-      font-weight: 800;
-      font-family: var(--font-heading);
-      color: var(--text-main);
+    .toolbar-group {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      flex-wrap: wrap;
     }
 
     /* Buttons & Inputs */
@@ -218,11 +276,11 @@
       background: var(--primary-gradient);
       color: #050505;
       border: none;
-      padding: 0.75rem 1.35rem;
+      padding: 0.7rem 1.35rem;
       border-radius: var(--radius-md);
       font-family: var(--font-heading);
       font-weight: 700;
-      font-size: 0.95rem;
+      font-size: 0.92rem;
       cursor: pointer;
       transition: all 0.2s ease;
       display: inline-flex;
@@ -231,17 +289,20 @@
       box-shadow: 0 0 15px rgba(0, 255, 102, 0.2);
     }
     .btn:hover { opacity: 0.95; box-shadow: 0 0 25px rgba(0, 255, 102, 0.45); transform: translateY(-1px); }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
     .btn-secondary { background: var(--bg-card-hover); color: var(--text-main); border: 1px solid var(--border-color); box-shadow: none; }
     .btn-secondary:hover { background: #272730; border-color: var(--accent-green); }
+    .btn-cyan { background: linear-gradient(135deg, #00E5FF 0%, #0091EA 100%); color: #050505; box-shadow: 0 0 15px rgba(0, 229, 255, 0.25); }
+    .btn-purple { background: linear-gradient(135deg, #C084FC 0%, #A855F7 100%); color: #050505; box-shadow: 0 0 15px rgba(168, 85, 247, 0.25); }
 
     input, select {
       background-color: var(--bg-dark);
       border: 1px solid var(--border-color);
       color: var(--text-main);
-      padding: 0.75rem 1rem;
+      padding: 0.65rem 0.95rem;
       border-radius: var(--radius-md);
       font-family: var(--font-main);
-      font-size: 0.9rem;
+      font-size: 0.88rem;
       outline: none;
       transition: border-color 0.2s ease;
     }
@@ -252,8 +313,8 @@
       background-color: var(--bg-card);
       border: 1px solid var(--border-color);
       border-radius: var(--radius-lg);
-      overflow: hidden;
-      margin-top: 1.5rem;
+      overflow-x: auto;
+      margin-top: 1rem;
     }
     table { width: 100%; border-collapse: collapse; text-align: left; }
     th {
@@ -261,31 +322,137 @@
       color: var(--text-muted);
       font-family: var(--font-heading);
       font-weight: 600;
-      font-size: 0.82rem;
+      font-size: 0.8rem;
       text-transform: uppercase;
-      padding: 1rem 1.25rem;
+      letter-spacing: 0.04em;
+      padding: 0.9rem 1.1rem;
       border-bottom: 1px solid var(--border-color);
+      white-space: nowrap;
     }
-    td { padding: 1rem 1.25rem; border-bottom: 1px solid var(--border-color); font-size: 0.9rem; }
+    td { padding: 0.85rem 1.1rem; border-bottom: 1px solid var(--border-color); font-size: 0.88rem; }
     tr:last-child td { border-bottom: none; }
     tr:hover td { background-color: var(--bg-card-hover); }
 
     /* Badges & Tags */
     .badge-tag {
       display: inline-block;
-      padding: 0.25rem 0.6rem;
+      padding: 0.2rem 0.55rem;
       border-radius: var(--radius-sm);
-      font-size: 0.75rem;
+      font-size: 0.74rem;
       font-family: var(--font-heading);
       font-weight: 700;
       text-transform: uppercase;
+      white-space: nowrap;
     }
-    .tag-cyan { background: rgba(0, 229, 255, 0.15); color: var(--accent-cyan); border: 1px solid rgba(0, 229, 255, 0.3); }
     .tag-green { background: rgba(0, 255, 102, 0.15); color: var(--accent-green); border: 1px solid rgba(0, 255, 102, 0.3); }
+    .tag-cyan { background: rgba(0, 229, 255, 0.15); color: var(--accent-cyan); border: 1px solid rgba(0, 229, 255, 0.3); }
+    .tag-purple { background: rgba(168, 85, 247, 0.15); color: var(--accent-purple); border: 1px solid rgba(168, 85, 247, 0.3); }
+    .tag-amber { background: rgba(255, 179, 0, 0.15); color: var(--accent-amber); border: 1px solid rgba(255, 179, 0, 0.3); }
 
     /* Progress Bar */
-    .bar-bg { background: var(--bg-dark); border-radius: 9999px; height: 8px; overflow: hidden; margin-top: 0.25rem; border: 1px solid var(--border-color); }
-    .bar-fill { height: 100%; background: var(--primary-gradient); border-radius: 9999px; }
+    .bar-bg { background: var(--bg-dark); border-radius: 9999px; height: 10px; overflow: hidden; margin-top: 0.35rem; border: 1px solid var(--border-color); }
+    .bar-fill { height: 100%; background: var(--primary-gradient); border-radius: 9999px; transition: width 0.3s ease; }
+
+    /* Rule Alert Pill */
+    .rule-callout {
+      background: rgba(0, 229, 255, 0.06);
+      border: 1px solid rgba(0, 229, 255, 0.25);
+      border-radius: var(--radius-md);
+      padding: 0.75rem 1rem;
+      font-size: 0.85rem;
+      color: #E0F2FE;
+      margin-bottom: 1.25rem;
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+    }
+    .rule-callout strong { color: var(--accent-cyan); }
+
+    /* Pagination */
+    .pagination-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.75rem 1rem;
+      background: var(--bg-surface);
+      border-top: 1px solid var(--border-color);
+      font-size: 0.82rem;
+      color: var(--text-muted);
+    }
+
+    /* Danger Buttons & Mini Actions */
+    .btn-danger {
+      background: linear-gradient(135deg, #FF1744 0%, #D50000 100%);
+      color: #FFFFFF;
+      box-shadow: 0 0 15px rgba(255, 23, 68, 0.3);
+    }
+    .btn-danger:hover {
+      box-shadow: 0 0 25px rgba(255, 23, 68, 0.5);
+      transform: translateY(-1px);
+    }
+    .btn-danger-mini {
+      background: rgba(255, 23, 68, 0.12);
+      color: #FF5252;
+      border: 1px solid rgba(255, 23, 68, 0.35);
+      padding: 0.35rem 0.65rem;
+      border-radius: var(--radius-sm);
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+    .btn-danger-mini:hover {
+      background: rgba(255, 23, 68, 0.3);
+      border-color: #FF1744;
+      color: #FFFFFF;
+      transform: translateY(-1px);
+    }
+    .btn-danger-mini:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    /* Bulk Action Bar */
+    .bulk-action-bar {
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-md);
+      padding: 0.6rem 1rem;
+      margin-top: 0.75rem;
+      margin-bottom: 0.75rem;
+      animation: fadeIn 0.2s ease;
+    }
+    .bulk-action-bar.active {
+      display: flex;
+    }
+    .bulk-selected-info {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .bulk-selected-info span {
+      color: var(--accent-green);
+      font-weight: 700;
+    }
+
+    /* Custom Checkbox */
+    .table-checkbox {
+      width: 16px;
+      height: 16px;
+      accent-color: var(--accent-green);
+      cursor: pointer;
+      vertical-align: middle;
+    }
   </style>
 </head>
 <body>
@@ -293,19 +460,14 @@
   <!-- Admin Header -->
   <header class="admin-header">
     <div class="brand">
-      <svg class="omniscope-logo-svg" viewBox="0 0 100 100" fill="none" style="width: 34px; height: 34px;">
+      <svg viewBox="0 0 100 100" fill="none" style="width: 32px; height: 32px;">
         <circle cx="50" cy="50" r="44" stroke="#00FF66" stroke-width="3" stroke-dasharray="6 4" opacity="0.4"/>
         <circle cx="50" cy="50" r="34" stroke="#00FF66" stroke-width="4"/>
         <circle cx="50" cy="50" r="22" stroke="#00E5FF" stroke-width="3"/>
         <circle cx="50" cy="50" r="6" fill="#00FF66"/>
-        <line x1="50" y1="6" x2="50" y2="94" stroke="#00FF66" stroke-width="2" opacity="0.5"/>
-        <line x1="6" y1="50" x2="94" y2="50" stroke="#00FF66" stroke-width="2" opacity="0.5"/>
-        <circle cx="74" cy="50" r="4" fill="#00E5FF"/>
-        <circle cx="50" cy="26" r="4" fill="#00FF66"/>
-        <circle cx="34" cy="66" r="4" fill="#10B981"/>
       </svg>
       <span class="brand-title">Omniscope <span>AI</span></span>
-      <span class="brand-badge">Admin Console</span>
+      <span class="brand-badge">Pipeline Admin Console</span>
     </div>
     <div class="header-actions">
       <div class="status-pill" id="admin-db-status">
@@ -317,423 +479,570 @@
     </div>
   </header>
 
-  <!-- Admin Main Container -->
+  <!-- Admin Container -->
   <div class="admin-container">
+
+    <!-- Lifecycle Stats Banner -->
+    <div class="lifecycle-banner">
+      <div class="stage-stat-card s1">
+        <div class="stat-label">
+          <span>Stage 1: Raw News DB</span>
+          <i class="fa-solid fa-cloud-arrow-down" style="color: var(--accent-cyan);"></i>
+        </div>
+        <div class="stat-num" id="stat-s1-count">--</div>
+        <div class="stat-desc">Deduplicated GDELT records in <code>raw_gdelt_news</code></div>
+      </div>
+
+      <div class="stage-stat-card s2">
+        <div class="stat-label">
+          <span>Stage 2: Filtered News DB</span>
+          <i class="fa-solid fa-filter" style="color: var(--accent-purple);"></i>
+        </div>
+        <div class="stat-num" id="stat-s2-count">--</div>
+        <div class="stat-desc">NLP Classified items in <code>stage2_filtered_news</code></div>
+      </div>
+
+      <div class="stage-stat-card s3">
+        <div class="stat-label">
+          <span>Stage 3: Master News DB</span>
+          <i class="fa-solid fa-database" style="color: var(--accent-green);"></i>
+        </div>
+        <div class="stat-num" id="stat-s3-count">--</div>
+        <div class="stat-desc">11-D Strategic vectors in <code>news_articles</code></div>
+      </div>
+
+      <div class="stage-stat-card s4">
+        <div class="stat-label">
+          <span>Benchmark Companies</span>
+          <i class="fa-solid fa-building" style="color: var(--accent-amber);"></i>
+        </div>
+        <div class="stat-num" id="stat-comp-count">500</div>
+        <div class="stat-desc">Peer companies in <code>benchmark_companies</code></div>
+      </div>
+    </div>
     
-    <!-- Level Navigation Tabs -->
+    <!-- Stage Navigation Tabs -->
     <div class="tabs-bar">
-      <button class="tab-btn active" onclick="switchAdminTab('level1')">
-        <i class="fa-solid fa-cloud-arrow-down"></i> Level 1: Stage 1 Raw Data
+      <button class="tab-btn active" onclick="switchAdminTab('stage1')">
+        <i class="fa-solid fa-cloud-arrow-down"></i> Stage 1: Ingestion
       </button>
-      <button class="tab-btn" onclick="switchAdminTab('level2')">
-        <i class="fa-solid fa-filter"></i> Level 2: Stage 2 Filtered News
+      <button class="tab-btn" onclick="switchAdminTab('stage2')">
+        <i class="fa-solid fa-filter"></i> Stage 2: NLP Filter & Purge
       </button>
-      <button class="tab-btn" onclick="switchAdminTab('level3')">
-        <i class="fa-solid fa-database"></i> Level 3: DB & 11-D Vectors
+      <button class="tab-btn" onclick="switchAdminTab('stage3')">
+        <i class="fa-solid fa-diagram-project"></i> Stage 3: 11-D Vector Projection
       </button>
       <button class="tab-btn" onclick="switchAdminTab('orchestrator')">
-        <i class="fa-solid fa-bolt"></i> Pipeline Controls & Auto-Purge
+        <i class="fa-solid fa-bolt"></i> Full Pipeline Orchestrator
       </button>
     </div>
 
-    <!-- LEVEL 1 PANEL -->
-    <div id="panel-level1" class="panel active">
-      <div class="card" style="max-width: 800px; margin: 0 auto;">
-        <h3 style="margin-bottom: 0.75rem;"><i class="fa-solid fa-cloud-arrow-down" style="color: var(--accent-green);"></i> Level 1: Stage 1 Raw GDELT Zip Ingestion</h3>
-        <p style="color: var(--text-muted); margin-bottom: 2rem;">
-          Select the start and end date (both inclusive) to fetch daily raw GDELT archives in-memory and stream records directly into Supabase database.
-        </p>
-
-        <!-- Date Range Selection Form -->
-        <div style="display: flex; flex-direction: column; gap: 1.25rem; margin-bottom: 2rem;">
-          <div style="display: flex; gap: 1.5rem; flex-wrap: wrap;">
-            <div style="flex: 1; min-width: 220px;">
-              <label style="display: block; font-size: 0.85rem; font-weight: 600; color: var(--text-muted); margin-bottom: 0.4rem;">Start Date (Inclusive):</label>
-              <input type="date" id="l1-start-date" value="2026-08-01" style="width: 100%;">
-            </div>
-            <div style="flex: 1; min-width: 220px;">
-              <label style="display: block; font-size: 0.85rem; font-weight: 600; color: var(--text-muted); margin-bottom: 0.4rem;">End Date (Inclusive):</label>
-              <input type="date" id="l1-end-date" value="2026-08-05" style="width: 100%;">
-            </div>
+    <!-- ============================================================ -->
+    <!-- STAGE 1: DATE SELECTION & RAW INGESTION -->
+    <!-- ============================================================ -->
+    <div id="panel-stage1" class="panel active">
+      <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem;">
+          <div>
+            <h3><i class="fa-solid fa-cloud-arrow-down" style="color: var(--accent-cyan);"></i> Stage 1: Date Selection & News Ingestion</h3>
+            <p style="color: var(--text-muted); font-size: 0.9rem; margin-top: 0.25rem;">
+              Select dates to stream, decompress in-memory, and ingest raw news events directly into the PostgreSQL database (<code>raw_gdelt_news</code>) with deduplication.
+            </p>
           </div>
+          <button class="btn btn-secondary" onclick="loadStage1Records()"><i class="fa-solid fa-rotate"></i> Refresh DB View</button>
+        </div>
 
-          <button class="btn" id="l1-submit-btn" onclick="startLevel1Ingestion()" style="width: 100%; justify-content: center; padding: 0.85rem; font-size: 1rem;">
-            <i class="fa-solid fa-download"></i> Fetch & Ingest Raw GDELT Zips into Database
+        <div class="rule-callout">
+          <i class="fa-solid fa-circle-check"></i>
+          <div><strong>Deduplication Guaranteed:</strong> Duplicate events with existing IDs or URLs are automatically ignored via PostgreSQL <code>ON CONFLICT (id) DO NOTHING</code>.</div>
+        </div>
+
+        <!-- Date Range Controls -->
+        <div class="action-toolbar">
+          <div class="toolbar-group">
+            <label style="font-size: 0.85rem; font-weight: 600; color: var(--text-muted);">Start Date (Inclusive):</label>
+            <input type="date" id="s1-start-date" value="2026-09-02">
+            <label style="font-size: 0.85rem; font-weight: 600; color: var(--text-muted);">End Date (Inclusive):</label>
+            <input type="date" id="s1-end-date" value="2026-09-02">
+          </div>
+          <button class="btn btn-cyan" id="s1-submit-btn" onclick="startStage1Ingestion()">
+            <i class="fa-solid fa-download"></i> Ingest News into Stage 1 DB
           </button>
         </div>
 
-        <!-- Live Ingestion Progress Box (Shown during execution) -->
-        <div id="l1-progress-box" style="display: none; background: var(--bg-dark); padding: 1.5rem; border-radius: 10px; border: 1px solid var(--border-color); margin-bottom: 1.5rem;">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-            <span style="font-weight: 600; color: var(--accent-green);"><i class="fa-solid fa-spinner fa-spin"></i> Ingestion In Progress...</span>
-            <span id="l1-progress-pct" style="font-weight: 800; font-size: 1.1rem; color: var(--accent-green);">0%</span>
+        <!-- Progress Box -->
+        <div id="s1-progress-box" style="display: none; background: var(--bg-dark); padding: 1.25rem; border-radius: 8px; border: 1px solid var(--border-color); margin-bottom: 1.25rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
+            <span style="font-weight: 600; color: var(--accent-cyan);"><i class="fa-solid fa-spinner fa-spin"></i> Ingesting GDELT Archives...</span>
+            <span id="s1-progress-pct" style="font-weight: 800; font-size: 1.1rem; color: var(--accent-cyan);">0%</span>
           </div>
-          <div class="bar-bg" style="height: 12px; margin-bottom: 0.75rem;">
-            <div class="bar-fill" id="l1-progress-fill" style="width: 0%;"></div>
+          <div class="bar-bg">
+            <div class="bar-fill" id="s1-progress-fill" style="width: 0%; background: linear-gradient(135deg, #00E5FF 0%, #0091EA 100%);"></div>
           </div>
-          <div id="l1-progress-msg" style="font-size: 0.85rem; color: var(--text-muted);">Initializing ingestion engine...</div>
+          <div id="s1-progress-msg" style="font-size: 0.85rem; color: var(--text-muted); margin-top: 0.5rem;">Initializing in-memory download stream...</div>
         </div>
 
-        <!-- Completion / Error Status Box (Shown at end of operation) -->
-        <div id="l1-status-box" style="display: none; padding: 1.25rem; border-radius: 10px; font-weight: 600; font-size: 0.95rem;">
-          <!-- Rendered dynamically -->
+        <!-- Status Message -->
+        <div id="s1-status-box" style="display: none; padding: 1rem 1.25rem; border-radius: 8px; font-weight: 600; font-size: 0.9rem; margin-bottom: 1.25rem;"></div>
+
+        <!-- Stage 1 Ingested Archives / Files Table -->
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1.5rem; margin-bottom: 0.5rem;">
+          <h4 style="font-size: 1rem; color: var(--accent-cyan);"><i class="fa-solid fa-file-zipper"></i> Imported Stage 1 GDELT Archives / Files</h4>
+          <button class="btn btn-secondary" style="padding: 0.35rem 0.75rem; font-size: 0.8rem;" onclick="loadStage1Files()"><i class="fa-solid fa-rotate"></i> Refresh Files</button>
         </div>
 
-      </div>
-    </div>
+        <!-- Stage 1 Files Bulk Bar -->
+        <div id="s1-files-bulk-bar" class="bulk-action-bar">
+          <div class="bulk-selected-info">
+            <i class="fa-solid fa-check-double" style="color: var(--accent-cyan);"></i>
+            <span><strong id="s1-files-selected-count">0</strong> file(s) selected</span>
+          </div>
+          <div style="display: flex; gap: 0.5rem;">
+            <button class="btn-danger-mini" onclick="deleteSelectedStage1Files()">
+              <i class="fa-solid fa-trash-can"></i> Delete Selected Files
+            </button>
+          </div>
+        </div>
 
-    <!-- LEVEL 2 PANEL -->
-    <div id="panel-level2" class="panel">
-      <div class="card">
-        <h3 style="margin-bottom: 0.75rem;"><i class="fa-solid fa-list-check"></i> Level 2: Stage 2 Filtered News Inspector</h3>
-        <p style="color: var(--text-muted); margin-bottom: 1.5rem;">
-          Inspect scraped news articles with irrelevant/clickbait stories strictly filtered out before 11-D vector projection.
-        </p>
+        <div class="table-box" style="margin-bottom: 2rem;">
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 38px; text-align: center;"><input type="checkbox" id="s1-files-select-all" class="table-checkbox" onchange="toggleSelectAll('s1-file-cb', this)"></th>
+                <th>Export File Name</th>
+                <th>Date</th>
+                <th>Size</th>
+                <th>Total Ingested</th>
+                <th>Remaining in Stage 1</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="s1-files-body">
+              <tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">Loading Stage 1 imported files...</td></tr>
+            </tbody>
+          </table>
+        </div>
 
-        <div style="display: flex; gap: 1rem; margin-bottom: 1.5rem;">
-          <input type="text" id="l2-search" placeholder="Filter headlines..." style="flex: 1;" onkeyup="loadLevel2Records()">
-          <select id="l2-location" onchange="loadLevel2Records()">
-            <option value="">All Locations</option>
-            <option value="India">India</option>
-            <option value="World">World</option>
-            <option value="LPU">LPU</option>
-            <option value="Punjab">Punjab</option>
-          </select>
+        <!-- Stage 1 Database Table Preview -->
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1.5rem; margin-bottom: 0.5rem;">
+          <h4 style="font-size: 1rem; color: var(--text-main);"><i class="fa-solid fa-table-list"></i> Raw News Database Records (<code>raw_gdelt_news</code>)</h4>
+          <input type="text" id="s1-search" placeholder="Search URL or Actor..." style="width: 250px;" onkeyup="if(event.key==='Enter') loadStage1Records()">
+        </div>
+
+        <!-- Stage 1 Records Bulk Bar -->
+        <div id="s1-records-bulk-bar" class="bulk-action-bar">
+          <div class="bulk-selected-info">
+            <i class="fa-solid fa-check-double" style="color: var(--accent-cyan);"></i>
+            <span><strong id="s1-records-selected-count">0</strong> record(s) selected</span>
+          </div>
+          <div style="display: flex; gap: 0.5rem;">
+            <button class="btn-danger-mini" onclick="deleteSelectedStage1Records()">
+              <i class="fa-solid fa-trash-can"></i> Delete Selected Records
+            </button>
+            <button class="btn-danger-mini" onclick="deleteAllStage1Records()">
+              <i class="fa-solid fa-dumpster-fire"></i> Delete ALL Raw Records
+            </button>
+          </div>
         </div>
 
         <div class="table-box">
           <table>
             <thead>
               <tr>
+                <th style="width: 38px; text-align: center;"><input type="checkbox" id="s1-records-select-all" class="table-checkbox" onchange="toggleSelectAll('s1-record-cb', this)"></th>
+                <th>Published Date</th>
+                <th>Actor 1</th>
+                <th>Actor 2</th>
+                <th>Country</th>
+                <th>Source URL</th>
+                <th>Status</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="s1-records-body">
+              <tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 2rem;">Loading Stage 1 raw records...</td></tr>
+            </tbody>
+          </table>
+          <div class="pagination-bar">
+            <span id="s1-page-info">Showing recent items</span>
+            <div style="display: flex; gap: 0.5rem;">
+              <button class="btn btn-secondary" style="padding: 0.35rem 0.75rem; font-size: 0.8rem;" onclick="prevPageStage1()"><i class="fa-solid fa-chevron-left"></i> Prev</button>
+              <button class="btn btn-secondary" style="padding: 0.35rem 0.75rem; font-size: 0.8rem;" onclick="nextPageStage1()">Next <i class="fa-solid fa-chevron-right"></i></button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- STAGE 2: BASIC NLP FILTERING & INTER-STAGE PURGE -->
+    <!-- ============================================================ -->
+    <div id="panel-stage2" class="panel">
+      <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem;">
+          <div>
+            <h3><i class="fa-solid fa-filter" style="color: var(--accent-purple);"></i> Stage 2: Basic NLP Filtering & Classification</h3>
+            <p style="color: var(--text-muted); font-size: 0.9rem; margin-top: 0.25rem;">
+              Filters raw items from Stage 1 using NLP keyword analysis to determine PESTLE/Porter alignment, discards clickbait/noise, deduplicates headlines, and moves relevant records to <code>stage2_filtered_news</code>.
+            </p>
+          </div>
+          <button class="btn btn-secondary" onclick="loadStage2Records()"><i class="fa-solid fa-rotate"></i> Refresh View</button>
+        </div>
+
+        <div class="rule-callout" style="background: rgba(168, 85, 247, 0.08); border-color: rgba(168, 85, 247, 0.3); color: #F3E8FF;">
+          <i class="fa-solid fa-trash-can" style="color: var(--accent-purple);"></i>
+          <div><strong>Purge & Deduplication Rule:</strong> Processed rows are <strong>permanently deleted from Stage 1</strong> (<code>raw_gdelt_news</code>) upon moving. Unwanted noise is filtered out and deduplicated across the pipeline.</div>
+        </div>
+
+        <!-- Stage 1 Files Available for Conversion (Previous Stage) -->
+        <div style="background: rgba(168, 85, 247, 0.04); border: 1px solid rgba(168, 85, 247, 0.25); border-radius: var(--radius-lg); padding: 1.5rem; margin-bottom: 1.75rem;">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.75rem;">
+            <div>
+              <h4 style="font-size: 1.05rem; color: var(--accent-purple); font-family: var(--font-heading); font-weight: 700; display: flex; align-items: center; gap: 0.5rem;">
+                <i class="fa-solid fa-folder-open"></i> Stage 1 Files Available for Conversion (Click to Filter & Move to Stage 2)
+              </h4>
+              <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 0.2rem;">
+                Select any imported archive from Stage 1 below. Click <strong>"Convert / Filter File"</strong> to run NLP categorization, assign strategic dimensions, move items into Stage 2, and <strong>purge</strong> them from Stage 1.
+              </p>
+            </div>
+            <button class="btn btn-secondary" style="padding: 0.35rem 0.75rem; font-size: 0.8rem;" onclick="loadStage1FilesForStage2()"><i class="fa-solid fa-rotate"></i> Refresh Stage 1 Files</button>
+          </div>
+
+          <!-- Stage 2 Files Bulk Bar -->
+          <div id="s2-files-bulk-bar" class="bulk-action-bar">
+            <div class="bulk-selected-info">
+              <i class="fa-solid fa-check-double" style="color: var(--accent-purple);"></i>
+              <span><strong id="s2-files-selected-count">0</strong> file(s) selected</span>
+            </div>
+            <div style="display: flex; gap: 0.5rem;">
+              <button class="btn btn-purple" style="padding: 0.35rem 0.85rem; font-size: 0.82rem;" onclick="convertSelectedStage1Files()">
+                <i class="fa-solid fa-play"></i> Bulk Convert Selected
+              </button>
+              <button class="btn-danger-mini" onclick="deleteSelectedStage1Files()">
+                <i class="fa-solid fa-trash-can"></i> Delete Selected Files
+              </button>
+            </div>
+          </div>
+
+          <div class="table-box" style="margin-top: 0.75rem;">
+            <table>
+              <thead>
+                <tr>
+                  <th style="width: 38px; text-align: center;"><input type="checkbox" id="s2-files-select-all" class="table-checkbox" onchange="toggleSelectAll('s2-file-cb', this)"></th>
+                  <th>Stage 1 File / Archive</th>
+                  <th>Date</th>
+                  <th>Remaining Items</th>
+                  <th>Conversion Batch Size</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="s2-previous-files-body">
+                <tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">Loading Stage 1 files for conversion...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Stage 2 Generic / All Dates Execution Toolbar -->
+        <div style="font-size: 0.85rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem;">
+          <i class="fa-solid fa-sliders"></i> Bulk / All-Dates Conversion:
+        </div>
+        <div class="action-toolbar" style="margin-top: 0;">
+          <div class="toolbar-group">
+            <label style="font-size: 0.85rem; font-weight: 600; color: var(--text-muted);">Batch Size:</label>
+            <select id="s2-batch-size">
+              <option value="50">50 Items</option>
+              <option value="100" selected>100 Items</option>
+              <option value="250">250 Items</option>
+              <option value="500">500 Items</option>
+              <option value="1000">1,000 Items</option>
+            </select>
+          </div>
+          <button class="btn btn-purple" id="s2-submit-btn" onclick="startStage2Processing()">
+            <i class="fa-solid fa-play"></i> Run Stage 2 NLP Filter & Move (Purges Stage 1)
+          </button>
+        </div>
+
+        <!-- Progress Box -->
+        <div id="s2-progress-box" style="display: none; background: var(--bg-dark); padding: 1.25rem; border-radius: 8px; border: 1px solid var(--border-color); margin-bottom: 1.25rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
+            <span style="font-weight: 600; color: var(--accent-purple);"><i class="fa-solid fa-spinner fa-spin"></i> NLP Filtering & Moving to Stage 2...</span>
+            <span id="s2-progress-pct" style="font-weight: 800; font-size: 1.1rem; color: var(--accent-purple);">0%</span>
+          </div>
+          <div class="bar-bg">
+            <div class="bar-fill" id="s2-progress-fill" style="width: 0%; background: linear-gradient(135deg, #C084FC 0%, #A855F7 100%);"></div>
+          </div>
+          <div id="s2-progress-msg" style="font-size: 0.85rem; color: var(--text-muted); margin-top: 0.5rem;">Filtering articles...</div>
+        </div>
+
+        <!-- Status Box -->
+        <div id="s2-status-box" style="display: none; padding: 1rem 1.25rem; border-radius: 8px; font-weight: 600; font-size: 0.9rem; margin-bottom: 1.25rem;"></div>
+
+        <!-- Stage 2 Table -->
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1.5rem; margin-bottom: 0.5rem;">
+          <h4 style="font-size: 1rem; color: var(--text-main);"><i class="fa-solid fa-list-check"></i> Filtered News Records (<code>stage2_filtered_news</code>)</h4>
+          <div style="display: flex; gap: 0.5rem;">
+            <input type="text" id="s2-search" placeholder="Search headline or category..." style="width: 250px;" onkeyup="if(event.key==='Enter') loadStage2Records()">
+            <select id="s2-location-filter" onchange="loadStage2Records()">
+              <option value="">All Locations</option>
+              <option value="India">India</option>
+              <option value="World">World</option>
+              <option value="United States">United States</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Stage 2 Records Bulk Bar -->
+        <div id="s2-records-bulk-bar" class="bulk-action-bar">
+          <div class="bulk-selected-info">
+            <i class="fa-solid fa-check-double" style="color: var(--accent-purple);"></i>
+            <span><strong id="s2-records-selected-count">0</strong> record(s) selected</span>
+          </div>
+          <div style="display: flex; gap: 0.5rem;">
+            <button class="btn-danger-mini" onclick="deleteSelectedStage2Records()">
+              <i class="fa-solid fa-trash-can"></i> Delete Selected Records
+            </button>
+            <button class="btn-danger-mini" onclick="deleteAllStage2Records()">
+              <i class="fa-solid fa-dumpster-fire"></i> Delete ALL Filtered Records
+            </button>
+          </div>
+        </div>
+
+        <div class="table-box">
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 38px; text-align: center;"><input type="checkbox" id="s2-records-select-all" class="table-checkbox" onchange="toggleSelectAll('s2-record-cb', this)"></th>
                 <th>Date</th>
-                <th>Headline</th>
+                <th>Extracted Headline</th>
+                <th>PESTLE/Porter Classification</th>
                 <th>Location</th>
                 <th>Source URL</th>
+                <th>Status</th>
+                <th>Action</th>
               </tr>
             </thead>
-            <tbody id="l2-records-body">
-              <tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Loading filtered records...</td></tr>
+            <tbody id="s2-records-body">
+              <tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 2rem;">Loading Stage 2 filtered records...</td></tr>
             </tbody>
           </table>
+          <div class="pagination-bar">
+            <span id="s2-page-info">Showing recent items</span>
+            <div style="display: flex; gap: 0.5rem;">
+              <button class="btn btn-secondary" style="padding: 0.35rem 0.75rem; font-size: 0.8rem;" onclick="prevPageStage2()"><i class="fa-solid fa-chevron-left"></i> Prev</button>
+              <button class="btn btn-secondary" style="padding: 0.35rem 0.75rem; font-size: 0.8rem;" onclick="nextPageStage2()">Next <i class="fa-solid fa-chevron-right"></i></button>
+            </div>
+          </div>
         </div>
+
       </div>
     </div>
 
-    <!-- LEVEL 3 PANEL -->
-    <div id="panel-level3" class="panel">
-      <!-- Live DB Cards -->
-      <div class="grid-2">
-        <div class="card">
-          <div class="card-header-title">Live Benchmark Companies Table</div>
-          <div class="card-big-value" id="l3-comp-count">500</div>
-          <div style="color: var(--green-accent); font-size: 0.85rem; margin-top: 0.25rem;">
-            <i class="fa-solid fa-check"></i> 11-D & 384-D Vector Indexed in Supabase
-          </div>
-        </div>
-        <div class="card">
-          <div class="card-header-title">Live Strategic News Articles Table</div>
-          <div class="card-big-value" id="l3-news-count">81,903</div>
-          <div style="color: var(--cyan-accent); font-size: 0.85rem; margin-top: 0.25rem;">
-            <i class="fa-solid fa-check"></i> HNSW Cosine Similarity Index Live
-          </div>
-        </div>
-      </div>
-
-      <!-- Live 11-D Vector Projection Tester Card -->
-      <div class="card" style="margin-bottom: 2rem;">
-        <h3 style="margin-bottom: 0.75rem;"><i class="fa-solid fa-bolt" style="color: var(--cyan-accent);"></i> Live 11-D Strategic Vector Projection Tester</h3>
-        <p style="color: var(--text-muted); margin-bottom: 1rem;">
-          Input any news headline to compute its 768-D Cloud Embedding via Hugging Face API and project its 11-D PESTLE & Porter scores live!
-        </p>
-
-        <div style="display: flex; gap: 1rem; margin-bottom: 1.5rem;">
-          <input type="text" id="l3-headline-input" value="India monitors US trade tariffs on oil imports while launching AI chip technology subsidies" style="flex: 1;">
-          <button class="btn" onclick="projectHeadlineLive()"><i class="fa-solid fa-wand-magic-sparkles"></i> Project 11-D Vector</button>
-        </div>
-
-        <div id="l3-vector-result" style="display: none; background: var(--bg-dark); padding: 1.25rem; border-radius: 8px; border: 1px solid var(--border-color);">
-          <h4 style="color: var(--cyan-accent); margin-bottom: 0.5rem;">11-D Strategic Vector Projection</h4>
-          <div id="l3-impact-badge" style="font-weight: 700; margin-bottom: 1rem; color: var(--green-accent);">Impact Score: --</div>
-          <div id="l3-bars-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
-            <!-- Bars rendered dynamically -->
-          </div>
-        </div>
-      </div>
-
-      <!-- Benchmark Companies Inspector Table -->
+    <!-- ============================================================ -->
+    <!-- STAGE 3: 11-D EMBEDDINGS & INGESTION INTO MASTER DB -->
+    <!-- ============================================================ -->
+    <div id="panel-stage3" class="panel">
       <div class="card">
-        <h3>500 Benchmark Companies (Vector Database)</h3>
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem;">
+          <div>
+            <h3><i class="fa-solid fa-diagram-project" style="color: var(--accent-green);"></i> Stage 3: Embedding Creation & 11-D Projection</h3>
+            <p style="color: var(--text-muted); font-size: 0.9rem; margin-top: 0.25rem;">
+              Takes items from <code>stage2_filtered_news</code>, generates 768-D embeddings, converts them using the linear projection model matrix to 11 strategic dimensions, and ingests them into the Master News Database (<code>news_articles</code>).
+            </p>
+          </div>
+          <button class="btn btn-secondary" onclick="loadStage3DBStatus(); loadStage3News();"><i class="fa-solid fa-rotate"></i> Refresh View</button>
+        </div>
+
+        <div class="rule-callout" style="background: rgba(0, 255, 102, 0.08); border-color: rgba(0, 255, 102, 0.3); color: #E8FDF0;">
+          <i class="fa-solid fa-trash-can" style="color: var(--accent-green);"></i>
+          <div><strong>Purge & Deduplication Rule:</strong> Successfully ingested articles are <strong>permanently deleted from Stage 2</strong> (<code>stage2_filtered_news</code>). The master table enforces deduplication on existing headlines.</div>
+        </div>
+
+        <!-- Stage 2 Filtered Batches Available for Ingestion (Previous Stage) -->
+        <div style="background: rgba(0, 255, 102, 0.04); border: 1px solid rgba(0, 255, 102, 0.25); border-radius: var(--radius-lg); padding: 1.5rem; margin-bottom: 1.75rem;">
+          <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 0.75rem;">
+            <div>
+              <h4 style="font-size: 1.05rem; color: var(--accent-green); font-family: var(--font-heading); font-weight: 700; display: flex; align-items: center; gap: 0.5rem;">
+                <i class="fa-solid fa-folder-open"></i> Stage 2 Filtered Batches Available for Ingestion (Click to Project & Move to Master DB)
+              </h4>
+              <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 0.2rem;">
+                Select any filtered batch from Stage 2 below. Click <strong>"Convert & Project 11-D"</strong> to generate embeddings, project to 11 dimensions using the trained matrix, ingest into <code>news_articles</code>, and <strong>purge</strong> from Stage 2.
+              </p>
+            </div>
+            <button class="btn btn-secondary" style="padding: 0.35rem 0.75rem; font-size: 0.8rem;" onclick="loadStage2FilesForStage3()"><i class="fa-solid fa-rotate"></i> Refresh Stage 2 Batches</button>
+          </div>
+
+          <!-- Stage 3 Batches Bulk Bar -->
+          <div id="s3-batches-bulk-bar" class="bulk-action-bar">
+            <div class="bulk-selected-info">
+              <i class="fa-solid fa-check-double" style="color: var(--accent-green);"></i>
+              <span><strong id="s3-batches-selected-count">0</strong> batch(es) selected</span>
+            </div>
+            <div style="display: flex; gap: 0.5rem;">
+              <button class="btn" style="padding: 0.35rem 0.85rem; font-size: 0.82rem;" onclick="convertSelectedStage2Batches()">
+                <i class="fa-solid fa-wand-magic-sparkles"></i> Bulk Project Selected (11-D)
+              </button>
+              <button class="btn-danger-mini" onclick="deleteSelectedStage2Batches()">
+                <i class="fa-solid fa-trash-can"></i> Delete Selected Batches
+              </button>
+            </div>
+          </div>
+
+          <div class="table-box" style="margin-top: 0.75rem;">
+            <table>
+              <thead>
+                <tr>
+                  <th style="width: 38px; text-align: center;"><input type="checkbox" id="s3-batches-select-all" class="table-checkbox" onchange="toggleSelectAll('s3-batch-cb', this)"></th>
+                  <th>Stage 2 Batch / File</th>
+                  <th>Date</th>
+                  <th>Filtered Items Waiting</th>
+                  <th>Categories in Batch</th>
+                  <th>Projection Batch Size</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="s3-previous-files-body">
+                <tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 1.5rem;">Loading Stage 2 filtered batches...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Stage 3 Generic / All Dates Execution Toolbar -->
+        <div style="font-size: 0.85rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem;">
+          <i class="fa-solid fa-sliders"></i> Bulk / All-Dates 11-D Projection:
+        </div>
+        <div class="action-toolbar" style="margin-top: 0;">
+          <div class="toolbar-group">
+            <label style="font-size: 0.85rem; font-weight: 600; color: var(--text-muted);">Batch Size:</label>
+            <select id="s3-batch-size">
+              <option value="10">10 Articles</option>
+              <option value="25">25 Articles</option>
+              <option value="50" selected>50 Articles</option>
+              <option value="100">100 Articles</option>
+            </select>
+          </div>
+          <button class="btn" id="s3-submit-btn" onclick="startStage3Processing()">
+            <i class="fa-solid fa-wand-magic-sparkles"></i> Project 11-D & Ingest to Master DB (Purges Stage 2)
+          </button>
+        </div>
+
+        <!-- Progress Box -->
+        <div id="s3-progress-box" style="display: none; background: var(--bg-dark); padding: 1.25rem; border-radius: 8px; border: 1px solid var(--border-color); margin-bottom: 1.25rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
+            <span style="font-weight: 600; color: var(--accent-green);"><i class="fa-solid fa-spinner fa-spin"></i> Generating Embeddings & Ingesting to Master DB...</span>
+            <span id="s3-progress-pct" style="font-weight: 800; font-size: 1.1rem; color: var(--accent-green);">0%</span>
+          </div>
+          <div class="bar-bg">
+            <div class="bar-fill" id="s3-progress-fill" style="width: 0%;"></div>
+          </div>
+          <div id="s3-progress-msg" style="font-size: 0.85rem; color: var(--text-muted); margin-top: 0.5rem;">Generating high-dim embeddings...</div>
+        </div>
+
+        <!-- Status Box -->
+        <div id="s3-status-box" style="display: none; padding: 1rem 1.25rem; border-radius: 8px; font-weight: 600; font-size: 0.9rem; margin-bottom: 1.25rem;"></div>
+
+        <!-- Master News Database Records Table -->
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1.5rem; margin-bottom: 0.5rem;">
+          <h4 style="font-size: 1rem; color: var(--text-main);"><i class="fa-solid fa-database"></i> Live Master News Database (<code>news_articles</code>)</h4>
+          <input type="text" id="s3-search" placeholder="Search master news..." style="width: 250px;" onkeyup="if(event.key==='Enter') loadStage3News()">
+        </div>
+
+        <!-- Stage 3 Articles Bulk Bar -->
+        <div id="s3-articles-bulk-bar" class="bulk-action-bar">
+          <div class="bulk-selected-info">
+            <i class="fa-solid fa-check-double" style="color: var(--accent-green);"></i>
+            <span><strong id="s3-articles-selected-count">0</strong> article(s) selected</span>
+          </div>
+          <div style="display: flex; gap: 0.5rem;">
+            <button class="btn-danger-mini" onclick="deleteSelectedStage3Articles()">
+              <i class="fa-solid fa-trash-can"></i> Delete Selected Articles
+            </button>
+          </div>
+        </div>
+
         <div class="table-box">
           <table>
             <thead>
               <tr>
-                <th>Company</th>
-                <th>Sector</th>
-                <th>Product</th>
-                <th>Customer Value Proposition (CVP)</th>
+                <th style="width: 38px; text-align: center;"><input type="checkbox" id="s3-articles-select-all" class="table-checkbox" onchange="toggleSelectAll('s3-article-cb', this)"></th>
+                <th>Date</th>
+                <th>Headline</th>
+                <th>Primary Driver</th>
+                <th>Impact Score</th>
+                <th>11-D Strategic Vector Preview</th>
+                <th>Source</th>
+                <th>Action</th>
               </tr>
             </thead>
-            <tbody id="l3-companies-body">
-              <tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Loading benchmark companies...</td></tr>
+            <tbody id="s3-records-body">
+              <tr><td colspan="8" style="text-align: center; color: var(--text-muted); padding: 2rem;">Loading Master News records...</td></tr>
             </tbody>
           </table>
+          <div class="pagination-bar">
+            <span id="s3-page-info">Showing recent items</span>
+            <div style="display: flex; gap: 0.5rem;">
+              <button class="btn btn-secondary" style="padding: 0.35rem 0.75rem; font-size: 0.8rem;" onclick="prevPageStage3()"><i class="fa-solid fa-chevron-left"></i> Prev</button>
+              <button class="btn btn-secondary" style="padding: 0.35rem 0.75rem; font-size: 0.8rem;" onclick="nextPageStage3()">Next <i class="fa-solid fa-chevron-right"></i></button>
+            </div>
+          </div>
         </div>
+
       </div>
     </div>
 
-    <!-- PIPELINE CONTROLS PANEL -->
+    <!-- ============================================================ -->
+    <!-- PIPELINE ORCHESTRATOR & AUTOMATION -->
+    <!-- ============================================================ -->
     <div id="panel-orchestrator" class="panel">
       <div class="card">
-        <h3 style="margin-bottom: 0.75rem;"><i class="fa-solid fa-gears"></i> Master Pipeline Controller & Auto-Purge Manager</h3>
-        <p style="color: var(--text-muted); margin-bottom: 1.5rem;">
-          Trigger pipeline stages manually. Intermediate data is stored safely per stage and automatically purged upon successful transition to save disk space.
+        <h3><i class="fa-solid fa-bolt" style="color: var(--accent-green);"></i> Full Pipeline Orchestrator & Auto-Purge Manager</h3>
+        <p style="color: var(--text-muted); font-size: 0.9rem; margin-top: 0.25rem; margin-bottom: 1.5rem;">
+          Execute end-to-end multi-stage pipeline runs. The orchestrator transitions data seamlessly from Stage 1 to Stage 2 and into Stage 3, enforcing automatic purging and deduplication at every step.
         </p>
 
         <div style="display: flex; flex-direction: column; gap: 1rem;">
-          <div style="display: flex; justify-content: space-between; align-items: center; background: var(--bg-dark); padding: 1.25rem; border-radius: 8px; border: 1px solid var(--border-color);">
+          <!-- Stage 1 Block -->
+          <div style="display: flex; justify-content: space-between; align-items: center; background: var(--bg-surface); padding: 1.25rem; border-radius: 8px; border: 1px solid var(--border-color);">
             <div>
-              <strong>Stage 1: Fetch Raw GDELT Zip</strong>
-              <div style="font-size: 0.85rem; color: var(--text-muted);">Downloads raw event zip files into <code>gdelt_data/</code></div>
+              <div style="font-weight: 700; color: var(--accent-cyan);"><i class="fa-solid fa-1"></i> Stage 1: Ingest Raw GDELT News</div>
+              <div style="font-size: 0.85rem; color: var(--text-muted); margin-top: 0.2rem;">Streams archives and stores records in <code>raw_gdelt_news</code> with ID/URL deduplication.</div>
             </div>
-            <button class="btn btn-secondary" onclick="triggerL1Download()"><i class="fa-solid fa-play"></i> Run Stage 1</button>
+            <button class="btn btn-secondary" onclick="switchAdminTab('stage1')">Configure Stage 1</button>
           </div>
 
-          <div style="display: flex; justify-content: space-between; align-items: center; background: var(--bg-dark); padding: 1.25rem; border-radius: 8px; border: 1px solid var(--border-color);">
+          <!-- Stage 2 Block -->
+          <div style="display: flex; justify-content: space-between; align-items: center; background: var(--bg-surface); padding: 1.25rem; border-radius: 8px; border: 1px solid var(--border-color);">
             <div>
-              <strong>Stage 2: Filter & Scrape Irrelevant News</strong>
-              <div style="font-size: 0.85rem; color: var(--text-muted);">Scrapes articles, filters clickbait, then <strong>AUTO-PURGES Stage 1 Raw Zips</strong></div>
+              <div style="font-weight: 700; color: var(--accent-purple);"><i class="fa-solid fa-2"></i> Stage 2: Basic NLP Filter & Discard Noise</div>
+              <div style="font-size: 0.85rem; color: var(--text-muted); margin-top: 0.2rem;">Extracts business headlines, categorizes across 11 dimensions, moves to Stage 2, and <strong>deletes processed rows from Stage 1</strong>.</div>
             </div>
-            <button class="btn" onclick="triggerL2Filter()"><i class="fa-solid fa-filter"></i> Run Stage 2 (Auto-Purge)</button>
+            <button class="btn btn-purple" onclick="startStage2Processing()">Run Stage 2 (Purges Stage 1)</button>
           </div>
 
-          <div style="display: flex; justify-content: space-between; align-items: center; background: var(--bg-dark); padding: 1.25rem; border-radius: 8px; border: 1px solid var(--border-color);">
+          <!-- Stage 3 Block -->
+          <div style="display: flex; justify-content: space-between; align-items: center; background: var(--bg-surface); padding: 1.25rem; border-radius: 8px; border: 1px solid var(--border-color);">
             <div>
-              <strong>Stage 3: 11-D Projection & Master DB Ingestion</strong>
-              <div style="font-size: 0.85rem; color: var(--text-muted);">Projects 11-D vectors, inserts into Supabase, then <strong>AUTO-PURGES Stage 2 CSVs</strong></div>
+              <div style="font-weight: 700; color: var(--accent-green);"><i class="fa-solid fa-3"></i> Stage 3: 768-D Embeddings to 11-D Model Projection</div>
+              <div style="font-size: 0.85rem; color: var(--text-muted); margin-top: 0.2rem;">Generates embeddings, applies linear matrix model to 11 dimensions, ingests into master DB, and <strong>deletes promoted rows from Stage 2</strong>.</div>
             </div>
-            <button class="btn" onclick="triggerL3Deploy()"><i class="fa-solid fa-upload"></i> Run Stage 3 (Auto-Purge)</button>
+            <button class="btn" onclick="startStage3Processing()">Run Stage 3 (Purges Stage 2)</button>
           </div>
         </div>
+
       </div>
     </div>
 
   </div>
 
-  <script>
-    function switchAdminTab(panelId) {
-      document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-      document.querySelectorAll('.panel').forEach(panel => panel.classList.remove('active'));
-      
-      event.target.classList.add('active');
-      document.getElementById('panel-' + panelId).classList.add('active');
-
-      if (panelId === 'level2') loadLevel2Records();
-      if (panelId === 'level3') { loadLevel3DBStatus(); loadLevel3Companies(); }
-    }
-
-    let l1PollInterval = null;
-
-    async function startLevel1Ingestion() {
-      const sDate = document.getElementById('l1-start-date').value;
-      const eDate = document.getElementById('l1-end-date').value;
-
-      if (!sDate || !eDate) {
-        alert('Please select both Start Date and End Date.');
-        return;
-      }
-      if (sDate > eDate) {
-        alert('Start Date must be before or equal to End Date.');
-        return;
-      }
-
-      const btn = document.getElementById('l1-submit-btn');
-      const progressBox = document.getElementById('l1-progress-box');
-      const statusBox = document.getElementById('l1-status-box');
-
-      // UI setup
-      btn.disabled = true;
-      btn.style.opacity = '0.5';
-      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Ingestion Running...';
-      
-      progressBox.style.display = 'block';
-      statusBox.style.display = 'none';
-
-      document.getElementById('l1-progress-pct').innerText = '0%';
-      document.getElementById('l1-progress-fill').style.width = '0%';
-      document.getElementById('l1-progress-msg').innerText = 'Initiating ingestion request...';
-
-      try {
-        const res = await fetch('/api/stage1/ingest', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ start_date: sDate, end_date: eDate })
-        });
-        const data = await res.json();
-
-        if (!data.success) {
-          btn.disabled = false;
-          btn.style.opacity = '1';
-          btn.innerHTML = '<i class="fa-solid fa-download"></i> Fetch & Ingest Raw GDELT Zips into Database';
-          
-          statusBox.style.display = 'block';
-          statusBox.style.background = 'rgba(255, 0, 85, 0.15)';
-          statusBox.style.border = '1px solid var(--danger-accent)';
-          statusBox.style.color = '#FF4D6D';
-          statusBox.innerHTML = `<i class="fa-solid fa-circle-exclamation"></i> <strong>Error:</strong> ${data.error}`;
-          return;
-        }
-
-        // Start polling progress
-        if (l1PollInterval) clearInterval(l1PollInterval);
-        l1PollInterval = setInterval(pollLevel1Progress, 600);
-
-      } catch (e) {
-        btn.disabled = false;
-        btn.style.opacity = '1';
-        btn.innerHTML = '<i class="fa-solid fa-download"></i> Fetch & Ingest Raw GDELT Zips into Database';
-        
-        statusBox.style.display = 'block';
-        statusBox.style.background = 'rgba(255, 0, 85, 0.15)';
-        statusBox.style.border = '1px solid var(--danger-accent)';
-        statusBox.style.color = '#FF4D6D';
-        statusBox.innerHTML = `<i class="fa-solid fa-circle-exclamation"></i> <strong>Network Error:</strong> ${e.message}`;
-      }
-    }
-
-    async function pollLevel1Progress() {
-      try {
-        const res = await fetch('/api/stage1/progress');
-        const data = await res.json();
-
-        const pct = data.progress_pct || 0;
-        document.getElementById('l1-progress-pct').innerText = `${pct}%`;
-        document.getElementById('l1-progress-fill').style.width = `${pct}%`;
-        document.getElementById('l1-progress-msg').innerText = data.message || 'Processing GDELT export archives...';
-
-        if (data.status === 'completed' || data.status === 'error') {
-          clearInterval(l1PollInterval);
-          l1PollInterval = null;
-
-          const btn = document.getElementById('l1-submit-btn');
-          btn.disabled = false;
-          btn.style.opacity = '1';
-          btn.innerHTML = '<i class="fa-solid fa-download"></i> Fetch & Ingest Raw GDELT Zips into Database';
-
-          const statusBox = document.getElementById('l1-status-box');
-          statusBox.style.display = 'block';
-
-          if (data.status === 'completed') {
-            statusBox.style.background = 'rgba(0, 255, 102, 0.12)';
-            statusBox.style.border = '1px solid rgba(0, 255, 102, 0.4)';
-            statusBox.style.color = 'var(--accent-green)';
-            statusBox.innerHTML = `<i class="fa-solid fa-circle-check"></i> <strong>SUCCESS:</strong> ${data.message}`;
-          } else {
-            statusBox.style.background = 'rgba(255, 0, 85, 0.15)';
-            statusBox.style.border = '1px solid var(--danger-accent)';
-            statusBox.style.color = '#FF4D6D';
-            statusBox.innerHTML = `<i class="fa-solid fa-circle-exclamation"></i> <strong>INGESTION FAILED:</strong> ${data.message}`;
-          }
-        }
-      } catch (e) {
-        console.error('Progress polling error:', e);
-      }
-    }
-
-    async function loadLevel2Records() {
-      const search = document.getElementById('l2-search').value;
-      const loc = document.getElementById('l2-location').value;
-      try {
-        const res = await fetch(`/api/stage2/records?search=${encodeURIComponent(search)}&location=${encodeURIComponent(loc)}`);
-        const data = await res.json();
-        const tbody = document.getElementById('l2-records-body');
-        if (data.records && data.records.length > 0) {
-          tbody.innerHTML = data.records.map(r => `
-            <tr>
-              <td>${r.date}</td>
-              <td style="font-weight: 500;">${r.headline}</td>
-              <td><span class="badge-tag tag-green">${r.location_affected}</span></td>
-              <td><a href="${r.source_link}" target="_blank" style="color: var(--cyan-accent);">Source 🔗</a></td>
-            </tr>
-          `).join('');
-        } else {
-          tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted);">No Stage 2 filtered records found.</td></tr>`;
-        }
-      } catch (e) { console.error(e); }
-    }
-
-    async function loadLevel3DBStatus() {
-      try {
-        const res = await fetch('/api/stage3/db-status');
-        const data = await res.json();
-        const pill = document.getElementById('admin-db-status');
-        if (data.connected) {
-          pill.innerHTML = `<span class="status-dot"></span> Supabase DB Connected (${data.news_articles_count.toLocaleString()} News Live)`;
-          document.getElementById('l3-comp-count').innerText = data.benchmark_companies_count.toLocaleString();
-          document.getElementById('l3-news-count').innerText = data.news_articles_count.toLocaleString();
-        } else {
-          pill.innerHTML = `<span class="status-dot" style="background: var(--warning-accent);"></span> DB Connection Pending`;
-        }
-      } catch (e) { console.error(e); }
-    }
-
-    async function loadLevel3Companies() {
-      try {
-        const res = await fetch('/api/stage3/companies?limit=15');
-        const data = await res.json();
-        const tbody = document.getElementById('l3-companies-body');
-        if (data.companies && data.companies.length > 0) {
-          tbody.innerHTML = data.companies.map(c => `
-            <tr>
-              <td style="font-weight: 600; color: var(--cyan-accent);">${c.company}</td>
-              <td><span class="badge-tag tag-green">${c.sector}</span></td>
-              <td>${c.product_name || '--'}</td>
-              <td style="font-size: 0.85rem; color: var(--text-muted);">${c.cvp}</td>
-            </tr>
-          `).join('');
-        }
-      } catch (e) { console.error(e); }
-    }
-
-    async function projectHeadlineLive() {
-      const headline = document.getElementById('l3-headline-input').value;
-      const res = await fetch('/api/stage3/project-headline', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ headline: headline })
-      });
-      const data = await res.json();
-      if (data.success) {
-        document.getElementById('l3-vector-result').style.display = 'block';
-        document.getElementById('l3-impact-badge').innerText = `Strategic Impact Score: ${data.impact_score}`;
-        
-        const container = document.getElementById('l3-bars-grid');
-        container.innerHTML = Object.entries(data.driver_breakdown).map(([dim, score]) => `
-          <div>
-            <div style="display: flex; justify-content: space-between; font-size: 0.8rem; color: var(--text-muted);">
-              <span>${dim}</span>
-              <span style="color: var(--cyan-accent); font-weight: 600;">${score}</span>
-            </div>
-            <div class="bar-bg">
-              <div class="bar-fill" style="width: ${Math.round(score * 100)}%;"></div>
-            </div>
-          </div>
-        `).join('');
-      }
-    }
-
-    async function triggerL2Filter() {
-      const res = await fetch('/api/stage2/trigger', { method: 'POST' });
-      const data = await res.json();
-      alert(data.message || data.error);
-    }
-    async function triggerL3Deploy() {
-      const res = await fetch('/api/stage3/trigger', { method: 'POST' });
-      const data = await res.json();
-      alert(data.message || data.error);
-    }
-
-    // Init
-    loadLevel3DBStatus();
+  <script type="module">
+    import { AdminController } from './modules/admin-controller.js';
+    window.addEventListener('DOMContentLoaded', () => {
+      window.adminController = new AdminController();
+    });
   </script>
 </body>
 </html>
+

@@ -37,11 +37,14 @@ CREATE TABLE IF NOT EXISTS stage2_filtered_news (
     headline TEXT NOT NULL,
     source_link TEXT NOT NULL,
     location_affected VARCHAR(50) NOT NULL DEFAULT 'World',
+    category VARCHAR(100) DEFAULT 'General Market',
     status VARCHAR(50) DEFAULT 'FILTERED',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX IF NOT EXISTS idx_stage2_news_date ON stage2_filtered_news (published_date DESC);
+CREATE INDEX IF NOT EXISTS idx_stage2_news_headline ON stage2_filtered_news (headline);
+CREATE INDEX IF NOT EXISTS idx_stage2_news_link ON stage2_filtered_news (source_link);
 
 
 -- 1. Benchmark Companies Table (CVP Matching & 11-D Market Positioning)
