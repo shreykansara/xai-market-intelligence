@@ -152,8 +152,8 @@ export class CvpWorkflow {
         ChartVisualizer.drawPorterCanvas(this.canvasPorter, this.state.activePorterVector, peerPorter);
         ChartVisualizer.drawPorterCanvas(this.sideCanvasPorter, this.state.activePorterVector, peerPorter);
 
-        ChartVisualizer.updateLegendValues('leg-pestle-', this.state.activePestleVector);
-        ChartVisualizer.updateLegendValues('leg-porter-', this.state.activePorterVector);
+        ChartVisualizer.updateCvpLegendValues(this.state.activePestleVector, this.state.activePorterVector);
+
 
         this.renderMatches(this.state.activeNearestCvps);
 

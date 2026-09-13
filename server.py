@@ -2355,27 +2355,10 @@ def evaluate_cvp():
     # Step 1: Compute 768-D Cloud Embedding via Hugging Face API / Fallback
     c_emb_768d = get_cloud_text_embedding(cvp_text)
 
-    # Step 2: Project 11-D Strategic Vector (PESTLE + Porter)
-    if W_MATRIX is not None and B_BIAS is not None:
-        x = np.array(c_emb_768d, dtype=np.float32)
-        if x.shape[0] != W_MATRIX.shape[0]:
-            if x.shape[0] < W_MATRIX.shape[0]:
-                x = np.pad(x, (0, W_MATRIX.shape[0] - x.shape[0]))
-            else:
-                x = x[:W_MATRIX.shape[0]]
-
-        y_raw = np.dot(x, W_MATRIX) + B_BIAS
-        y_clipped = np.clip(y_raw, 0.05, 0.95)
-        user_11d_vector = [round(float(v), 3) for v in y_clipped]
-    else:
-        user_11d_vector = [0.35, 0.45, 0.30, 0.85, 0.40, 0.30, 0.55, 0.40, 0.50, 0.45, 0.60]
-
-    pestle_vector = user_11d_vector[:6]
-    porter_vector = user_11d_vector[6:]
-
-    # Step 3: Real-Time Distance-Based Comparison against all 500 Benchmark Companies
+    # Step 2: Real-Time Distance-Based Comparison against all 500 Benchmark Companies
     from sklearn.metrics.pairwise import cosine_similarity
     nearest_cvps = []
+    user_11d_vector = [0.65, 0.72, 0.85, 0.82, 0.68, 0.84, 0.28, 0.74, 0.67, 0.42, 0.85]
 
     if BENCHMARK_COMPANIES_500 and CVP_VECTORIZER and CVP_TFIDF_MATRIX is not None:
         try:
@@ -2383,20 +2366,12 @@ def evaluate_cvp():
             q_vec = CVP_VECTORIZER.transform([cvp_text])
             semantic_sims = cosine_similarity(q_vec, CVP_TFIDF_MATRIX)[0]
 
-            # B. 11-D Strategic Vector Cosine Distance
-            u_arr = np.array(user_11d_vector, dtype=np.float32)
-            u_norm = np.linalg.norm(u_arr)
-            u_unit = u_arr / u_norm if u_norm > 0 else u_arr
-            strat_sims = np.dot(STRATEGIC_11D_MATRIX, u_unit) if STRATEGIC_11D_MATRIX is not None else np.zeros(len(BENCHMARK_COMPANIES_500))
-
-            # C. Multi-Aspect Distance Metric: 70% Semantic CVP Overlap + 30% Strategic Macro 11-D alignment
-            combined_scores = (semantic_sims * 0.70) + (np.clip(strat_sims, 0, 1) * 0.30)
-
-            # Take Top 6 Distinct Benchmark Matches
-            top_indices = np.argsort(combined_scores)[::-1]
+            # Rank benchmark matches by semantic overlap
+            top_indices = np.argsort(semantic_sims)[::-1]
             seen_companies = set()
             max_raw = float(semantic_sims[top_indices[0]]) if len(top_indices) > 0 and semantic_sims[top_indices[0]] > 0 else 0.4
             rank_idx = 0
+            candidate_peers = []
 
             for idx in top_indices:
                 comp = BENCHMARK_COMPANIES_500[idx]
@@ -2407,34 +2382,93 @@ def evaluate_cvp():
                 seen_companies.add(norm_name)
 
                 raw_sem = float(semantic_sims[idx])
-                raw_strat = float(strat_sims[idx])
-
-                # Calibrate similarity into realistic percentage [75.0% - 98.8%]
                 rel_sem = raw_sem / max_raw if max_raw > 0 else 0.5
                 sim_pct = round(min(98.8, max(75.0, 84.5 + (rel_sem * 13.0) - (rank_idx * 1.8))), 1)
                 rank_idx += 1
 
+                candidate_peers.append({
+                    "comp": comp,
+                    "c_name": c_name,
+                    "sim_pct": sim_pct,
+                    "raw_sem": raw_sem
+                })
+                if len(candidate_peers) >= 6:
+                    break
+
+            # B. Relative Spacing Manifold Projection:
+            # Derive baseline 11-D strategic vector directly from the relative distance spacing of nearest benchmark peers
+            if candidate_peers:
+                peer_sims = np.array([p["sim_pct"] for p in candidate_peers], dtype=np.float32)
+                exp_s = np.exp((peer_sims - np.max(peer_sims)) / 5.0)
+                weights = exp_s / np.sum(exp_s)
+
+                peer_11d_matrix = []
+                for p in candidate_peers:
+                    s11 = p["comp"].get("strategic_embedding_11d")
+                    if not s11 or len(s11) != 11:
+                        p_dict = p["comp"].get("pestle", {}) or {}
+                        f_dict = p["comp"].get("porters", {}) or {}
+                        s11 = [
+                            float(p_dict.get("political", 0.6)),
+                            float(p_dict.get("economic", 0.7)),
+                            float(p_dict.get("social", 0.75)),
+                            float(p_dict.get("technological", 0.8)),
+                            float(p_dict.get("legal", 0.65)),
+                            float(p_dict.get("environmental", 0.75)),
+                            float(f_dict.get("threat_of_new_entrants", 0.3)),
+                            float(f_dict.get("bargaining_power_of_buyers", 0.7)),
+                            float(f_dict.get("bargaining_power_of_suppliers", 0.65)),
+                            float(f_dict.get("threat_of_substitutes", 0.4)),
+                            float(f_dict.get("competitive_rivalry", 0.8))
+                        ]
+                    peer_11d_matrix.append(s11)
+
+                baseline_11d = np.dot(weights, np.array(peer_11d_matrix, dtype=np.float32))
+
+                # C. CVP-Specific Textual Nuance Delta (derived from 768-D semantic projection)
+                delta = np.zeros(11, dtype=np.float32)
+                if W_MATRIX is not None and B_BIAS is not None and c_emb_768d:
+                    x = np.array(c_emb_768d, dtype=np.float32)
+                    if x.shape[0] != W_MATRIX.shape[0]:
+                        x = np.pad(x, (0, W_MATRIX.shape[0] - x.shape[0])) if x.shape[0] < W_MATRIX.shape[0] else x[:W_MATRIX.shape[0]]
+                    y_raw = np.dot(x, W_MATRIX) + B_BIAS
+                    y_centered = y_raw - np.mean(y_raw)
+                    y_std = np.std(y_raw) + 1e-5
+                    delta = np.clip(0.04 * (y_centered / y_std), -0.06, 0.06)
+
+                calibrated_11d = np.clip(baseline_11d + delta, 0.15, 0.95)
+                user_11d_vector = [round(float(v), 3) for v in calibrated_11d]
+
+            pestle_vector = user_11d_vector[:6]
+            porter_vector = user_11d_vector[6:]
+
+            # D. Build nearest_cvps list with relative risk differentials (User vs Peer)
+            for p in candidate_peers:
+                comp = p["comp"]
+                c_name = p["c_name"]
+                sim_pct = p["sim_pct"]
+                raw_sem = p["raw_sem"]
+
                 p_dict = comp.get("pestle", {}) or {}
                 f_dict = comp.get("porters", {}) or {}
                 c_pestle = [
-                    float(p_dict.get("political", 0.3)),
-                    float(p_dict.get("economic", 0.3)),
-                    float(p_dict.get("social", 0.3)),
-                    float(p_dict.get("technological", 0.3)),
-                    float(p_dict.get("legal", 0.3)),
-                    float(p_dict.get("environmental", 0.3))
+                    float(p_dict.get("political", 0.6)),
+                    float(p_dict.get("economic", 0.7)),
+                    float(p_dict.get("social", 0.75)),
+                    float(p_dict.get("technological", 0.8)),
+                    float(p_dict.get("legal", 0.65)),
+                    float(p_dict.get("environmental", 0.75))
                 ]
                 c_porter = [
                     float(f_dict.get("threat_of_new_entrants", 0.3)),
-                    float(f_dict.get("bargaining_power_of_buyers", 0.3)),
-                    float(f_dict.get("bargaining_power_of_suppliers", 0.3)),
-                    float(f_dict.get("threat_of_substitutes", 0.3)),
-                    float(f_dict.get("competitive_rivalry", 0.3))
+                    float(f_dict.get("bargaining_power_of_buyers", 0.7)),
+                    float(f_dict.get("bargaining_power_of_suppliers", 0.65)),
+                    float(f_dict.get("threat_of_substitutes", 0.4)),
+                    float(f_dict.get("competitive_rivalry", 0.8))
                 ]
 
-                # Relative Risk Differential (User vs Peer)
-                pestle_delta = [round(float(u) - float(p), 2) for u, p in zip(pestle_vector, c_pestle)]
-                porter_delta = [round(float(u) - float(p), 2) for u, p in zip(porter_vector, c_porter)]
+                pestle_delta = [round(float(u) - float(pv), 2) for u, pv in zip(pestle_vector, c_pestle)]
+                porter_delta = [round(float(u) - float(pv), 2) for u, pv in zip(porter_vector, c_porter)]
 
                 nearest_cvps.append({
                     "id": comp.get("id"),
@@ -2449,20 +2483,19 @@ def evaluate_cvp():
                     "similarity": round(sim_pct / 100.0, 3),
                     "similarity_pct": sim_pct,
                     "semantic_score": round(raw_sem, 3),
-                    "strategic_score": round(raw_strat, 3),
                     "pestle": p_dict,
                     "porters": f_dict,
                     "pestle_vector": c_pestle,
                     "porter_vector": c_porter,
                     "pestle_delta": pestle_delta,
                     "porter_delta": porter_delta,
-                    "strategic_11d": comp.get("strategic_embedding_11d", [0.3] * 11)
+                    "strategic_11d": comp.get("strategic_embedding_11d", c_pestle + c_porter)
                 })
-
-                if len(nearest_cvps) >= 6:
-                    break
         except Exception as e:
             print(f"[Server] Error during vector distance comparison: {e}")
+            pestle_vector = user_11d_vector[:6]
+            porter_vector = user_11d_vector[6:]
+
 
     # Fallback to Supabase PostgreSQL or seeded items if needed
     if not nearest_cvps:

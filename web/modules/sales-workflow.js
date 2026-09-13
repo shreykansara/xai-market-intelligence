@@ -221,11 +221,11 @@ export class SalesWorkflow {
             this.renderFluctuationClusters(data.active_clusters || []);
             this.renderLaggingNewsMatrix(data.matched_news || []);
             
-            // Draw Radars
             ChartVisualizer.drawPestleCanvas(this.canvasPestle, this.state.activePestleVector);
             ChartVisualizer.drawPorterCanvas(this.canvasPorter, this.state.activePorterVector);
-            ChartVisualizer.updateLegendValues('leg-rev-pestle-', this.state.activePestleVector);
-            ChartVisualizer.updateLegendValues('leg-rev-porter-', this.state.activePorterVector);
+            ChartVisualizer.updateSalesLegendValues(this.state.activePestleVector, this.state.activePorterVector);
+
+
 
             this.renderStrategicEvidence(data.audit_categories || null, data.evidence_records || []);
             this.renderRevenuePeers(this.state.activeNearestCvps);

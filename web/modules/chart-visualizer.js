@@ -172,10 +172,35 @@ export class ChartVisualizer {
         ctx.stroke();
     }
 
+    static updateCvpLegendValues(pestleVec, porterVec) {
+        if (!pestleVec || !porterVec) return;
+        const full11D = [...pestleVec, ...porterVec];
+        for (let i = 0; i < 11; i++) {
+            const val = (full11D[i] !== undefined ? full11D[i] : 0.35).toFixed(2);
+            const mainEl = document.getElementById(`val-p${i}`);
+            if (mainEl) mainEl.textContent = val;
+            const sideEl = document.getElementById(`sidebar-val-p${i}`);
+            if (sideEl) sideEl.textContent = val;
+        }
+    }
+
+    static updateSalesLegendValues(pestleVec, porterVec) {
+        if (!pestleVec || !porterVec) return;
+        const full11D = [...pestleVec, ...porterVec];
+        for (let i = 0; i < 11; i++) {
+            const val = (full11D[i] !== undefined ? full11D[i] : 0.35).toFixed(2);
+            const mainEl = document.getElementById(`val-rev-p${i}`);
+            if (mainEl) mainEl.textContent = val;
+            const sideEl = document.getElementById(`sidebar-val-p${i}`);
+            if (sideEl) sideEl.textContent = val;
+        }
+    }
+
     static updateLegendValues(prefix, vec) {
         for (let i = 0; i < vec.length; i++) {
             const el = document.getElementById(`${prefix}${i}`);
-            if (el) el.textContent = (vec[i] || 0.35).toFixed(2);
+            if (el) el.textContent = (vec[i] !== undefined ? vec[i] : 0.35).toFixed(2);
         }
     }
 }
+
