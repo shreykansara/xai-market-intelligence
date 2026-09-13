@@ -11,8 +11,25 @@ import json
 import os
 import urllib.request
 import logging
+from pathlib import Path
 
 logger = logging.getLogger("CloudEmbeddings")
+
+# Auto-load .env if not already set
+_env_path = Path(__file__).parent / ".env"
+if _env_path.exists():
+    try:
+        with open(_env_path, "r", encoding="utf-8") as _f:
+            for _line in _f:
+                _line = _line.strip()
+                if _line and not _line.startswith("#") and "=" in _line:
+                    _k, _v = _line.split("=", 1)
+                    _k = _k.strip()
+                    if _k not in os.environ:
+                        os.environ[_k] = _v.strip().strip('"').strip("'")
+    except Exception:
+        pass
+
 
 # Supported Cloud Embedding Endpoints
 DEFAULT_HF_MODEL = "BAAI/bge-base-en-v1.5"  # 768-D native model
@@ -43,28 +60,45 @@ def _call_openai_embeddings(text: str, api_key: str) -> list:
 
 
 def _call_huggingface_embeddings(text: str, token: str, model: str = DEFAULT_HF_MODEL) -> list:
-    """Fetches text embedding via Hugging Face Inference API (zero dependencies)."""
-    url = f"https://api-inference.huggingface.co/pipeline/feature-extraction/{model}"
+    """Fetches text embedding via Hugging Face Serverless Inference API."""
+    endpoints = [
+        f"https://router.huggingface.co/hf-inference/models/{model}",
+        f"https://api-inference.huggingface.co/pipeline/feature-extraction/{model}"
+    ]
     payload = json.dumps({
         "inputs": text[:1500],
         "options": {"wait_for_model": True}
     }).encode("utf-8")
+    
     headers = {"Content-Type": "application/json"}
     if token:
-        headers["Authorization"] = f"Bearer {token}"
+        headers["Authorization"] = f"Bearer {token.strip()}"
 
-    req = urllib.request.Request(url, data=payload, headers=headers)
-    with urllib.request.urlopen(req, timeout=3.0) as resp:
-        res_json = json.loads(resp.read().decode("utf-8"))
-        if isinstance(res_json, list):
-            if len(res_json) > 0 and isinstance(res_json[0], (float, int)):
-                return [float(v) for v in res_json]
-            elif len(res_json) > 0 and isinstance(res_json[0], list):
-                matrix = [row for row in res_json if isinstance(row, list)]
-                if matrix:
-                    dim = len(matrix[0])
-                    return [sum(row[i] for row in matrix) / len(matrix) for i in range(dim)]
+    for url in endpoints:
+        try:
+            req = urllib.request.Request(url, data=payload, headers=headers)
+            with urllib.request.urlopen(req, timeout=4.0) as resp:
+                res_json = json.loads(resp.read().decode("utf-8"))
+                if isinstance(res_json, list):
+                    if len(res_json) > 0 and isinstance(res_json[0], (float, int)):
+                        return [float(v) for v in res_json]
+                    elif len(res_json) > 0 and isinstance(res_json[0], list):
+                        matrix = [row for row in res_json if isinstance(row, list)]
+                        if matrix:
+                            dim = len(matrix[0])
+                            return [sum(row[i] for row in matrix) / len(matrix) for i in range(dim)]
+        except urllib.error.HTTPError as he:
+            err_msg = ""
+            try:
+                err_msg = he.read().decode("utf-8")
+            except Exception:
+                pass
+            logger.warning(f"HF API {url} returned HTTP {he.code}: {err_msg}")
+        except Exception as e:
+            logger.warning(f"HF API {url} network error: {e}")
+            
     return None
+
 
 
 def get_cloud_text_embedding(text: str, hf_token: str = None, model: str = DEFAULT_HF_MODEL) -> list:

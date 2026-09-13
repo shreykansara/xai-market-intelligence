@@ -13,7 +13,10 @@ services:
         sync: false
       - key: GROQ_API_KEY
         sync: false
-      - key: HF_TOKEN
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
         sync: false
       - key: ADMIN_AUTH_SECRET
         generateValue: true
+

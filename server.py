@@ -36,6 +36,31 @@ import numpy as np
 from cloud_embeddings import get_cloud_text_embedding
 
 BASE_DIR = Path(__file__).parent.resolve()
+
+# Auto-load Environment Variables from .env file
+def _load_env():
+    env_file = BASE_DIR / ".env"
+    if env_file.exists():
+        try:
+            with open(env_file, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line or line.startswith("#") or "=" not in line:
+                        continue
+                    key, val = line.split("=", 1)
+                    key = key.strip()
+                    val = val.strip().strip('"').strip("'")
+                    if key not in os.environ:
+                        os.environ[key] = val
+        except Exception as err:
+            print(f"[Server] Note: Failed reading .env file: {err}")
+
+try:
+    from dotenv import load_dotenv
+    load_dotenv(BASE_DIR / ".env")
+except Exception:
+    _load_env()
+
 WEB_DIR = BASE_DIR / "web"
 GDELT_DATA_DIR = BASE_DIR / "gdelt_data"
 STAGE2_DIR = BASE_DIR / "stage2_filter"
@@ -56,26 +81,29 @@ if WEIGHTS_PATH.exists():
     except Exception as e:
         print(f"[Server] Warning: Failed to load projection matrix: {e}")
 
-# Database Configuration & Connection Helper
-DEFAULT_SUPABASE_URL = "postgresql://postgres.fqmrguogcptkpsbhdmgo:efO5FSkBGg8iQlws@aws-0-ap-northeast-1.pooler.supabase.com:6543/postgres"
+# Database Configuration & Connection Helper (Secrets read strictly from .env / os.environ)
+DEFAULT_SUPABASE_URL = os.environ.get("SUPABASE_DB_URL", "")
 
 def get_db_connection():
     """Returns a direct live PostgreSQL database connection."""
     try:
         import psycopg2
         db_url = os.environ.get("SUPABASE_DB_URL", DEFAULT_SUPABASE_URL)
+        if not db_url:
+            return None
         return psycopg2.connect(db_url, connect_timeout=6)
     except Exception as err:
         print(f"[Server] Note: DB connection attempt failed: {err}")
         return None
 
 # ==========================================
-# PLATFORM ADMINISTRATOR AUTHENTICATION
+# PLATFORM ADMINISTRATOR AUTHENTICATION (Environment Driven)
 # ==========================================
-ADMIN_EMAIL = "admin@shreykansara.dev"
-ADMIN_PASSWORD = "C0nf!d3nt!41"
+ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "admin@shreykansara.dev")
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
 ADMIN_AUTH_SECRET = os.environ.get("ADMIN_AUTH_SECRET", "omniscope_strategic_admin_secret_key_2026_shrey")
 ACTIVE_ADMIN_TOKENS = {}  # token -> {"email": email, "created_at": timestamp, "expires_at": timestamp}
+
 
 def generate_admin_token(email: str) -> str:
     raw_token = secrets.token_urlsafe(32)
