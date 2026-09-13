@@ -3348,4 +3348,77 @@ body {
     transform: translateY(-1px);
 }
 
+/* Audit Score Pills & Badges */
+.audit-score-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-family: var(--font-heading);
+    font-size: 12px;
+    font-weight: 700;
+    padding: 4px 10px;
+    border-radius: 12px;
+    background: rgba(0, 229, 255, 0.1);
+    color: #00E5FF;
+    border: 1px solid rgba(0, 229, 255, 0.35);
+    letter-spacing: 0.3px;
+    white-space: nowrap;
+}
+
+.audit-score-pill.score-high {
+    background: rgba(239, 68, 68, 0.15);
+    color: #f87171;
+    border-color: rgba(239, 68, 68, 0.4);
+}
+
+.audit-score-pill.score-mod {
+    background: rgba(245, 158, 11, 0.15);
+    color: #fbbf24;
+    border-color: rgba(245, 158, 11, 0.4);
+}
+
+.audit-score-pill.score-low {
+    background: rgba(16, 185, 129, 0.15);
+    color: #34d399;
+    border-color: rgba(16, 185, 129, 0.4);
+}
+
+.audit-sev-badge {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 2px 7px;
+    border-radius: 4px;
+    margin-left: 8px;
+    vertical-align: middle;
+    display: inline-block;
+}
+
+.audit-sev-badge.sev-high {
+    background: rgba(239, 68, 68, 0.2);
+    color: #f87171;
+    border: 1px solid rgba(239, 68, 68, 0.4);
+}
+
+.audit-sev-badge.sev-mod {
+    background: rgba(245, 158, 11, 0.2);
+    color: #fbbf24;
+    border: 1px solid rgba(245, 158, 11, 0.4);
+}
+
+.audit-sev-badge.sev-low {
+    background: rgba(16, 185, 129, 0.2);
+    color: #34d399;
+    border: 1px solid rgba(16, 185, 129, 0.4);
+}
+
+.btn-preset-chip.active {
+    background: rgba(0, 229, 255, 0.2);
+    border-color: #00E5FF;
+    color: #fff;
+    box-shadow: 0 0 12px rgba(0, 229, 255, 0.35);
+}
+
+
 

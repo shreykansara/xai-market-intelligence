@@ -24,6 +24,9 @@ export class SalesWorkflow {
         this.fileNameLabel = document.getElementById('file-name-label');
         this.fileCountTag = document.getElementById('file-count-tag');
 
+        this.btnPresetRetail = document.getElementById('btn-preset-csv-retail') || document.getElementById('btn-preset-retail');
+        this.btnPresetTech = document.getElementById('btn-preset-csv-tech') || document.getElementById('btn-preset-tech');
+
         this.btnAnalyze = document.getElementById('btn-analyze-revenue');
         this.resultsPanel = document.getElementById('revenue-results-panel');
         this.canvasPestle = document.getElementById('canvas-revenue-pestle');
@@ -43,38 +46,96 @@ export class SalesWorkflow {
     }
 
     bindEvents() {
-        if (this.btnBrowse && this.inputFile) {
-            this.btnBrowse.addEventListener('click', () => this.inputFile.click());
+        // Preset Buttons
+        if (this.btnPresetRetail) {
+            this.btnPresetRetail.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                this.loadPreset('retail');
+            });
+        }
+        if (this.btnPresetTech) {
+            this.btnPresetTech.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                this.loadPreset('tech');
+            });
         }
 
-        if (this.dropzone) {
+        // Hidden input stop propagation on click
+        if (this.inputFile) {
+            this.inputFile.addEventListener('click', (e) => e.stopPropagation());
+            this.inputFile.addEventListener('change', () => {
+                if (this.inputFile.files && this.inputFile.files.length > 0) {
+                    this.handleUploadedFile(this.inputFile.files[0]);
+                }
+            });
+        }
+
+        // Browse Files button
+        if (this.btnBrowse && this.inputFile) {
+            this.btnBrowse.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                this.inputFile.value = '';
+                this.inputFile.click();
+            });
+        }
+
+        // Drag and Drop Zone
+        if (this.dropzone && this.inputFile) {
+            this.dropzone.style.cursor = 'pointer';
+            this.dropzone.addEventListener('click', (e) => {
+                if (e.target.closest('#btn-clear-file') || e.target === this.inputFile) {
+                    return;
+                }
+                this.inputFile.value = '';
+                this.inputFile.click();
+            });
+
             ['dragenter', 'dragover'].forEach(ev => {
                 this.dropzone.addEventListener(ev, (e) => {
                     e.preventDefault();
+                    e.stopPropagation();
                     this.dropzone.classList.add('drag-over');
                 });
             });
-            ['dragleave', 'drop'].forEach(ev => {
+
+            ['dragleave'].forEach(ev => {
                 this.dropzone.addEventListener(ev, (e) => {
                     e.preventDefault();
+                    e.stopPropagation();
                     this.dropzone.classList.remove('drag-over');
                 });
             });
+
             this.dropzone.addEventListener('drop', (e) => {
-                const files = e.dataTransfer.files;
-                if (files.length > 0) this.handleUploadedFile(files[0]);
+                e.preventDefault();
+                e.stopPropagation();
+                this.dropzone.classList.remove('drag-over');
+                const files = e.dataTransfer?.files;
+                if (files && files.length > 0) {
+                    this.handleUploadedFile(files[0]);
+                }
             });
         }
 
-        if (this.inputFile) {
-            this.inputFile.addEventListener('change', (e) => {
-                if (this.inputFile.files.length > 0) this.handleUploadedFile(this.inputFile.files[0]);
-            });
-        }
+        // Window dragover/drop guard to prevent accidental navigation
+        window.addEventListener('dragover', (e) => {
+            if (e.target && e.target.closest && e.target.closest('#revenue-dropzone')) return;
+            e.preventDefault();
+        }, false);
+        window.addEventListener('drop', (e) => {
+            if (e.target && e.target.closest && e.target.closest('#revenue-dropzone')) return;
+            e.preventDefault();
+        }, false);
 
         if (this.btnClearFile) {
-            this.btnClearFile.addEventListener('click', () => {
+            this.btnClearFile.addEventListener('click', (e) => {
+                e.stopPropagation();
                 this.parsedSeries = [];
+                this.btnPresetRetail?.classList.remove('active');
+                this.btnPresetTech?.classList.remove('active');
                 if (this.inputFile) this.inputFile.value = '';
                 if (this.fileStatusBar) this.fileStatusBar.classList.add('hidden');
                 const previewBox = document.getElementById('revenue-input-preview-box');
@@ -90,14 +151,15 @@ export class SalesWorkflow {
         // Expand / Collapse Audit Accordions
         if (this.btnExpandAllAudit) {
             this.btnExpandAllAudit.addEventListener('click', () => {
-                document.querySelectorAll('.audit-category-card').forEach(card => card.classList.add('expanded'));
+                document.querySelectorAll('.audit-category-accordion').forEach(card => card.classList.add('expanded'));
             });
         }
         if (this.btnCollapseAllAudit) {
             this.btnCollapseAllAudit.addEventListener('click', () => {
-                document.querySelectorAll('.audit-category-card').forEach(card => card.classList.remove('expanded'));
+                document.querySelectorAll('.audit-category-accordion').forEach(card => card.classList.remove('expanded'));
             });
         }
+
 
         // Delegate Peer clicks
         if (this.revenuePeersList) {
@@ -125,11 +187,37 @@ export class SalesWorkflow {
         }
     }
 
+    loadPreset(type) {
+        if (type === 'retail') {
+            this.btnPresetRetail?.classList.add('active');
+            this.btnPresetTech?.classList.remove('active');
+            const sampleCsv = `Period,Revenue_USD,Change_Pct,Notes
+2026-07-W2 (Jul 08-14),118500,-16.8,Tariff Escalation Anticipation & Pre-emptive Port Ingestion
+2026-07-W4 (Jul 22-28),104200,-12.1,Red Sea Maritime Shipping Disruptions & Logistics Delays
+2026-08-W2 (Aug 05-11),132400,+27.1,Digital-First Neighbourhood Format Launch & Retail Store Unveiling
+2026-08-W4 (Aug 19-25),134100,+1.3,Standard Consumer Energy Tax Holiday & Mid-Quarter Equilibrium`;
+            this.parseAndSetRevenueSeries(sampleCsv, 'retail_apparel_sales_jul_aug_2026.csv');
+        } else {
+            this.btnPresetTech?.classList.add('active');
+            this.btnPresetRetail?.classList.remove('active');
+            const sampleCsv = `Period,Revenue_USD,Change_Pct,Notes
+2026-07-W1 (Jul 01-07),245000,+18.4,Enterprise LLM Cloud Migration Acceleration & Contract Renewals
+2026-07-W3 (Jul 15-21),208000,-15.1,Global Semiconductor Supply Chain Bottleneck & Hardware Allocation Delay
+2026-08-W1 (Aug 01-07),215000,+3.4,Mid-Summer Enterprise SaaS Expansion & Routine Upsells
+2026-08-W3 (Aug 15-21),172000,-20.0,EU AI Act Stringent Sovereign Compliance Enforcement Pause`;
+            this.parseAndSetRevenueSeries(sampleCsv, 'enterprise_tech_saas_jul_aug_2026.csv');
+        }
+    }
+
     handleUploadedFile(file) {
+        if (!file) return;
+        this.btnPresetRetail?.classList.remove('active');
+        this.btnPresetTech?.classList.remove('active');
         const reader = new FileReader();
         reader.onload = (e) => this.parseAndSetRevenueSeries(e.target.result, file.name);
         reader.readAsText(file);
     }
+
 
     parseAndSetRevenueSeries(content, filename = 'sales_data.csv') {
         const lines = content.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
@@ -336,40 +424,93 @@ export class SalesWorkflow {
         const renderCatList = (cats, container) => {
             if (!container) return;
             container.innerHTML = cats.map(cat => {
-                const scorePct = Math.round((cat.score || 0.3) * 100);
+                const assignedScore = (cat.assigned_score !== undefined && cat.assigned_score !== null)
+                    ? cat.assigned_score
+                    : ((cat.score !== undefined && cat.score !== null) ? cat.score : 0.30);
+                const scorePct = Math.round(assignedScore * 100);
+
+                let scorePillClass = 'score-low';
+                let sevClass = 'sev-low';
+                if (scorePct >= 65) {
+                    scorePillClass = 'score-high';
+                    sevClass = 'sev-high';
+                } else if (scorePct >= 40) {
+                    scorePillClass = 'score-mod';
+                    sevClass = 'sev-mod';
+                }
+
                 const items = cat.news_items || [];
-                const newsHtml = items.length === 0 
-                    ? '<p style="font-size:12px; color:var(--text-dim); padding:8px 0;">No direct news items linked to this dimension in the selected time window.</p>'
-                    : items.map(n => `
-                        <div class="evidence-news-item">
-                            <div class="ev-item-headline">${CompanyIntelligence.escapeHtml(n.headline)}</div>
-                            <div class="ev-item-meta">
-                                <span><i class="fa-solid fa-calendar"></i> ${CompanyIntelligence.escapeHtml(n.date || 'July-Aug 2026')}</span>
-                                <span><i class="fa-solid fa-chart-line"></i> Associated Revenue Fluctuation: <strong style="color:${(n.fluctuation_pct||0) >= 0 ? 'var(--accent-green)' : '#f87171'};">${(n.fluctuation_pct||0) >= 0 ? '+' : ''}${n.fluctuation_pct}%</strong></span>
-                                ${n.source_link ? `<a href="${n.source_link}" target="_blank" class="ev-item-source-link"><i class="fa-solid fa-arrow-up-right-from-square"></i> Source Link</a>` : ''}
+                const hasShocks = items.length > 0 && (cat.dominant_fluctuation && cat.dominant_fluctuation !== 'Empirical Baseline (0.0%)');
+                
+                const rationaleText = cat.overall_rationale || cat.rationale || 
+                    `Assigned baseline score of ${assignedScore.toFixed(2)} to ${cat.full_name || cat.name}. Empirical database indicators reflect macroeconomic and regulatory equilibrium with no acute abnormal revenue volatility recorded.`;
+
+                const newsHtml = items.length === 0
+                    ? '<p style="font-size:12px; color:var(--text-dim); padding:10px 0; font-style:italic;">No direct market shock items linked to this dimension in the analyzed fluctuation window. Baseline equilibrium maintained.</p>'
+                    : items.map((n, idx) => {
+                        const isPrimary = idx === 0 && hasShocks;
+                        const fluctuationText = n.associated_fluctuation || '';
+                        const isNegativeFluc = fluctuationText.startsWith('-');
+                        const flucColor = isNegativeFluc ? '#ff4d4f' : (fluctuationText.startsWith('+') ? '#00FF66' : 'var(--accent-cyan)');
+
+                        return `
+                            <div class="audit-news-card ${isPrimary ? 'primary-shock' : ''}">
+                                <div class="audit-news-top">
+                                    <div class="audit-news-quote">"${CompanyIntelligence.escapeHtml(n.headline)}"</div>
+                                    ${n.source_link ? `
+                                        <a href="${CompanyIntelligence.escapeHtml(n.source_link)}" target="_blank" rel="noopener noreferrer" class="evidence-source-link">
+                                            <i class="fa-solid fa-arrow-up-right-from-square"></i> Source Article
+                                        </a>
+                                    ` : ''}
+                                </div>
+                                <div class="audit-news-meta">
+                                    <span><i class="fa-solid fa-calendar-day color-cyan"></i> Published: <strong>${CompanyIntelligence.escapeHtml(n.published_date || 'July–Aug 2026')}</strong></span>
+                                    <span><i class="fa-solid fa-location-dot color-cyan"></i> Location: <strong>${CompanyIntelligence.escapeHtml(n.location_affected || 'Global')}</strong></span>
+                                    ${fluctuationText ? `<span><i class="fa-solid fa-chart-line color-cyan"></i> Fluctuation: <strong style="color:${flucColor};">${CompanyIntelligence.escapeHtml(fluctuationText)}</strong></span>` : ''}
+                                    ${n.likelihood_score ? `<span><i class="fa-solid fa-crosshairs color-cyan"></i> Causal Likelihood: <strong style="color:var(--accent-cyan);">${CompanyIntelligence.escapeHtml(n.likelihood_score)}</strong></span>` : ''}
+                                </div>
+                                ${n.item_rationale ? `
+                                    <div class="audit-news-rationale">
+                                        <strong style="color:#cbd5e1;">Lagging Indicator Sensitivity:</strong> ${CompanyIntelligence.escapeHtml(n.item_rationale)}
+                                    </div>
+                                ` : ''}
                             </div>
-                        </div>
-                    `).join('');
+                        `;
+                    }).join('');
 
                 return `
-                    <div class="audit-category-card" onclick="this.classList.toggle('expanded')">
-                        <div class="audit-category-header">
-                            <div class="audit-header-left">
-                                <i class="fa-solid fa-chevron-right audit-chevron"></i>
+                    <div class="audit-category-accordion ${hasShocks ? 'active-shock' : ''}">
+                        <div class="audit-category-header" onclick="this.parentElement.classList.toggle('expanded')">
+                            <div class="audit-cat-left">
+                                <i class="fa-solid fa-chevron-down accordion-chevron"></i>
                                 <div>
-                                    <h5 class="audit-cat-title">${CompanyIntelligence.escapeHtml(cat.name)}</h5>
-                                    <div class="audit-cat-evidence-count"><i class="fa-solid fa-newspaper"></i> ${cat.evidence_count} News Evidence Items Linked</div>
+                                    <div class="audit-cat-title">
+                                        ${CompanyIntelligence.escapeHtml(cat.name)}
+                                        <span class="audit-sev-badge ${sevClass}">${CompanyIntelligence.escapeHtml(cat.severity_level || (scorePct >= 65 ? 'High Exposure' : (scorePct >= 40 ? 'Moderate Exposure' : 'Low Exposure')))}</span>
+                                    </div>
+                                    <div style="font-size:11.5px; color:var(--text-muted); margin-top:3px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                                        <span><i class="fa-solid fa-newspaper color-cyan"></i> ${items.length} News Evidence Item${items.length === 1 ? '' : 's'} Linked</span>
+                                        ${cat.dominant_fluctuation && cat.dominant_fluctuation !== 'Empirical Baseline (0.0%)' ? `<span>&bull; Associated Fluctuation: <strong style="color:${cat.dominant_fluctuation.startsWith('-') ? '#ff4d4f' : '#00FF66'};">${CompanyIntelligence.escapeHtml(cat.dominant_fluctuation)}</strong></span>` : ''}
+                                    </div>
                                 </div>
                             </div>
-                            <div class="audit-header-right">
-                                <span class="audit-score-pill">${scorePct}% Risk Score</span>
+                            <div class="audit-cat-right">
+                                <span class="audit-score-pill ${scorePillClass}">
+                                    <i class="fa-solid fa-gauge-high"></i> ${scorePct}% Risk Score
+                                </span>
                             </div>
                         </div>
                         <div class="audit-category-body">
-                            <div class="audit-rationale-box">
-                                <strong>Rationale for Assigned Score:</strong> ${CompanyIntelligence.escapeHtml(cat.rationale)}
+                            <div class="category-rationale-box">
+                                <strong style="color:var(--accent-cyan); display:flex; align-items:center; gap:6px; margin-bottom:5px;">
+                                    <i class="fa-solid fa-circle-info"></i> Empirical Mathematical Rationale:
+                                </strong>
+                                ${CompanyIntelligence.escapeHtml(rationaleText)}
                             </div>
-                            <div class="evidence-news-list">
+                            <div class="category-news-subheading">
+                                <i class="fa-solid fa-newspaper"></i> Verified Database News Articles (July – August 2026)
+                            </div>
+                            <div class="audit-news-list">
                                 ${newsHtml}
                             </div>
                         </div>

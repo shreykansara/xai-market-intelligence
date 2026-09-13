@@ -36,8 +36,9 @@ export class NavigationManager {
         // Presets
         this.btnPresetCvpTesla = document.getElementById('btn-preset-cvp-tesla');
         this.btnPresetCvpStripe = document.getElementById('btn-preset-cvp-stripe');
-        this.btnPresetRetail = document.getElementById('btn-preset-retail');
-        this.btnPresetTech = document.getElementById('btn-preset-tech');
+        this.btnPresetRetail = document.getElementById('btn-preset-retail') || document.getElementById('btn-preset-csv-retail');
+        this.btnPresetTech = document.getElementById('btn-preset-tech') || document.getElementById('btn-preset-csv-tech');
+
 
         // Sidebar Navigation
         this.btnBackStep1 = document.getElementById('btn-back-step1');

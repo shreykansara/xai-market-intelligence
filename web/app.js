@@ -91,28 +91,18 @@ Compare your internal CVP risks directly against ${CompanyIntelligence.escapeHtm
 
     // Preset dataset helpers
     function loadRetailPreset() {
-        const sampleCsv = `Period,Revenue_USD,Change_Pct,Notes
-2026-07-W2 (Jul 08-14),118500,-16.8,Tariff Escalation Anticipation & Pre-emptive Port Ingestion
-2026-07-W4 (Jul 22-28),104200,-12.1,Red Sea Maritime Shipping Disruptions & Logistics Delays
-2026-08-W2 (Aug 05-11),132400,+27.1,Digital-First Neighbourhood Format Launch & Retail Store Unveiling
-2026-08-W4 (Aug 19-25),134100,+1.3,Standard Consumer Energy Tax Holiday & Mid-Quarter Equilibrium`;
-        salesWorkflow.parseAndSetRevenueSeries(sampleCsv, 'retail_apparel_sales_jul_aug_2026.csv');
+        salesWorkflow.loadPreset('retail');
     }
 
     function loadTechPreset() {
-        const sampleCsv = `Period,Revenue_USD,Change_Pct,Notes
-2026-07-W1 (Jul 01-07),245000,+18.4,Enterprise LLM Cloud Migration Acceleration & Contract Renewals
-2026-07-W3 (Jul 15-21),208000,-15.1,Global Semiconductor Supply Chain Bottleneck & Hardware Allocation Delay
-2026-08-W1 (Aug 01-07),215000,+3.4,Mid-Summer Enterprise SaaS Expansion & Routine Upsells
-2026-08-W3 (Aug 15-21),172000,-20.0,EU AI Act Stringent Sovereign Compliance Enforcement Pause`;
-        salesWorkflow.parseAndSetRevenueSeries(sampleCsv, 'enterprise_tech_saas_jul_aug_2026.csv');
+        salesWorkflow.loadPreset('tech');
     }
 
     // Initialize Navigation Manager
     const nav = new NavigationManager(state, {
         onRevenueModeActivated: () => {
             if (!salesWorkflow.parsedSeries || salesWorkflow.parsedSeries.length === 0) {
-                loadRetailPreset();
+                salesWorkflow.loadPreset('retail');
             }
         },
         onProceedToChatbot: () => {
