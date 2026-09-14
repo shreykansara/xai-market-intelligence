@@ -344,7 +344,6 @@ class GroqOllamaProvider:
         return text.strip()
 
     OBSOLETE_GROQ_MODELS = {
-        "llama-3.3-70b-versatile",
         "llama-3.1-70b-versatile",
         "llama3-70b-8192",
         "llama3-8b-8192",
@@ -354,12 +353,11 @@ class GroqOllamaProvider:
     }
 
     DEFAULT_ACTIVE_GROQ_MODELS = [
-        "openai/gpt-oss-120b",
-        "openai/gpt-oss-20b",
+        "llama-3.3-70b-versatile",
         "llama-3.1-8b-instant",
-        "qwen/qwen3.6-27b",
-        "qwen/qwen3.8-27b",
-        "groq/compound"
+        "llama-3.2-11b-vision-preview",
+        "llama-3.2-3b-preview",
+        "llama-3.2-1b-preview"
     ]
 
     def _get_active_groq_models(self) -> list:
@@ -383,12 +381,11 @@ class GroqOllamaProvider:
                 ]
                 if active_ids:
                     priority_order = [
-                        "openai/gpt-oss-120b", 
-                        "openai/gpt-oss-20b", 
-                        "llama-3.1-8b-instant", 
-                        "qwen/qwen3.6-27b", 
-                        "qwen/qwen3.8-27b", 
-                        "groq/compound"
+                        "llama-3.3-70b-versatile",
+                        "llama-3.1-8b-instant",
+                        "llama-3.2-11b-vision-preview",
+                        "llama-3.2-3b-preview",
+                        "llama-3.2-1b-preview"
                     ]
                     sorted_models = [m for m in priority_order if m in active_ids]
                     for m in active_ids:

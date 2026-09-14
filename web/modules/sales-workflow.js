@@ -305,6 +305,7 @@ export class SalesWorkflow {
             this.state.activePorterVector = data.porter_vector || [0.3, 0.3, 0.3, 0.3, 0.3];
             this.state.activeUser11DVector = data.user_11d_vector || [...this.state.activePestleVector, ...this.state.activePorterVector];
             this.state.activeNearestCvps = data.nearest_cvps || [];
+            this.state.activeClusters = data.active_clusters || [];
 
             this.renderFluctuationClusters(data.active_clusters || []);
             this.renderLaggingNewsMatrix(data.matched_news || []);
@@ -312,6 +313,11 @@ export class SalesWorkflow {
             ChartVisualizer.drawPestleCanvas(this.canvasPestle, this.state.activePestleVector);
             ChartVisualizer.drawPorterCanvas(this.canvasPorter, this.state.activePorterVector);
             ChartVisualizer.updateSalesLegendValues(this.state.activePestleVector, this.state.activePorterVector);
+
+            const sideCanvasPestle = document.getElementById('sidebar-canvas-pestle');
+            const sideCanvasPorter = document.getElementById('sidebar-canvas-porter');
+            if (sideCanvasPestle) ChartVisualizer.drawPestleCanvas(sideCanvasPestle, this.state.activePestleVector);
+            if (sideCanvasPorter) ChartVisualizer.drawPorterCanvas(sideCanvasPorter, this.state.activePorterVector);
 
 
 

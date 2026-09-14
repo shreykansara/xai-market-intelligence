@@ -1057,9 +1057,91 @@ body {
     cursor: pointer;
 }
 .modal-footer {
-    margin-top: 20px;
+    margin-top: 24px;
     display: flex;
     justify-content: flex-end;
+    align-items: center;
+    gap: 12px;
+}
+
+.btn-outline-md {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-main, #e0e0e0);
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.15));
+    border-radius: var(--radius-md, 8px);
+    padding: 10px 20px;
+    font-family: var(--font-heading, inherit);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    backdrop-filter: blur(8px);
+}
+
+.btn-outline-md:hover {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.35);
+    color: #ffffff;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+}
+
+.btn-outline-md:active {
+    transform: translateY(0);
+}
+
+.btn-primary {
+    background: var(--primary-gradient, linear-gradient(135deg, #00ff66, #00b344));
+    color: #050b07;
+    border: none;
+    border-radius: var(--radius-md, 8px);
+    padding: 10px 22px;
+    font-family: var(--font-heading, inherit);
+    font-size: 14px;
+    font-weight: 700;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    box-shadow: 0 0 16px rgba(0, 255, 102, 0.3);
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 0 26px rgba(0, 255, 102, 0.55);
+    color: #000;
+}
+
+.btn-primary:active {
+    transform: translateY(0);
+}
+
+.btn-remove-file {
+    background: rgba(255, 59, 48, 0.12);
+    color: #ff5e57;
+    border: 1px solid rgba(255, 59, 48, 0.25);
+    border-radius: var(--radius-sm, 6px);
+    padding: 6px 14px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.2s ease;
+}
+
+.btn-remove-file:hover {
+    background: rgba(255, 59, 48, 0.25);
+    border-color: rgba(255, 59, 48, 0.45);
+    color: #ff3b30;
+    transform: translateY(-1px);
 }
 
 /* ===================================================================
