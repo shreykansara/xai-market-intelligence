@@ -69,28 +69,35 @@ export class ChatAssistant {
         try {
             const payload = {
                 message: text,
-                cvp_text: this.state.activeCvpText,
+                cvp_text: this.state.activeCvpText || '',
+                business_context: this.state.activeCvpText || '',
                 pestle_vector: this.state.activePestleVector,
                 porter_vector: this.state.activePorterVector,
                 user_11d_vector: this.state.activeUser11DVector,
                 nearest_cvps: this.state.activeNearestCvps,
                 conversation_history: this.conversationHistory,
-                groq_api_key: this.state.groqApiKey
+                chat_history: this.conversationHistory,
+                groq_api_key: this.state.groqApiKey || '',
+                groq_key: this.state.groqApiKey || ''
             };
 
             const data = await ChatApi.sendMessage(payload);
             this.removeMessage(loadingId);
 
-            if (data.error) {
+            const replyText = data.response || data.text || data.reply || data.message || '';
+
+            if (data.error && !replyText) {
                 this.appendMessage('assistant', `⚠️ **Error:** ${data.error}`);
+            } else if (!replyText) {
+                this.appendMessage('assistant', `⚠️ **Analysis Notice:** The strategic evaluation engine could not process this prompt. Please ask a specific query regarding your CVP, PESTLE forces, or competitive market risks.`);
             } else {
-                this.appendMessage('assistant', data.response);
+                this.appendMessage('assistant', replyText);
                 this.conversationHistory.push({ role: 'user', content: text });
-                this.conversationHistory.push({ role: 'assistant', content: data.response });
+                this.conversationHistory.push({ role: 'assistant', content: replyText });
             }
         } catch (err) {
             this.removeMessage(loadingId);
-            this.appendMessage('assistant', `⚠️ **Network Error:** ${err.message}`);
+            this.appendMessage('assistant', `⚠️ **Network Error:** Could not connect to the AI Strategy server (${err.message}). Ensure the backend server is running.`);
         }
     }
 
@@ -99,12 +106,28 @@ export class ChatAssistant {
         const msgDiv = document.createElement('div');
         msgDiv.className = `chat-message ${role}`;
 
-        const avatarIcon = role === 'user' ? 'fa-user' : 'fa-brain';
+        const isUser = role === 'user';
+        const avatarIcon = isUser ? 'fa-user' : 'fa-brain';
+        const badgeTag = isUser 
+            ? '<span class="msg-sender-badge user-badge"><i class="fa-solid fa-circle-user"></i> You</span>'
+            : '<span class="msg-sender-badge ai-badge"><i class="fa-solid fa-brain"></i> Omniscope AI Strategist</span>';
+        
+        const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         const formatted = this.formatMarkdown(text);
 
         msgDiv.innerHTML = `
-            <div class="msg-avatar"><i class="fa-solid ${avatarIcon}"></i></div>
-            <div class="msg-bubble">${formatted}</div>
+            <div class="msg-header">
+                ${badgeTag}
+                <span class="msg-time">${timestamp}</span>
+            </div>
+            <div class="msg-row">
+                <div class="msg-avatar ${isUser ? 'user-avatar' : 'ai-avatar'}">
+                    <i class="fa-solid ${avatarIcon}"></i>
+                </div>
+                <div class="msg-bubble ${isUser ? 'user-bubble' : 'ai-bubble'}">
+                    ${formatted}
+                </div>
+            </div>
         `;
 
         this.chatMessages.appendChild(msgDiv);
@@ -114,12 +137,38 @@ export class ChatAssistant {
 
     appendSystemMessage(text) {
         if (!this.chatMessages) return;
+
+        // Deduplication: prevent spamming identical system notifications consecutively
+        const trimmed = (text || '').trim();
+        if (this.lastSystemMessageText === trimmed) return;
+        this.lastSystemMessageText = trimmed;
+
         const msgDiv = document.createElement('div');
         msgDiv.className = 'chat-message system';
+
+        const lines = trimmed.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
+        let title = 'System Intelligence Update';
+        let bodyLines = lines;
+
+        if (lines.length > 0 && lines[0].toUpperCase() === lines[0] && lines[0].length < 80) {
+            title = lines[0];
+            bodyLines = lines.slice(1);
+        }
+
+        const bodyHtml = this.formatMarkdown(bodyLines.join('\n'));
+
         msgDiv.innerHTML = `
-            <div class="msg-avatar"><i class="fa-solid fa-circle-info"></i></div>
-            <div class="msg-bubble system-bubble">${this.formatMarkdown(text)}</div>
+            <div class="system-card">
+                <div class="system-card-header">
+                    <i class="fa-solid fa-circle-info system-icon"></i>
+                    <span class="system-title">${CompanyIntelligence.escapeHtml(title)}</span>
+                </div>
+                <div class="system-card-body">
+                    ${bodyHtml}
+                </div>
+            </div>
         `;
+
         this.chatMessages.appendChild(msgDiv);
         this.chatMessages.scrollTop = this.chatMessages.scrollHeight;
     }
@@ -131,10 +180,17 @@ export class ChatAssistant {
         msgDiv.id = id;
         msgDiv.className = 'chat-message assistant';
         msgDiv.innerHTML = `
-            <div class="msg-avatar"><i class="fa-solid fa-brain"></i></div>
-            <div class="msg-bubble">
-                <div class="typing-indicator">
-                    <span></span><span></span><span></span>
+            <div class="msg-header">
+                <span class="msg-sender-badge ai-badge"><i class="fa-solid fa-brain"></i> Omniscope AI Strategist</span>
+                <span class="msg-time">Formulating Analysis...</span>
+            </div>
+            <div class="msg-row">
+                <div class="msg-avatar ai-avatar"><i class="fa-solid fa-brain"></i></div>
+                <div class="msg-bubble ai-bubble typing-bubble">
+                    <div class="typing-indicator">
+                        <span></span><span></span><span></span>
+                    </div>
+                    <span class="typing-label">Analyzing strategic factors & generating intelligence...</span>
                 </div>
             </div>
         `;
@@ -149,14 +205,28 @@ export class ChatAssistant {
     }
 
     formatMarkdown(text) {
-        let formatted = CompanyIntelligence.escapeHtml(text)
-            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-            .replace(/\*(.*?)\*/g, '<em>$1</em>')
-            .replace(/`([^`]+)`/g, '<code>$1</code>')
-            .replace(/^\s*-\s+(.*)$/gm, '<li>$1</li>')
-            .replace(/\n\n/g, '</p><p>')
-            .replace(/\n/g, '<br>');
+        if (!text) return '';
+        let escaped = CompanyIntelligence.escapeHtml(text);
 
-        return `<p>${formatted}</p>`;
+        // Bold
+        escaped = escaped.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+        // Italic
+        escaped = escaped.replace(/\*(.*?)\*/g, '<em>$1</em>');
+        // Inline code
+        escaped = escaped.replace(/`([^`]+)`/g, '<code>$1</code>');
+        // Highlight strategic headers like "PESTLE Risk Factors:", "Key Business Focus Areas:"
+        escaped = escaped.replace(/^([A-Z][A-Za-z0-9\s&/–—-]+:)/gm, '<strong class="chat-section-header">$1</strong>');
+        // Bullet points (- ...)
+        escaped = escaped.replace(/^\s*[-•]\s+(.*)$/gm, '<li class="chat-li"><span class="chat-bullet"></span><span>$1</span></li>');
+        // Wrap adjacent li in ul
+        escaped = escaped.replace(/(<li class="chat-li">[\s\S]*?<\/li>)+/g, '<ul class="chat-ul">$&</ul>');
+        
+        // Double newlines to paragraph breaks
+        const paragraphs = escaped.split(/\n\s*\n/).filter(p => p.trim().length > 0);
+        
+        return paragraphs.map(p => {
+            if (p.startsWith('<ul class="chat-ul">')) return p;
+            return `<p class="chat-paragraph">${p.replace(/\n/g, '<br>')}</p>`;
+        }).join('');
     }
 }

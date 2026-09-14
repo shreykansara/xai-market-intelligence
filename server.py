@@ -349,13 +349,24 @@ def admin_verify():
 @app.route("/api/chat", methods=["POST"])
 def chat():
     data = request.json or {}
-    message = data.get("message", "")
-    business_context = data.get("business_context") or data.get("context")
-    groq_key = data.get("groq_key")
-    chat_history = data.get("chat_history", [])
+    message = (data.get("message") or "").strip()
+    
+    # Handle both payload formats seamlessly
+    business_context = data.get("business_context") or data.get("context") or data.get("cvp_text")
+    if not business_context and (data.get("pestle_vector") or data.get("nearest_cvps")):
+        business_context = {
+            "cvp_text": data.get("cvp_text", ""),
+            "pestle_vector": data.get("pestle_vector"),
+            "porter_vector": data.get("porter_vector"),
+            "user_11d_vector": data.get("user_11d_vector"),
+            "nearest_cvps": data.get("nearest_cvps")
+        }
+
+    groq_key = data.get("groq_key") or data.get("groq_api_key")
+    chat_history = data.get("chat_history") or data.get("conversation_history") or []
 
     if not message:
-        return jsonify({"error": "Message is required"}), 400
+        return jsonify({"error": "Message is required", "response": "Please enter a question or business topic to evaluate."}), 400
 
     try:
         response = chatbot_engine.process_message(
@@ -364,9 +375,18 @@ def chat():
             groq_key_override=groq_key,
             chat_history=chat_history
         )
-        return jsonify(response)
+        if isinstance(response, dict):
+            reply_text = response.get("text") or response.get("response") or ""
+            response["text"] = reply_text
+            response["response"] = reply_text
+            response["success"] = True
+            return jsonify(response)
+        reply_str = str(response)
+        return jsonify({"success": True, "text": reply_str, "response": reply_str})
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        print(f"[Server /api/chat Error] {e}")
+        err_msg = str(e)
+        return jsonify({"error": err_msg, "response": f"Strategic Analysis Engine Notice: {err_msg}", "text": f"Strategic Analysis Engine Notice: {err_msg}"}), 500
 
 
 # Global Pipeline Progress States
