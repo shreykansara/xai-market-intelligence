@@ -123,6 +123,7 @@ export class CvpWorkflow {
             this.state.activePorterVector = data.porter_vector || [0.3, 0.3, 0.3, 0.3, 0.3];
             this.state.activeUser11DVector = data.user_11d_vector || [...this.state.activePestleVector, ...this.state.activePorterVector];
             this.state.activeNearestCvps = data.nearest_cvps || [];
+            this.state.activeCvpPrognosis = data.investment_prognosis || null;
 
             this.syncStateToUi();
 
@@ -154,8 +155,11 @@ export class CvpWorkflow {
 
         ChartVisualizer.updateCvpLegendValues(this.state.activePestleVector, this.state.activePorterVector);
 
-
         this.renderMatches(this.state.activeNearestCvps);
+
+        if (this.state.activeCvpPrognosis) {
+            this.renderInvestmentScore(this.state.activeCvpPrognosis);
+        }
 
         if (this.resultsPanel) {
             this.resultsPanel.classList.remove('hidden');
@@ -198,5 +202,160 @@ export class CvpWorkflow {
 
         if (this.matchesList) this.matchesList.innerHTML = html;
         if (this.sidebarNeighbors) this.sidebarNeighbors.innerHTML = html;
+    }
+
+    renderInvestmentScore(prognosis) {
+        if (!prognosis) return;
+
+        const badgeTier = document.getElementById('badge-cvp-investment-tier');
+        const pillRec = document.getElementById('pill-cvp-investment-rec');
+        const gaugeCircle = document.getElementById('gauge-cvp-investment-circle');
+        const valScore = document.getElementById('val-cvp-investment-score');
+        const valMoat = document.getElementById('val-cvp-moat-strength');
+        const valMacro = document.getElementById('val-cvp-macro-alignment');
+        const valPricing = document.getElementById('val-cvp-pricing-power');
+        const boxVerdict = document.getElementById('box-cvp-executive-verdict');
+        const textVerdict = document.getElementById('text-cvp-investment-verdict');
+
+        const statusMoat = document.getElementById('status-cvp-factor-moat');
+        const barMoat = document.getElementById('bar-cvp-factor-moat');
+        const statusTech = document.getElementById('status-cvp-factor-tech');
+        const barTech = document.getElementById('bar-cvp-factor-tech');
+        const statusPricing = document.getElementById('status-cvp-factor-pricing');
+        const barPricing = document.getElementById('bar-cvp-factor-pricing');
+        const statusBenchmark = document.getElementById('status-cvp-factor-benchmark');
+        const barBenchmark = document.getElementById('bar-cvp-factor-benchmark');
+
+        const listCatalysts = document.getElementById('list-cvp-investment-catalysts');
+        const listDeterrents = document.getElementById('list-cvp-investment-deterrents');
+
+        // Tier badge & Recommendation pill
+        if (badgeTier) {
+            badgeTier.textContent = prognosis.tier_label || prognosis.tier;
+            badgeTier.className = `investment-tier-badge ${prognosis.tier_badge || 'tier-mod'}`;
+        }
+        if (pillRec) {
+            pillRec.textContent = prognosis.recommendation || 'MONITOR';
+            pillRec.className = `investment-recommendation-pill pill-${prognosis.tier_badge || 'tier-mod'}`;
+        }
+
+        // Animated Radial Gauge
+        const targetScore = prognosis.score || 0;
+        const color = prognosis.color || '#00FF66';
+        const circumference = 427.26; // 2 * pi * 68
+
+        if (gaugeCircle) {
+            gaugeCircle.style.stroke = color;
+            const offset = circumference - (circumference * (targetScore / 100));
+            requestAnimationFrame(() => {
+                gaugeCircle.style.transition = 'stroke-dashoffset 1.4s cubic-bezier(0.16, 1, 0.3, 1)';
+                gaugeCircle.style.strokeDashoffset = offset.toFixed(2);
+            });
+        }
+
+        // Score number counter animation
+        if (valScore) {
+            valScore.style.color = color;
+            const duration = 1200;
+            const start = performance.now();
+            const animateScore = (time) => {
+                const elapsed = time - start;
+                const progress = Math.min(elapsed / duration, 1);
+                const ease = progress === 1 ? 1 : 1 - Math.pow(2, -10 * progress);
+                const currentVal = Math.round(ease * targetScore);
+                valScore.textContent = currentVal;
+                if (progress < 1) {
+                    requestAnimationFrame(animateScore);
+                } else {
+                    valScore.textContent = targetScore;
+                }
+            };
+            requestAnimationFrame(animateScore);
+        }
+
+        // Submetrics
+        if (valMoat) {
+            const m = prognosis.moat_strength_pct ?? 70;
+            valMoat.textContent = `${m}%`;
+            valMoat.style.color = m >= 60 ? 'var(--accent-green)' : '#f87171';
+        }
+        if (valMacro) {
+            const a = prognosis.macro_alignment_pct ?? 65;
+            valMacro.textContent = `${a}%`;
+            valMacro.style.color = a >= 60 ? 'var(--accent-green)' : '#f87171';
+        }
+        if (valPricing) {
+            valPricing.textContent = prognosis.pricing_power_label || 'Balanced';
+            valPricing.style.color = color;
+        }
+
+        // Executive verdict narrative
+        if (textVerdict) {
+            textVerdict.textContent = prognosis.verdict || '';
+        }
+        if (boxVerdict) {
+            boxVerdict.className = `executive-verdict-box verdict-${prognosis.tier_badge || 'tier-mod'}`;
+        }
+
+        // 4 Factors
+        const f = prognosis.factors || {};
+        if (f.moat) {
+            if (statusMoat) statusMoat.textContent = `${f.moat.status} (${f.moat.score}/100)`;
+            if (barMoat) {
+                barMoat.style.width = `${Math.min(100, Math.max(0, f.moat.score))}%`;
+                barMoat.style.background = f.moat.score >= 60 ? 'linear-gradient(90deg, #00FF66, #00E5FF)' : (f.moat.score < 45 ? 'linear-gradient(90deg, #f87171, #ef4444)' : 'linear-gradient(90deg, #f59e0b, #eab308)');
+            }
+        }
+        if (f.tech) {
+            if (statusTech) statusTech.textContent = `${f.tech.status} (${f.tech.score}/100)`;
+            if (barTech) {
+                barTech.style.width = `${Math.min(100, Math.max(0, f.tech.score))}%`;
+                barTech.style.background = f.tech.score >= 60 ? 'linear-gradient(90deg, #00FF66, #00E5FF)' : (f.tech.score < 45 ? 'linear-gradient(90deg, #f87171, #ef4444)' : 'linear-gradient(90deg, #f59e0b, #eab308)');
+            }
+        }
+        if (f.pricing) {
+            if (statusPricing) statusPricing.textContent = `${f.pricing.status} (${f.pricing.score}/100)`;
+            if (barPricing) {
+                barPricing.style.width = `${Math.min(100, Math.max(0, f.pricing.score))}%`;
+                barPricing.style.background = f.pricing.score >= 60 ? 'linear-gradient(90deg, #00FF66, #00E5FF)' : (f.pricing.score < 45 ? 'linear-gradient(90deg, #f87171, #ef4444)' : 'linear-gradient(90deg, #f59e0b, #eab308)');
+            }
+        }
+        if (f.benchmark) {
+            if (statusBenchmark) statusBenchmark.textContent = `${f.benchmark.status} (${f.benchmark.score}/100)`;
+            if (barBenchmark) {
+                barBenchmark.style.width = `${Math.min(100, Math.max(0, f.benchmark.score))}%`;
+                barBenchmark.style.background = f.benchmark.score >= 60 ? 'linear-gradient(90deg, #00FF66, #00E5FF)' : (f.benchmark.score < 50 ? 'linear-gradient(90deg, #f87171, #ef4444)' : 'linear-gradient(90deg, #f59e0b, #eab308)');
+            }
+        }
+
+        // Catalysts list
+        if (listCatalysts) {
+            const cats = prognosis.catalysts || [];
+            if (cats.length === 0) {
+                listCatalysts.innerHTML = '<li><span class="text-dim">No acute positive catalysts isolated.</span></li>';
+            } else {
+                listCatalysts.innerHTML = cats.map(c => `
+                    <li class="insight-bullet-item catalyst-item">
+                        <i class="fa-solid fa-circle-check" style="color: #00FF66;"></i>
+                        <span>${CompanyIntelligence.escapeHtml(c)}</span>
+                    </li>
+                `).join('');
+            }
+        }
+
+        // Deterrents list
+        if (listDeterrents) {
+            const dets = prognosis.deterrents || [];
+            if (dets.length === 0) {
+                listDeterrents.innerHTML = '<li><span class="text-dim">No acute structural deterrents isolated.</span></li>';
+            } else {
+                listDeterrents.innerHTML = dets.map(d => `
+                    <li class="insight-bullet-item deterrent-item">
+                        <i class="fa-solid fa-triangle-exclamation" style="color: #FFB300;"></i>
+                        <span>${CompanyIntelligence.escapeHtml(d)}</span>
+                    </li>
+                `).join('');
+            }
+        }
     }
 }

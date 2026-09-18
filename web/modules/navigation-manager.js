@@ -42,6 +42,7 @@ export class NavigationManager {
 
         // Sidebar Navigation
         this.btnBackStep1 = document.getElementById('btn-back-step1');
+        this.btnChangeCvp = document.getElementById('btn-change-cvp');
         this.btnSidebarHub = document.getElementById('btn-sidebar-hub');
         this.btnSidebarHome = document.getElementById('btn-sidebar-home');
         this.btnProceedToChatbot = document.getElementById('btn-proceed-to-chatbot');
@@ -109,14 +110,24 @@ export class NavigationManager {
             this.callbacks.onProceedToChatbot?.();
         });
 
-        // Left Panel Back
-        this.btnBackStep1?.addEventListener('click', () => {
+        // Left Panel Back & Edit in Step 1 Handler
+        const returnToStep1 = () => {
             if (this.state.activeIntelligenceMode === 'revenue') {
                 this.switchScreen(this.viewStep1Revenue);
             } else {
                 this.switchScreen(this.viewStep1Cvp);
+                const input = document.getElementById('input-cvp-text');
+                if (input) {
+                    if (this.state.activeCvpText && !input.value) {
+                        input.value = this.state.activeCvpText;
+                    }
+                    input.focus();
+                }
             }
-        });
+        };
+
+        this.btnBackStep1?.addEventListener('click', returnToStep1);
+        this.btnChangeCvp?.addEventListener('click', returnToStep1);
 
         this.btnSidebarHub?.addEventListener('click', () => this.switchScreen(this.viewModeSelection));
         this.btnSidebarHome?.addEventListener('click', () => this.switchScreen(this.viewLandingPage));

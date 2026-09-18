@@ -543,6 +543,134 @@
                 <!-- Step 1 Results Panel (Hidden until CVP analyzed) -->
                 <div class="step1-results-panel hidden" id="step1-results-panel">
                     
+                    <!-- Section 0: Strategic Viability & Investment Confidence Score -->
+                    <div class="card glass-card investment-hero-card" id="card-cvp-investment-score">
+                        <div class="investment-header-row">
+                            <div class="investment-title-group">
+                                <span class="investment-eyebrow"><i class="fa-solid fa-bullseye color-green"></i> CVP STRATEGIC VIABILITY PROGNOSIS</span>
+                                <h3 class="investment-main-heading">Strategic Viability & Investment Confidence Score</h3>
+                                <p class="investment-subtitle">
+                                    Synthesized from 11-dimensional PESTLE macro tailwinds, Porter's competitive barrier strength, enterprise benchmark positioning, and margin defensibility.
+                                </p>
+                            </div>
+                            <div class="investment-badge-wrap">
+                                <div class="investment-tier-badge" id="badge-cvp-investment-tier">CALCULATING...</div>
+                                <div class="investment-recommendation-pill" id="pill-cvp-investment-rec">--</div>
+                            </div>
+                        </div>
+
+                        <div class="investment-score-grid">
+                            <!-- Left: Radial Visual Gauge & Core Metrics -->
+                            <div class="investment-gauge-card">
+                                <div class="radial-gauge-container">
+                                    <svg class="radial-gauge-svg" viewBox="0 0 160 160">
+                                        <circle class="gauge-bg-circle" cx="80" cy="80" r="68"></circle>
+                                        <circle class="gauge-fill-circle" id="gauge-cvp-investment-circle" cx="80" cy="80" r="68" stroke-dasharray="427.26" stroke-dashoffset="427.26"></circle>
+                                    </svg>
+                                    <div class="radial-gauge-content">
+                                        <span class="gauge-score-value" id="val-cvp-investment-score">--</span>
+                                        <span class="gauge-score-max">/ 100</span>
+                                        <span class="gauge-score-label">VIABILITY INDEX</span>
+                                    </div>
+                                </div>
+                                <div class="gauge-submetrics-row">
+                                    <div class="submetric-box">
+                                        <span class="submetric-label">Moat Strength</span>
+                                        <strong class="submetric-val" id="val-cvp-moat-strength">--%</strong>
+                                    </div>
+                                    <div class="submetric-divider"></div>
+                                    <div class="submetric-box">
+                                        <span class="submetric-label">Macro Tailwinds</span>
+                                        <strong class="submetric-val" id="val-cvp-macro-alignment">--%</strong>
+                                    </div>
+                                    <div class="submetric-divider"></div>
+                                    <div class="submetric-box">
+                                        <span class="submetric-label">Pricing Power</span>
+                                        <strong class="submetric-val" id="val-cvp-pricing-power">--</strong>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Right: Executive Verdict & 4-Factor Weighted Breakdown -->
+                            <div class="investment-breakdown-card">
+                                <div class="executive-verdict-box" id="box-cvp-executive-verdict">
+                                    <div class="verdict-tag-header">
+                                        <i class="fa-solid fa-gavel"></i>
+                                        <span>EXECUTIVE STRATEGIC VIABILITY VERDICT</span>
+                                    </div>
+                                    <p class="verdict-narrative" id="text-cvp-investment-verdict">
+                                        Evaluating customer value proposition barriers, macro exposure, and benchmark defensibility...
+                                    </p>
+                                </div>
+
+                                <!-- 4-Factor Progress Meters -->
+                                <div class="factor-meters-container">
+                                    <div class="factor-meter-item">
+                                        <div class="factor-meter-header">
+                                            <span><i class="fa-solid fa-shield-halved color-green"></i> Competitive Moat & Barriers (30%)</span>
+                                            <span class="factor-status-pill" id="status-cvp-factor-moat">--</span>
+                                        </div>
+                                        <div class="factor-bar-bg">
+                                            <div class="factor-bar-fill" id="bar-cvp-factor-moat" style="width: 0%;"></div>
+                                        </div>
+                                    </div>
+
+                                    <div class="factor-meter-item">
+                                        <div class="factor-meter-header">
+                                            <span><i class="fa-solid fa-microchip color-cyan"></i> Tech Velocity & Macro Tailwinds (25%)</span>
+                                            <span class="factor-status-pill" id="status-cvp-factor-tech">--</span>
+                                        </div>
+                                        <div class="factor-bar-bg">
+                                            <div class="factor-bar-fill" id="bar-cvp-factor-tech" style="width: 0%;"></div>
+                                        </div>
+                                    </div>
+
+                                    <div class="factor-meter-item">
+                                        <div class="factor-meter-header">
+                                            <span><i class="fa-solid fa-hand-holding-dollar color-mint"></i> Pricing Power & Margin Defense (25%)</span>
+                                            <span class="factor-status-pill" id="status-cvp-factor-pricing">--</span>
+                                        </div>
+                                        <div class="factor-bar-bg">
+                                            <div class="factor-bar-fill" id="bar-cvp-factor-pricing" style="width: 0%;"></div>
+                                        </div>
+                                    </div>
+
+                                    <div class="factor-meter-item">
+                                        <div class="factor-meter-header">
+                                            <span><i class="fa-solid fa-crosshairs color-purple"></i> Benchmark Validation & Defensibility (20%)</span>
+                                            <span class="factor-status-pill" id="status-cvp-factor-benchmark">--</span>
+                                        </div>
+                                        <div class="factor-bar-bg">
+                                            <div class="factor-bar-fill" id="bar-cvp-factor-benchmark" style="width: 0%;"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Catalysts vs Deterrents Dual Column Callouts -->
+                        <div class="investment-insights-dual-row">
+                            <div class="insight-column catalyst-col">
+                                <div class="insight-col-header">
+                                    <i class="fa-solid fa-circle-arrow-up color-green"></i>
+                                    <strong>Primary Viability Catalysts (Strategic Strengths)</strong>
+                                </div>
+                                <ul class="insight-bullet-list" id="list-cvp-investment-catalysts">
+                                    <!-- Populated dynamically -->
+                                </ul>
+                            </div>
+                            <div class="insight-column deterrent-col">
+                                <div class="insight-col-header">
+                                    <i class="fa-solid fa-triangle-exclamation color-amber"></i>
+                                    <strong>Strategic Risk Deterrents (Vulnerability Areas)</strong>
+                                </div>
+                                <ul class="insight-bullet-list" id="list-cvp-investment-deterrents">
+                                    <!-- Populated dynamically -->
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Dual Radar Charts Grid -->
                     <div class="dual-radar-grid">
                         <!-- Chart 1: PESTLE Analysis -->

@@ -41,6 +41,17 @@ document.addEventListener('DOMContentLoaded', () => {
             activeCvpCard.style.display = (state.activeIntelligenceMode === 'revenue') ? 'none' : '';
         }
 
+        const btnBackStep1 = document.getElementById('btn-back-step1');
+        if (btnBackStep1) {
+            if (state.activeIntelligenceMode === 'revenue') {
+                btnBackStep1.innerHTML = '<i class="fa-solid fa-arrow-left"></i> Step 1 Sales';
+                btnBackStep1.title = 'Return to Step 1 Sales & Revenue Analysis';
+            } else {
+                btnBackStep1.innerHTML = '<i class="fa-solid fa-arrow-left"></i> Step 1 CVP';
+                btnBackStep1.title = 'Return to Step 1 CVP Input';
+            }
+        }
+
         // 1. Sync Active Context Text
         if (sidebarCvpEl) {
             if (state.activeIntelligenceMode === 'revenue') {

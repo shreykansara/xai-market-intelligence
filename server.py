@@ -2390,6 +2390,168 @@ def compute_investment_confidence_score(revenue_series, user_11d_vector, matched
     }
 
 
+def compute_cvp_investment_score(cvp_text, pestle_vector, porter_vector, nearest_cvps):
+    """
+    Computes an Executive Strategic Viability & Investment Confidence Score (0 - 100) for a CVP statement.
+    Evaluates:
+      1. Competitive Moat & Barriers (30%): Low entrant threat & low substitute vulnerability.
+      2. Tech Velocity & Macro Tailwinds (25%): Technology acceleration & sociocultural tailwinds vs regulatory headwinds.
+      3. Pricing Power & Margin Defense (25%): Low buyer price sensitivity, supplier independence & manageable rivalry.
+      4. Benchmark Validation & Defensibility (20%): Proximity to proven $1B+ enterprise models without commoditization.
+    """
+    pv = pestle_vector if len(pestle_vector) == 6 else [0.5] * 6
+    fv = porter_vector if len(porter_vector) == 5 else [0.5] * 5
+
+    pol, econ, soc, tech, leg, env = pv
+    threat_new, buyer_pwr, supplier_pwr, threat_sub, rivalry = fv
+
+    # 1. Moat & Barriers (30%)
+    moat_val = ((1.0 - threat_new) * 0.55) + ((1.0 - threat_sub) * 0.45)
+    moat_score = min(100.0, max(10.0, moat_val * 100.0))
+
+    # 2. Tech Velocity & Macro Tailwinds (25%)
+    tailwinds = (tech * 0.55) + (soc * 0.30) + (env * 0.15)
+    headwinds = (pol * 0.40) + (econ * 0.40) + (leg * 0.20)
+    macro_net = tailwinds - (headwinds * 0.70)
+    macro_score = min(100.0, max(10.0, 50.0 + (macro_net * 45.0)))
+
+    # 3. Pricing Power & Margin Defense (25%)
+    pricing_val = ((1.0 - buyer_pwr) * 0.40) + ((1.0 - supplier_pwr) * 0.30) + ((1.0 - rivalry) * 0.30)
+    pricing_score = min(100.0, max(10.0, pricing_val * 100.0))
+
+    # 4. Benchmark Validation & Defensibility (20%)
+    top_peer = nearest_cvps[0].get("company", "Enterprise Benchmark") if nearest_cvps else "Enterprise Benchmark"
+    top_sim = float(nearest_cvps[0].get("similarity_pct", 85.0)) if nearest_cvps else 85.0
+    bench_val = 55.0 + min(35.0, max(0.0, (top_sim - 65.0) * 1.4))
+    if rivalry > 0.75 and top_sim > 95.0:
+        bench_val -= 10.0
+    bench_score = min(100.0, max(10.0, bench_val))
+
+    composite = (0.30 * moat_score) + (0.25 * macro_score) + (0.25 * pricing_score) + (0.20 * bench_score)
+    final_score = int(round(min(96.0, max(12.0, composite))))
+
+    if final_score >= 78:
+        tier = "HIGH_CONFIDENCE"
+        tier_label = "High Confidence — Strong Strategic Viability"
+        tier_badge = "tier-high"
+        color = "#00FF66"
+        recommendation = "FAVORABLE TO INVEST / OVERWEIGHT"
+        growth_outlook = "High Defensibility"
+        verdict = (
+            f"HIGH STRATEGIC & INVESTMENT CONVICTION. The proposition commands robust competitive entry moats "
+            f"and strong technological tailwinds. Strategic alignment with proven enterprise peer '{top_peer}' ({top_sim:.1f}%) "
+            f"confirms solid product-market defensibility and sustainable long-term pricing power."
+        )
+    elif final_score >= 60:
+        tier = "MODERATE_CONFIDENCE"
+        tier_label = "Moderate Confidence — Favorable Positioning"
+        tier_badge = "tier-mod"
+        color = "#00E5FF"
+        recommendation = "SELECTIVE ENTRY / ACCUMULATE"
+        growth_outlook = "Viable Differentiation"
+        verdict = (
+            f"MODERATE INVESTMENT CONVICTION. The value proposition presents a viable market opportunity with defensible "
+            f"differentiation against benchmark peer '{top_peer}'. Sustained execution must prioritize customer lock-in "
+            f"and gross margin defense against potential substitute pressure."
+        )
+    elif final_score >= 45:
+        tier = "WATCHLIST"
+        tier_label = "Watchlist — Moderate Barriers / Crowded Niche"
+        tier_badge = "tier-watch"
+        color = "#FFB300"
+        recommendation = "HOLD / REFINE VALUE PROPOSITION"
+        growth_outlook = "Competitive Friction"
+        verdict = (
+            f"NEUTRAL OUTLOOK — HOLD CAPITAL DEPLOYMENT. While addressing a recognizable market need, the CVP faces "
+            f"moderate incumbent rivalry and buyer price sensitivity relative to peers like '{top_peer}'. "
+            f"Recommend sharpening the unique benefit proposition before aggressive capital investment."
+        )
+    else:
+        tier = "HIGH_RISK"
+        tier_label = "High Risk — Severe Headwinds"
+        tier_badge = "tier-risk"
+        color = "#FF4D4F"
+        recommendation = "DEFER INVESTMENT / PIVOT CVP"
+        growth_outlook = "High Vulnerability"
+        verdict = (
+            f"ELEVATED DOWNSIDE EXPOSURE. The proposition operates in an intensely competitive environment with low entry "
+            f"barriers and high customer bargaining leverage. Capital deployment should be deferred until structural moats "
+            f"and proprietary technological advantages are established."
+        )
+
+    # Catalysts
+    catalysts = []
+    if threat_new <= 0.35:
+        catalysts.append(f"High Barrier to Entry: Low threat of new entrants ({threat_new:.2f}) protects against copycat saturation.")
+    if tech >= 0.70:
+        catalysts.append(f"Technological Velocity: Strong innovation acceleration ({tech:.2f}) establishes a defensible architectural moat.")
+    if threat_sub <= 0.40:
+        catalysts.append(f"Low Substitute Vulnerability: High switching costs and proprietary benefits limit substitute erosion ({threat_sub:.2f}).")
+    if top_sim >= 80.0:
+        catalysts.append(f"Validated Enterprise Precedent: Strong commercial resonance with verified enterprise model '{top_peer}' ({top_sim:.1f}%).")
+    if buyer_pwr <= 0.50:
+        catalysts.append(f"Differentiated Pricing Power: Moderate customer price sensitivity preserves margin expansion potential.")
+    if not catalysts:
+        catalysts.append("Established Core Benefit: Proposition targets an identifiable enterprise operational need.")
+
+    # Deterrents
+    deterrents = []
+    if rivalry >= 0.65:
+        deterrents.append(f"Intense Incumbent Rivalry: High competitive rivalry ({rivalry:.2f}) compresses customer acquisition margins.")
+    if buyer_pwr >= 0.65:
+        deterrents.append(f"Elevated Buyer Bargaining Power: Strong customer leverage ({buyer_pwr:.2f}) necessitates aggressive value justification.")
+    if supplier_pwr >= 0.60:
+        deterrents.append(f"Supplier Dependency: Reliance on critical upstream inputs ({supplier_pwr:.2f}) limits gross margin flexibility.")
+    if econ >= 0.65:
+        deterrents.append(f"Macroeconomic Sensitivity: Macroeconomic pressure ({econ:.2f}) may lengthen enterprise sales cycles.")
+    if pol >= 0.70 or leg >= 0.70:
+        deterrents.append(f"Regulatory Compliance Overhead: Compliance and policy mandates ({max(pol, leg):.2f}) require continuous governance.")
+    if not deterrents:
+        deterrents.append("Execution Risk: Requires disciplined go-to-market execution to establish durable brand equity.")
+
+    return {
+        "score": final_score,
+        "tier": tier,
+        "tier_label": tier_label,
+        "tier_badge": tier_badge,
+        "color": color,
+        "verdict": verdict,
+        "recommendation": recommendation,
+        "growth_outlook": growth_outlook,
+        "moat_strength_pct": int(round(moat_score)),
+        "macro_alignment_pct": int(round(macro_score)),
+        "pricing_power_label": "High Defense" if pricing_score >= 60 else ("Moderate" if pricing_score >= 45 else "Vulnerable"),
+        "factors": {
+            "moat": {
+                "score": int(round(moat_score)),
+                "weight": "30%",
+                "label": "Competitive Moat & Barriers",
+                "status": "High Moat" if moat_score >= 65 else ("Moderate" if moat_score >= 45 else "Low Barriers")
+            },
+            "tech": {
+                "score": int(round(macro_score)),
+                "weight": "25%",
+                "label": "Tech Velocity & Macro Tailwinds",
+                "status": "Accelerating" if macro_score >= 65 else ("Favorable" if macro_score >= 45 else "Headwinds")
+            },
+            "pricing": {
+                "score": int(round(pricing_score)),
+                "weight": "25%",
+                "label": "Pricing Power & Margin Defense",
+                "status": "Strong Defense" if pricing_score >= 60 else ("Balanced" if pricing_score >= 45 else "Vulnerable")
+            },
+            "benchmark": {
+                "score": int(round(bench_score)),
+                "weight": "20%",
+                "label": "Benchmark Validation & Defensibility",
+                "status": "High Validation" if bench_score >= 65 else ("Moderate" if bench_score >= 45 else "Unvalidated")
+            }
+        },
+        "catalysts": catalysts[:3],
+        "deterrents": deterrents[:3]
+    }
+
+
 @app.route("/api/match_revenue_clusters", methods=["POST"])
 def match_revenue_clusters():
     """Analyzes sales & revenue time-series:
@@ -3016,13 +3178,16 @@ def evaluate_cvp():
         except Exception:
             pass
 
+    investment_prognosis = compute_cvp_investment_score(cvp_text, pestle_vector, porter_vector, nearest_cvps)
+
     return jsonify({
         "success": True,
         "cvp_text": cvp_text,
         "pestle_vector": pestle_vector,
         "porter_vector": porter_vector,
         "user_11d_vector": user_11d_vector,
-        "nearest_cvps": nearest_cvps
+        "nearest_cvps": nearest_cvps,
+        "investment_prognosis": investment_prognosis
     })
 
 
