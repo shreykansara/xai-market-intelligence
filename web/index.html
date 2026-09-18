@@ -649,7 +649,7 @@
                         <i class="fa-solid fa-cloud-arrow-up dropzone-icon color-cyan"></i>
                         <p class="dropzone-text">Drag & Drop your sales CSV file here, or <span class="dropzone-link color-cyan" id="btn-browse-file" style="cursor: pointer; text-decoration: underline;">browse files</span></p>
 
-                        <span class="dropzone-subtext">Supported formats: CSV, JSON (Period, Revenue, Change_Pct)</span>
+                        <span class="dropzone-subtext">Supported formats: CSV, JSON (Strictly 2 Columns: <strong>Date / Date Range</strong>, <strong>Revenue</strong>)</span>
                         <input type="file" id="input-file-revenue" accept=".csv,.json" style="display: none;">
                     </div>
 
@@ -676,10 +676,10 @@
                             <table class="revenue-preview-table" style="width: 100%; border-collapse: collapse; font-size: 0.8rem;">
                                 <thead>
                                     <tr style="border-bottom: 1px solid rgba(0, 229, 255, 0.2); text-align: left; color: #8892b0;">
-                                        <th style="padding: 6px 10px;">Period</th>
-                                        <th style="padding: 6px 10px;">Recorded Metric</th>
-                                        <th style="padding: 6px 10px;">Fluctuation (% Δ)</th>
-                                        <th style="padding: 6px 10px;">Context / Notes</th>
+                                        <th style="padding: 6px 10px;">Date / Date Range</th>
+                                        <th style="padding: 6px 10px;">Recorded Revenue</th>
+                                        <th style="padding: 6px 10px;">Computed Fluctuation (% Δ)</th>
+                                        <th style="padding: 6px 10px;">Detected Interval</th>
                                     </tr>
                                 </thead>
                                 <tbody id="revenue-preview-tbody"></tbody>
@@ -697,40 +697,154 @@
                 <!-- Sales Analysis Results Panel -->
                 <div class="step1-results-panel hidden" id="revenue-results-panel">
                     
-                    <!-- Section 1: Fluctuation Clusters & Collective Decisions -->
-                    <div class="card glass-card">
-                        <div class="card-header">
-                            <i class="fa-solid fa-layer-group color-cyan"></i>
-                            <span>1. Fluctuation Clusters & Collective Decisions (Grouped by % Change)</span>
+                    <!-- Section 0: Executive Investment Confidence Score & Forward Growth Prognosis -->
+                    <div class="card glass-card investment-hero-card" id="card-investment-score">
+                        <div class="investment-header-row">
+                            <div class="investment-title-group">
+                                <span class="investment-eyebrow"><i class="fa-solid fa-chart-line-up"></i> EXECUTIVE PROGNOSIS</span>
+                                <h3 class="investment-main-heading">Investment Confidence & Growth Prognosis Score</h3>
+                                <p class="investment-subtitle">
+                                    Synthesized from recent revenue trajectory, forward momentum acceleration, 11-D macroeconomic resilience, and causal shock recoverability.
+                                </p>
+                            </div>
+                            <div class="investment-badge-wrap">
+                                <div class="investment-tier-badge" id="badge-investment-tier">CALCULATING...</div>
+                                <div class="investment-recommendation-pill" id="pill-investment-rec">--</div>
+                            </div>
                         </div>
-                        <p style="font-size: 13px; color: var(--text-muted); margin: 6px 0 16px 0; line-height: 1.5;">
-                            All revenue movements are grouped into discrete fluctuation bands by severity (<span style="color:var(--accent-green);">% change</span>). For each cluster, a collective strategic decision is formulated from the dominant news category.
-                        </p>
-                        <div id="fluctuation-clusters-list" class="clusters-grid">
-                            <!-- Populated dynamically with cluster cards and collective decision callouts -->
+
+                        <div class="investment-score-grid">
+                            <!-- Left: Radial Visual Gauge & Core Metrics -->
+                            <div class="investment-gauge-card">
+                                <div class="radial-gauge-container">
+                                    <svg class="radial-gauge-svg" viewBox="0 0 160 160">
+                                        <circle class="gauge-bg-circle" cx="80" cy="80" r="68"></circle>
+                                        <circle class="gauge-fill-circle" id="gauge-investment-circle" cx="80" cy="80" r="68" stroke-dasharray="427.26" stroke-dashoffset="427.26"></circle>
+                                    </svg>
+                                    <div class="radial-gauge-content">
+                                        <span class="gauge-score-value" id="val-investment-score">--</span>
+                                        <span class="gauge-score-max">/ 100</span>
+                                        <span class="gauge-score-label">CONFIDENCE INDEX</span>
+                                    </div>
+                                </div>
+                                <div class="gauge-submetrics-row">
+                                    <div class="submetric-box">
+                                        <span class="submetric-label">Trailing Momentum</span>
+                                        <strong class="submetric-val" id="val-trailing-momentum">--%</strong>
+                                    </div>
+                                    <div class="submetric-divider"></div>
+                                    <div class="submetric-box">
+                                        <span class="submetric-label">Growth Velocity</span>
+                                        <strong class="submetric-val" id="val-growth-velocity">--%</strong>
+                                    </div>
+                                    <div class="submetric-divider"></div>
+                                    <div class="submetric-box">
+                                        <span class="submetric-label">Forward Outlook</span>
+                                        <strong class="submetric-val" id="val-forward-outlook">--</strong>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Right: Executive Verdict & 4-Factor Weighted Breakdown -->
+                            <div class="investment-breakdown-card">
+                                <div class="executive-verdict-box" id="box-executive-verdict">
+                                    <div class="verdict-tag-header">
+                                        <i class="fa-solid fa-gavel"></i>
+                                        <span>EXECUTIVE INVESTMENT VERDICT</span>
+                                    </div>
+                                    <p class="verdict-narrative" id="text-investment-verdict">
+                                        Evaluating trailing financial momentum and external market shocks...
+                                    </p>
+                                </div>
+
+                                <!-- 4-Factor Progress Meters -->
+                                <div class="factor-meters-container">
+                                    <div class="factor-meter-item">
+                                        <div class="factor-meter-header">
+                                            <span><i class="fa-solid fa-arrow-trend-up"></i> Recent Financial Momentum (35%)</span>
+                                            <span class="factor-status-pill" id="status-factor-momentum">--</span>
+                                        </div>
+                                        <div class="factor-bar-bg">
+                                            <div class="factor-bar-fill" id="bar-factor-momentum" style="width: 0%;"></div>
+                                        </div>
+                                    </div>
+
+                                    <div class="factor-meter-item">
+                                        <div class="factor-meter-header">
+                                            <span><i class="fa-solid fa-gauge-high"></i> Growth Velocity & Acceleration (25%)</span>
+                                            <span class="factor-status-pill" id="status-factor-growth">--</span>
+                                        </div>
+                                        <div class="factor-bar-bg">
+                                            <div class="factor-bar-fill" id="bar-factor-growth" style="width: 0%;"></div>
+                                        </div>
+                                    </div>
+
+                                    <div class="factor-meter-item">
+                                        <div class="factor-meter-header">
+                                            <span><i class="fa-solid fa-shield-halved"></i> Macro & Competitive Resilience (25%)</span>
+                                            <span class="factor-status-pill" id="status-factor-resilience">--</span>
+                                        </div>
+                                        <div class="factor-bar-bg">
+                                            <div class="factor-bar-fill" id="bar-factor-resilience" style="width: 0%;"></div>
+                                        </div>
+                                    </div>
+
+                                    <div class="factor-meter-item">
+                                        <div class="factor-meter-header">
+                                            <span><i class="fa-solid fa-arrows-rotate"></i> Shock Recoverability & Agility (15%)</span>
+                                            <span class="factor-status-pill" id="status-factor-recovery">--</span>
+                                        </div>
+                                        <div class="factor-bar-bg">
+                                            <div class="factor-bar-fill" id="bar-factor-recovery" style="width: 0%;"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Catalysts vs Deterrents Dual Column Callouts -->
+                        <div class="investment-insights-dual-row">
+                            <div class="insight-column catalyst-col">
+                                <div class="insight-col-header">
+                                    <i class="fa-solid fa-circle-arrow-up color-green"></i>
+                                    <strong>Primary Investment Catalysts (Growth Drivers)</strong>
+                                </div>
+                                <ul class="insight-bullet-list" id="list-investment-catalysts">
+                                    <!-- Populated dynamically -->
+                                </ul>
+                            </div>
+                            <div class="insight-column deterrent-col">
+                                <div class="insight-col-header">
+                                    <i class="fa-solid fa-triangle-exclamation color-amber"></i>
+                                    <strong>Key Risk Deterrents & Headwinds (Monitoring Areas)</strong>
+                                </div>
+                                <ul class="insight-bullet-list" id="list-investment-deterrents">
+                                    <!-- Populated dynamically -->
+                                </ul>
+                            </div>
                         </div>
                     </div>
 
-                    <!-- Section 2: Lagging Indicator News & Likelihood Scoring Matrix -->
+                    <!-- Section 1: Lagging Indicator News & Likelihood Scoring Matrix -->
                     <div class="card glass-card">
                         <div class="card-header">
                             <i class="fa-solid fa-newspaper color-cyan"></i>
-                            <span>2. Lagging Indicator News Assignment & Causal Likelihood Scores</span>
+                            <span>1. Lagging Indicator News Assignment & Causal Likelihood Scores</span>
                         </div>
                         <p style="font-size: 13px; color: var(--text-muted); margin: 6px 0 16px 0; line-height: 1.5;">
-                            Sales is an empirical lagging indicator. For each fluctuation, historical macro news emerging prior to that period is assigned with a calibrated causal likelihood score.
+                            Sales is an empirical lagging indicator. For each fluctuation, historical macro news emerging prior to that period is assigned with a calibrated causal likelihood score based on cluster-common category agreement.
                         </p>
                         <div id="correlation-matrix-list" style="margin-top: 1rem;">
                             <!-- Dynamically populated with lagging news & likelihood meters -->
                         </div>
                     </div>
 
-                    <!-- Section 3: Dual Radar Charts Grid for Revenue -->
+                    <!-- Section 2: Dual Radar Charts Grid for Revenue -->
                     <div class="dual-radar-grid">
                         <div class="card glass-card radar-card">
                             <div class="card-header">
                                 <i class="fa-solid fa-chart-pie color-pestle"></i>
-                                <span>3A. PESTLE Macro Risk Impact (Sales Mode)</span>
+                                <span>2A. PESTLE Macro Risk Impact (Sales Mode)</span>
                             </div>
                             <div class="canvas-wrapper">
                                 <canvas id="canvas-revenue-pestle" width="300" height="300"></canvas>
@@ -748,7 +862,7 @@
                         <div class="card glass-card radar-card">
                             <div class="card-header">
                                 <i class="fa-solid fa-shield-halved color-porter"></i>
-                                <span>3B. Porter's 5 Forces Impact (Sales Mode)</span>
+                                <span>2B. Porter's 5 Forces Impact (Sales Mode)</span>
                             </div>
                             <div class="canvas-wrapper">
                                 <canvas id="canvas-revenue-porter" width="300" height="300"></canvas>
@@ -763,12 +877,12 @@
                         </div>
                     </div>
 
-                    <!-- Section 4: PESTLE & Porter Evidences & Scoring Rationales -->
+                    <!-- Section 3: PESTLE & Porter Evidences & Scoring Rationales -->
                     <div class="card glass-card evidence-container-card">
                         <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
                             <div style="display: flex; align-items: center; gap: 10px;">
                                 <i class="fa-solid fa-scale-balanced color-cyan"></i>
-                                <span>4. PESTLE & Porter Scoring Evidences & Rationales (Audit Trail)</span>
+                                <span>3. PESTLE & Porter Scoring Evidences & Rationales (Audit Trail)</span>
                             </div>
                             <div class="audit-header-actions">
                                 <span class="audit-total-badge"><i class="fa-solid fa-layer-group"></i> 11 Categories Evaluated</span>
@@ -812,11 +926,11 @@
                         <div id="strategic-evidence-list" style="display:none;"></div>
                     </div>
 
-                    <!-- Section 5: Nearest Benchmark Peer Companies in Revenue Mode -->
+                    <!-- Section 4: Nearest Benchmark Peer Companies in Revenue Mode -->
                     <div class="card glass-card benchmark-results-card">
                         <div class="card-header">
                             <i class="fa-solid fa-chart-scatter color-cyan"></i>
-                            <span>5. Nearest Strategic Benchmark Peers (500 Company Database)</span>
+                            <span>4. Nearest Strategic Benchmark Peers (500 Company Database)</span>
                         </div>
                         <p style="font-size: 13px; color: var(--text-muted); margin: 6px 0 16px 0; line-height: 1.5;">
                             500-Company Vector Engine matches: Companies with closest strategic risk vectors to your revenue sensitivity profile. Click any company to view its database profile.

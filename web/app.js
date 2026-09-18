@@ -9,6 +9,7 @@ import { ChatAssistant } from './modules/chat-assistant.js';
 import { NavigationManager } from './modules/navigation-manager.js';
 import { ChartVisualizer } from './modules/chart-visualizer.js';
 import { CompanyIntelligence } from './modules/company-intelligence.js';
+import { CompanyApi } from './modules/api-client.js';
 
 document.addEventListener('DOMContentLoaded', () => {
     // Centralized Application State
@@ -33,6 +34,12 @@ document.addEventListener('DOMContentLoaded', () => {
         const sideCanvasPorter = document.getElementById('sidebar-canvas-porter');
         const sidebarCvpEl = document.getElementById('sidebar-active-cvp');
         const sidebarNeighborsList = document.getElementById('sidebar-neighbors-list');
+        const activeCvpCard = document.querySelector('.active-cvp-card');
+
+        // 0. Hide CVP Context in sidebar when running in sales/revenue mode
+        if (activeCvpCard) {
+            activeCvpCard.style.display = (state.activeIntelligenceMode === 'revenue') ? 'none' : '';
+        }
 
         // 1. Sync Active Context Text
         if (sidebarCvpEl) {
@@ -73,13 +80,17 @@ document.addEventListener('DOMContentLoaded', () => {
             sidebarNeighborsList.innerHTML = state.activeNearestCvps.map((m, idx) => `
                 <div class="cvp-match-card" style="border-left: 4px solid ${borderColors[idx % borderColors.length]};">
                     <div class="cvp-match-header">
-                        <span>
-                            <button type="button" class="company-profile-btn" data-company="${CompanyIntelligence.escapeHtml(m.company)}" title="Click to view on-DB company intelligence">
-                                <span>${CompanyIntelligence.escapeHtml(m.company)}</span>
-                                <i class="fa-solid fa-arrow-up-right-from-square" style="font-size: 11px; opacity: 0.8;"></i>
-                            </button>
-                            <span class="cvp-match-sector-tag"><i class="fa-solid fa-building"></i> ${CompanyIntelligence.escapeHtml(m.sector || 'Enterprise')}</span>
-                        </span>
+                        <div class="cvp-match-identity">
+                            <div class="cvp-match-company-row">
+                                <button type="button" class="company-profile-btn" data-company="${CompanyIntelligence.escapeHtml(m.company)}" title="Click to view on-DB company intelligence">
+                                    <span>${CompanyIntelligence.escapeHtml(m.company)}</span>
+                                    <i class="fa-solid fa-arrow-up-right-from-square" style="font-size: 11px; opacity: 0.8;"></i>
+                                </button>
+                            </div>
+                            <div class="cvp-match-sector-row">
+                                <span class="cvp-match-sector-tag"><i class="fa-solid fa-building"></i> ${CompanyIntelligence.escapeHtml(m.sector || 'Enterprise')}</span>
+                            </div>
+                        </div>
                         <span class="cvp-match-badge">${m.similarity_pct}% Match</span>
                     </div>
                     <p class="cvp-match-cvp">"${CompanyIntelligence.escapeHtml(m.cvp || '')}"</p>
@@ -98,7 +109,14 @@ document.addEventListener('DOMContentLoaded', () => {
             sidebarNeighborsList.querySelectorAll('.company-profile-btn, .btn-peer-action:not(.btn-peer-radar)').forEach(btn => {
                 btn.addEventListener('click', () => {
                     const compName = btn.getAttribute('data-company');
-                    if (compName) CompanyIntelligence.openCompanyModal(compName, pestleVec, porterVec);
+                    if (compName) {
+                        CompanyIntelligence.loadAndShowProfile(
+                            compName,
+                            state.activePestleVector,
+                            state.activePorterVector,
+                            (peer) => overlayPeerRadar(peer.company)
+                        );
+                    }
                 });
             });
 
@@ -130,20 +148,38 @@ Your Customer Value Proposition: "${CompanyIntelligence.escapeHtml(data.cvp_text
         }
     });
 
-    // Helper for overlaying peer on radars
+    // Helper for overlaying peer on radars WITHOUT flashing modal
     async function overlayPeerRadar(companyName) {
-        const comp = await CompanyIntelligence.loadAndShowProfile(
-            companyName,
-            state.activePestleVector,
-            state.activePorterVector
-        );
-        if (!comp) return;
+        if (!companyName) return;
+
+        // 1. Look up peer vectors from activeNearestCvps or API without showing any modal
+        const isFlatOrInvalid = (vec) => !vec || !Array.isArray(vec) || vec.length < 5 || vec.every(v => Math.abs(Number(v) - 0.3) < 0.001);
+
+        let comp = state.activeNearestCvps?.find(c => c.company?.toLowerCase() === companyName.toLowerCase());
+        if (!comp || isFlatOrInvalid(comp.pestle_vector) || isFlatOrInvalid(comp.porter_vector)) {
+            try {
+                const res = await CompanyApi.getProfile(companyName);
+                if (res?.success && res?.company) {
+                    comp = res.company;
+                    const existing = state.activeNearestCvps?.find(c => c.company?.toLowerCase() === companyName.toLowerCase());
+                    if (existing) {
+                        existing.pestle_vector = comp.pestle_vector;
+                        existing.porter_vector = comp.porter_vector;
+                    }
+                }
+            } catch (err) {
+                console.warn('Failed to load peer profile for overlay:', err);
+            }
+        }
+
+        if (!comp || !comp.pestle_vector || !comp.porter_vector) {
+            alert(`Unable to load benchmark radar vectors for "${companyName}".`);
+            return;
+        }
 
         state.activeOverlayPeer = comp;
-        const modal = document.getElementById('modal-company-profile');
-        if (modal) modal.classList.remove('active');
 
-        // Redraw radars on both main and sidebar
+        // Redraw radars on both main and sidebar canvases WITHOUT opening/closing the modal
         const canvasPestle = document.getElementById('canvas-pestle');
         const sideCanvasPestle = document.getElementById('sidebar-canvas-pestle');
         const canvasPorter = document.getElementById('canvas-porter');

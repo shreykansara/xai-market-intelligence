@@ -15,12 +15,12 @@ if %ERRORLEVEL% NEQ 0 (
 )
 
 echo [1/2] Starting Omniscope AI Backend and Web Server...
-echo Server running at http://localhost:5000
-echo Admin Console available at http://localhost:5000/admin
+echo Web Application will open at http://127.0.0.1:5000
+echo Admin Console available at   http://127.0.0.1:5000/admin
 echo.
 
-:: Open default browser after 2 seconds in background
-start "" cmd /c "timeout /t 2 /nobreak >nul & start http://localhost:5000"
+:: Automatically launch browser once server is listening
+start "" cmd /c "powershell -Command \"while (!(Test-NetConnection -ComputerName 127.0.0.1 -Port 5000 -InformationLevel Quiet)) { Start-Sleep -Milliseconds 400 }; Start-Process 'http://127.0.0.1:5000'\""
 
 :: Launch the main Flask server
 python server.py

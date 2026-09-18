@@ -170,7 +170,7 @@ export class SalesWorkflow {
                     if (comp) this.callbacks.onPeerRadarOverlay?.(comp);
                     return;
                 }
-                const profileBtn = e.target.closest('.company-profile-btn, .btn-peer-action');
+                const profileBtn = e.target.closest('.company-profile-btn, .btn-peer-action:not(.btn-peer-radar)');
                 if (profileBtn) {
                     const comp = profileBtn.dataset.company;
                     if (comp) {
@@ -191,20 +191,28 @@ export class SalesWorkflow {
         if (type === 'retail') {
             this.btnPresetRetail?.classList.add('active');
             this.btnPresetTech?.classList.remove('active');
-            const sampleCsv = `Period,Revenue_USD,Change_Pct,Notes
-2026-07-W2 (Jul 08-14),118500,-16.8,Tariff Escalation Anticipation & Pre-emptive Port Ingestion
-2026-07-W4 (Jul 22-28),104200,-12.1,Red Sea Maritime Shipping Disruptions & Logistics Delays
-2026-08-W2 (Aug 05-11),132400,+27.1,Digital-First Neighbourhood Format Launch & Retail Store Unveiling
-2026-08-W4 (Aug 19-25),134100,+1.3,Standard Consumer Energy Tax Holiday & Mid-Quarter Equilibrium`;
+            const sampleCsv = `Date,Revenue_USD
+2026-07-01 to 2026-07-07,142500
+2026-07-08 to 2026-07-14,118500
+2026-07-15 to 2026-07-21,112000
+2026-07-22 to 2026-07-28,98400
+2026-08-01 to 2026-08-07,105000
+2026-08-08 to 2026-08-14,133500
+2026-08-15 to 2026-08-21,128000
+2026-08-22 to 2026-08-28,134100`;
             this.parseAndSetRevenueSeries(sampleCsv, 'retail_apparel_sales_jul_aug_2026.csv');
         } else {
             this.btnPresetTech?.classList.add('active');
             this.btnPresetRetail?.classList.remove('active');
-            const sampleCsv = `Period,Revenue_USD,Change_Pct,Notes
-2026-07-W1 (Jul 01-07),245000,+18.4,Enterprise LLM Cloud Migration Acceleration & Contract Renewals
-2026-07-W3 (Jul 15-21),208000,-15.1,Global Semiconductor Supply Chain Bottleneck & Hardware Allocation Delay
-2026-08-W1 (Aug 01-07),215000,+3.4,Mid-Summer Enterprise SaaS Expansion & Routine Upsells
-2026-08-W3 (Aug 15-21),172000,-20.0,EU AI Act Stringent Sovereign Compliance Enforcement Pause`;
+            const sampleCsv = `Date,Revenue_USD
+2026-07-01 to 2026-07-07,245000
+2026-07-08 to 2026-07-14,230000
+2026-07-15 to 2026-07-21,195000
+2026-07-22 to 2026-07-28,212000
+2026-08-01 to 2026-08-07,219000
+2026-08-08 to 2026-08-14,240000
+2026-08-15 to 2026-08-21,188000
+2026-08-22 to 2026-08-28,205000`;
             this.parseAndSetRevenueSeries(sampleCsv, 'enterprise_tech_saas_jul_aug_2026.csv');
         }
     }
@@ -218,69 +226,117 @@ export class SalesWorkflow {
         reader.readAsText(file);
     }
 
+    detectIntervalType(dateStr) {
+        if (!dateStr) return 'Periodic';
+        const lower = dateStr.toLowerCase();
+        if (lower.includes('to') || lower.includes(' - ') || lower.includes(' – ') || lower.includes('through') || lower.includes('..')) {
+            return 'Weekly / Date Range';
+        }
+        if (/^\d{4}[-/.]\d{1,2}$/.test(dateStr.trim()) || /^(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)/i.test(dateStr.trim()) && !/\d{1,2},/.test(dateStr)) {
+            return 'Monthly Aggregate';
+        }
+        if (/^\d{4}[-/.]\d{1,2}[-/.]\d{1,2}$/.test(dateStr.trim()) || /^\d{1,2}[-/.]\d{1,2}[-/.]\d{4}$/.test(dateStr.trim())) {
+            return 'Daily Record';
+        }
+        return 'Date Interval';
+    }
 
     parseAndSetRevenueSeries(content, filename = 'sales_data.csv') {
         const lines = content.split(/\r?\n/).map(l => l.trim()).filter(l => l.length > 0);
-        const series = [];
+        const rawRows = [];
 
         if (filename.endsWith('.json')) {
             try {
                 const jsonObj = JSON.parse(content);
                 const arr = Array.isArray(jsonObj) ? jsonObj : (jsonObj.data || jsonObj.revenue_series || []);
                 arr.forEach(item => {
-                    series.push({
-                        period: item.period || item.date || item.quarter || 'Q1',
-                        revenue: parseFloat(item.revenue || item.sales || item.value || 0),
-                        change_pct: parseFloat(item.change_pct || item.change || 0),
-                        notes: item.notes || item.description || ''
-                    });
+                    const dateVal = item.date || item.period || item.date_range || item.range || Object.values(item)[0] || '';
+                    const revVal = item.revenue !== undefined ? item.revenue : (item.sales !== undefined ? item.sales : (item.metric !== undefined ? item.metric : Object.values(item)[1]));
+                    const revClean = parseFloat(String(revVal).replace(/[\$,\s]/g, '')) || 0.0;
+                    if (dateVal) {
+                        rawRows.push({ period: String(dateVal).trim(), revenue: revClean });
+                    }
                 });
             } catch (err) {
-                alert('Invalid JSON file format.');
+                alert('Invalid JSON file format. Expecting array of { date, revenue } objects.');
                 return;
             }
         } else {
             let headerFound = false;
-            lines.forEach(line => {
+            lines.forEach((line, idx) => {
+                // Support comma-separated 2 columns
                 const parts = line.split(',').map(p => p.trim().replace(/^["']|["']$/g, ''));
                 if (parts.length >= 2) {
                     const first = parts[0].toLowerCase();
-                    if (!headerFound && (first.includes('date') || first.includes('period') || first.includes('quarter'))) {
+                    const second = parts[1].toLowerCase();
+                    if (!headerFound && (first.includes('date') || first.includes('period') || first.includes('range') || second.includes('rev') || second.includes('sale'))) {
                         headerFound = true;
                         return;
                     }
                     const period = parts[0];
-                    const val = parseFloat(parts[1]) || 0.0;
-                    const chg = parts.length >= 3 ? (parseFloat(parts[2]) || 0.0) : 0.0;
-                    const notes = parts.length >= 4 ? parts.slice(3).join(', ') : '';
-                    series.push({ period, revenue: val, change_pct: chg, notes: notes });
+                    const revClean = parseFloat(parts[1].replace(/[\$,\s]/g, '')) || 0.0;
+                    if (period) {
+                        rawRows.push({ period, revenue: revClean });
+                    }
                 }
             });
         }
 
-        if (series.length === 0) {
-            alert('No valid revenue rows detected in file.');
+        if (rawRows.length === 0) {
+            alert('No valid 2-column (Date, Revenue) data rows detected in file.');
             return;
         }
 
+        // Compute sequential percentage fluctuation (ΔS) automatically from the 2 columns
+        const series = rawRows.map((row, idx) => {
+            let change_pct = 0.0;
+            if (idx > 0) {
+                const prevRev = rawRows[idx - 1].revenue;
+                if (prevRev > 0) {
+                    change_pct = parseFloat((((row.revenue - prevRev) / prevRev) * 100.0).toFixed(1));
+                }
+            }
+            const interval_type = this.detectIntervalType(row.period);
+            return {
+                period: row.period,
+                revenue: row.revenue,
+                change_pct: change_pct,
+                interval_type: interval_type,
+                notes: `${interval_type}: Recorded Revenue of $${Number(row.revenue).toLocaleString()}`
+            };
+        });
+
         this.parsedSeries = series;
         if (this.fileNameLabel) this.fileNameLabel.textContent = filename;
-        if (this.fileCountTag) this.fileCountTag.textContent = `${series.length} periods loaded`;
+        if (this.fileCountTag) this.fileCountTag.textContent = `${series.length} periods loaded (2-column format)`;
         if (this.fileStatusBar) this.fileStatusBar.classList.remove('hidden');
 
         // Render preview table
         const previewBox = document.getElementById('revenue-input-preview-box');
         const previewTbody = document.getElementById('revenue-preview-tbody');
         if (previewTbody) {
-            previewTbody.innerHTML = series.map(item => {
-                const chgColor = item.change_pct < 0 ? '#ff4d4f' : (item.change_pct > 0 ? '#00FF66' : '#8892b0');
+            previewTbody.innerHTML = series.map((item, idx) => {
+                const isBaseline = idx === 0;
+                const chgColor = isBaseline ? '#8892b0' : (item.change_pct < 0 ? '#ff4d4f' : (item.change_pct > 0 ? '#00FF66' : '#8892b0'));
                 const chgSign = item.change_pct > 0 ? '+' : '';
+                const chgDisplay = isBaseline ? '0.0% (Baseline)' : `${chgSign}${item.change_pct.toFixed(1)}%`;
                 return `
                     <tr>
-                        <td style="font-weight: 600; color: #fff; padding: 6px 10px;">${CompanyIntelligence.escapeHtml(item.period)}</td>
-                        <td style="color: var(--text-muted); font-family: monospace; padding: 6px 10px;">$${Number(item.revenue).toLocaleString()}</td>
-                        <td style="font-weight: 700; color: ${chgColor}; font-family: monospace; padding: 6px 10px;">${chgSign}${item.change_pct.toFixed(1)}%</td>
-                        <td style="color: var(--text-muted); font-style: italic; padding: 6px 10px;">${CompanyIntelligence.escapeHtml(item.notes || 'Operational Performance')}</td>
+                        <td style="font-weight: 600; color: #fff; padding: 7px 10px;">
+                            <i class="fa-regular fa-calendar-check" style="color: var(--accent-cyan); font-size: 11px; margin-right: 6px;"></i>
+                            ${CompanyIntelligence.escapeHtml(item.period)}
+                        </td>
+                        <td style="color: #00E5FF; font-weight: 600; font-family: monospace; padding: 7px 10px;">
+                            $${Number(item.revenue).toLocaleString()}
+                        </td>
+                        <td style="font-weight: 700; color: ${chgColor}; font-family: monospace; padding: 7px 10px;">
+                            ${chgDisplay}
+                        </td>
+                        <td style="color: var(--text-muted); font-size: 11.5px; padding: 7px 10px;">
+                            <span class="badge-tag" style="background: rgba(255,255,255,0.06); padding: 3px 8px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.1);">
+                                ${CompanyIntelligence.escapeHtml(item.interval_type)}
+                            </span>
+                        </td>
                     </tr>
                 `;
             }).join('');
@@ -307,7 +363,7 @@ export class SalesWorkflow {
             this.state.activeNearestCvps = data.nearest_cvps || [];
             this.state.activeClusters = data.active_clusters || [];
 
-            this.renderFluctuationClusters(data.active_clusters || []);
+            this.renderInvestmentScore(data.investment_prognosis || null);
             this.renderLaggingNewsMatrix(data.matched_news || []);
             
             ChartVisualizer.drawPestleCanvas(this.canvasPestle, this.state.activePestleVector);
@@ -337,6 +393,161 @@ export class SalesWorkflow {
         } finally {
             this.btnAnalyze.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles"></i> Match Revenue Fluctuation & Filter Relevant Market Clusters`;
             this.btnAnalyze.disabled = false;
+        }
+    }
+
+    renderInvestmentScore(prognosis) {
+        if (!prognosis) return;
+
+        const badgeTier = document.getElementById('badge-investment-tier');
+        const pillRec = document.getElementById('pill-investment-rec');
+        const gaugeCircle = document.getElementById('gauge-investment-circle');
+        const valScore = document.getElementById('val-investment-score');
+        const valMomentum = document.getElementById('val-trailing-momentum');
+        const valVelocity = document.getElementById('val-growth-velocity');
+        const valOutlook = document.getElementById('val-forward-outlook');
+        const boxVerdict = document.getElementById('box-executive-verdict');
+        const textVerdict = document.getElementById('text-investment-verdict');
+
+        const statusMomentum = document.getElementById('status-factor-momentum');
+        const barMomentum = document.getElementById('bar-factor-momentum');
+        const statusGrowth = document.getElementById('status-factor-growth');
+        const barGrowth = document.getElementById('bar-factor-growth');
+        const statusResilience = document.getElementById('status-factor-resilience');
+        const barResilience = document.getElementById('bar-factor-resilience');
+        const statusRecovery = document.getElementById('status-factor-recovery');
+        const barRecovery = document.getElementById('bar-factor-recovery');
+
+        const listCatalysts = document.getElementById('list-investment-catalysts');
+        const listDeterrents = document.getElementById('list-investment-deterrents');
+
+        // Tier badge & Recommendation pill
+        if (badgeTier) {
+            badgeTier.textContent = prognosis.tier_label || prognosis.tier;
+            badgeTier.className = `investment-tier-badge ${prognosis.tier_badge || 'tier-mod'}`;
+        }
+        if (pillRec) {
+            pillRec.textContent = prognosis.recommendation || 'MONITOR';
+            pillRec.className = `investment-recommendation-pill pill-${prognosis.tier_badge || 'tier-mod'}`;
+        }
+
+        // Animated Radial Gauge
+        const targetScore = prognosis.score || 0;
+        const color = prognosis.color || '#00E5FF';
+        const circumference = 427.26; // 2 * pi * 68
+
+        if (gaugeCircle) {
+            gaugeCircle.style.stroke = color;
+            const offset = circumference - (circumference * (targetScore / 100));
+            requestAnimationFrame(() => {
+                gaugeCircle.style.transition = 'stroke-dashoffset 1.4s cubic-bezier(0.16, 1, 0.3, 1)';
+                gaugeCircle.style.strokeDashoffset = offset.toFixed(2);
+            });
+        }
+
+        // Score number counter animation
+        if (valScore) {
+            valScore.style.color = color;
+            const duration = 1200;
+            const start = performance.now();
+            const animateScore = (time) => {
+                const elapsed = time - start;
+                const progress = Math.min(elapsed / duration, 1);
+                const ease = progress === 1 ? 1 : 1 - Math.pow(2, -10 * progress);
+                const currentVal = Math.round(ease * targetScore);
+                valScore.textContent = currentVal;
+                if (progress < 1) {
+                    requestAnimationFrame(animateScore);
+                } else {
+                    valScore.textContent = targetScore;
+                }
+            };
+            requestAnimationFrame(animateScore);
+        }
+
+        // Submetrics
+        if (valMomentum) {
+            const m = prognosis.growth_rate_trailing ?? 0;
+            valMomentum.textContent = `${m >= 0 ? '+' : ''}${m.toFixed(1)}%`;
+            valMomentum.style.color = m >= 0 ? 'var(--accent-green)' : '#f87171';
+        }
+        if (valVelocity) {
+            const v = prognosis.acceleration_rate ?? 0;
+            valVelocity.textContent = `${v >= 0 ? '+' : ''}${v.toFixed(1)}%`;
+            valVelocity.style.color = v >= 0 ? 'var(--accent-green)' : '#f87171';
+        }
+        if (valOutlook) {
+            valOutlook.textContent = prognosis.growth_outlook || '--';
+            valOutlook.style.color = color;
+        }
+
+        // Executive verdict narrative
+        if (textVerdict) {
+            textVerdict.textContent = prognosis.verdict || '';
+        }
+        if (boxVerdict) {
+            boxVerdict.className = `executive-verdict-box verdict-${prognosis.tier_badge || 'tier-mod'}`;
+        }
+
+        // 4 Factors
+        const f = prognosis.factors || {};
+        if (f.recent_momentum) {
+            if (statusMomentum) statusMomentum.textContent = `${f.recent_momentum.status} (${f.recent_momentum.score}/100)`;
+            if (barMomentum) {
+                barMomentum.style.width = `${Math.min(100, Math.max(0, f.recent_momentum.score))}%`;
+                barMomentum.style.background = f.recent_momentum.score >= 60 ? 'linear-gradient(90deg, #00FF66, #00E5FF)' : (f.recent_momentum.score < 45 ? 'linear-gradient(90deg, #f87171, #ef4444)' : 'linear-gradient(90deg, #f59e0b, #eab308)');
+            }
+        }
+        if (f.growth_velocity) {
+            if (statusGrowth) statusGrowth.textContent = `${f.growth_velocity.status} (${f.growth_velocity.score}/100)`;
+            if (barGrowth) {
+                barGrowth.style.width = `${Math.min(100, Math.max(0, f.growth_velocity.score))}%`;
+                barGrowth.style.background = f.growth_velocity.score >= 60 ? 'linear-gradient(90deg, #00FF66, #00E5FF)' : (f.growth_velocity.score < 45 ? 'linear-gradient(90deg, #f87171, #ef4444)' : 'linear-gradient(90deg, #f59e0b, #eab308)');
+            }
+        }
+        if (f.macro_resilience) {
+            if (statusResilience) statusResilience.textContent = `${f.macro_resilience.status} (${f.macro_resilience.score}/100)`;
+            if (barResilience) {
+                barResilience.style.width = `${Math.min(100, Math.max(0, f.macro_resilience.score))}%`;
+                barResilience.style.background = f.macro_resilience.score >= 60 ? 'linear-gradient(90deg, #00FF66, #00E5FF)' : (f.macro_resilience.score < 45 ? 'linear-gradient(90deg, #f87171, #ef4444)' : 'linear-gradient(90deg, #f59e0b, #eab308)');
+            }
+        }
+        if (f.shock_recovery) {
+            if (statusRecovery) statusRecovery.textContent = `${f.shock_recovery.status} (${f.shock_recovery.score}/100)`;
+            if (barRecovery) {
+                barRecovery.style.width = `${Math.min(100, Math.max(0, f.shock_recovery.score))}%`;
+                barRecovery.style.background = f.shock_recovery.score >= 60 ? 'linear-gradient(90deg, #00FF66, #00E5FF)' : (f.shock_recovery.score < 50 ? 'linear-gradient(90deg, #f87171, #ef4444)' : 'linear-gradient(90deg, #f59e0b, #eab308)');
+            }
+        }
+
+        // Catalysts list
+        if (listCatalysts) {
+            const cats = prognosis.catalysts || [];
+            if (cats.length === 0) {
+                listCatalysts.innerHTML = '<li><span class="text-dim">No acute positive catalysts isolated.</span></li>';
+            } else {
+                listCatalysts.innerHTML = cats.map(c => `
+                    <li class="insight-bullet-item catalyst-item">
+                        <i class="fa-solid fa-circle-check color-green"></i>
+                        <span>${CompanyIntelligence.escapeHtml(c)}</span>
+                    </li>
+                `).join('');
+            }
+        }
+
+        // Deterrents list
+        if (listDeterrents) {
+            const dets = prognosis.deterrents || [];
+            if (dets.length === 0) {
+                listDeterrents.innerHTML = '<li><span class="text-dim">No severe systemic deterrents identified.</span></li>';
+            } else {
+                listDeterrents.innerHTML = dets.map(d => `
+                    <li class="insight-bullet-item deterrent-item">
+                        <i class="fa-solid fa-triangle-exclamation color-amber"></i>
+                        <span>${CompanyIntelligence.escapeHtml(d)}</span>
+                    </li>
+                `).join('');
+            }
         }
     }
 
@@ -540,13 +751,17 @@ export class SalesWorkflow {
         this.revenuePeersList.innerHTML = matches.map((m, idx) => `
             <div class="cvp-match-card" style="border-left: 4px solid ${borderColors[idx % 3]};">
                 <div class="cvp-match-header">
-                    <span>
-                        <button type="button" class="company-profile-btn" data-company="${CompanyIntelligence.escapeHtml(m.company)}" title="Click to view on-DB company intelligence">
-                            <span>${CompanyIntelligence.escapeHtml(m.company)}</span>
-                            <i class="fa-solid fa-arrow-up-right-from-square" style="font-size: 11px; opacity: 0.8;"></i>
-                        </button>
-                        <span class="cvp-match-sector-tag"><i class="fa-solid fa-building"></i> ${CompanyIntelligence.escapeHtml(m.sector || 'Enterprise')}</span>
-                    </span>
+                    <div class="cvp-match-identity">
+                        <div class="cvp-match-company-row">
+                            <button type="button" class="company-profile-btn" data-company="${CompanyIntelligence.escapeHtml(m.company)}" title="Click to view on-DB company intelligence">
+                                <span>${CompanyIntelligence.escapeHtml(m.company)}</span>
+                                <i class="fa-solid fa-arrow-up-right-from-square" style="font-size: 11px; opacity: 0.8;"></i>
+                            </button>
+                        </div>
+                        <div class="cvp-match-sector-row">
+                            <span class="cvp-match-sector-tag"><i class="fa-solid fa-building"></i> ${CompanyIntelligence.escapeHtml(m.sector || 'Enterprise')}</span>
+                        </div>
+                    </div>
                     <span class="cvp-match-badge" style="background: rgba(0, 229, 255, 0.12); color: #00E5FF; border: 1px solid rgba(0, 229, 255, 0.3);">${m.similarity_pct}% Vector Similarity</span>
                 </div>
                 <p class="cvp-match-cvp">"${CompanyIntelligence.escapeHtml(m.cvp)}"</p>

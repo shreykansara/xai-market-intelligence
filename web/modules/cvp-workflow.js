@@ -86,7 +86,7 @@ export class CvpWorkflow {
                     if (comp) this.callbacks.onPeerRadarOverlay?.(comp);
                     return;
                 }
-                const profileBtn = e.target.closest('.company-profile-btn, .btn-peer-action');
+                const profileBtn = e.target.closest('.company-profile-btn, .btn-peer-action:not(.btn-peer-radar)');
                 if (profileBtn) {
                     const comp = profileBtn.dataset.company;
                     if (comp) {
@@ -171,13 +171,17 @@ export class CvpWorkflow {
         const html = matches.map((m, idx) => `
             <div class="cvp-match-card" style="border-left: 4px solid ${borderColors[idx % borderColors.length]};">
                 <div class="cvp-match-header">
-                    <span>
-                        <button type="button" class="company-profile-btn" data-company="${CompanyIntelligence.escapeHtml(m.company)}" title="Click to view on-DB company intelligence">
-                            <span>${CompanyIntelligence.escapeHtml(m.company)}</span>
-                            <i class="fa-solid fa-arrow-up-right-from-square" style="font-size: 11px; opacity: 0.8;"></i>
-                        </button>
-                        <span class="cvp-match-sector-tag"><i class="fa-solid fa-building"></i> ${CompanyIntelligence.escapeHtml(m.sector || 'Enterprise')}</span>
-                    </span>
+                    <div class="cvp-match-identity">
+                        <div class="cvp-match-company-row">
+                            <button type="button" class="company-profile-btn" data-company="${CompanyIntelligence.escapeHtml(m.company)}" title="Click to view on-DB company intelligence">
+                                <span>${CompanyIntelligence.escapeHtml(m.company)}</span>
+                                <i class="fa-solid fa-arrow-up-right-from-square" style="font-size: 11px; opacity: 0.8;"></i>
+                            </button>
+                        </div>
+                        <div class="cvp-match-sector-row">
+                            <span class="cvp-match-sector-tag"><i class="fa-solid fa-building"></i> ${CompanyIntelligence.escapeHtml(m.sector || 'Enterprise')}</span>
+                        </div>
+                    </div>
                     <span class="cvp-match-badge">${m.similarity_pct}% CVP Similarity</span>
                 </div>
                 <p class="cvp-match-cvp">"${CompanyIntelligence.escapeHtml(m.cvp)}"</p>

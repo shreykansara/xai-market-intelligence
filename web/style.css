@@ -290,19 +290,40 @@ body {
 .cvp-match-header {
     display: flex;
     justify-content: space-between;
-    align-items: center;
+    align-items: flex-start;
+    gap: 12px;
     font-weight: 700;
     font-size: 13px;
     font-family: var(--font-heading);
+}
+.cvp-match-identity {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    flex: 1;
+    min-width: 0;
+}
+.cvp-match-company-row {
+    display: flex;
+    align-items: center;
+    width: 100%;
+}
+.cvp-match-sector-row {
+    display: flex;
+    align-items: center;
+    width: 100%;
 }
 .cvp-match-badge {
     background: rgba(0, 255, 102, 0.12);
     color: var(--accent-green);
     border: 1px solid rgba(0, 255, 102, 0.3);
-    padding: 2px 8px;
+    padding: 3px 8px;
     border-radius: var(--radius-sm);
     font-size: 11px;
     font-weight: 700;
+    white-space: nowrap;
+    flex-shrink: 0;
 }
 .cvp-match-cvp {
     font-size: 13px;
@@ -314,9 +335,16 @@ body {
     font-weight: 600;
     color: var(--text-muted);
     background: rgba(255, 255, 255, 0.05);
-    padding: 2px 6px;
+    padding: 2px 7px;
     border-radius: var(--radius-sm);
-    margin-left: 6px;
+    margin-left: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
 }
 
 /* Sidebar Benchmark Peer Cards */
@@ -430,13 +458,14 @@ body {
 }
 
 .sidebar {
-    width: 340px;
-    min-width: 340px;
+    width: 410px;
+    min-width: 400px;
+    max-width: 440px;
     background: var(--bg-surface);
     border-right: 1px solid var(--border-color);
     display: flex;
     flex-direction: column;
-    padding: 20px 16px;
+    padding: 20px 18px;
     gap: 14px;
     overflow-y: auto;
     max-height: 100vh;
@@ -2964,6 +2993,425 @@ body {
     display: flex;
     gap: 10px;
     margin-top: 8px;
+}
+
+/* ===================================================================
+   EXECUTIVE INVESTMENT CONFIDENCE SCORE & PROGNOSIS STYLES
+   =================================================================== */
+.investment-hero-card {
+    background: linear-gradient(135deg, rgba(16, 24, 40, 0.95), rgba(11, 15, 25, 0.98));
+    border: 1px solid rgba(0, 229, 255, 0.25);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45), 0 0 30px rgba(0, 229, 255, 0.08);
+    border-radius: var(--radius-lg);
+    padding: 24px;
+    margin-bottom: 24px;
+    position: relative;
+    overflow: hidden;
+}
+
+.investment-hero-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, #00FF66, #00E5FF, #3B82F6);
+}
+
+.investment-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 16px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.investment-title-group {
+    flex: 1;
+    min-width: 280px;
+}
+
+.investment-eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #00E5FF;
+    background: rgba(0, 229, 255, 0.1);
+    border: 1px solid rgba(0, 229, 255, 0.25);
+    border-radius: 999px;
+    padding: 3px 10px;
+    margin-bottom: 8px;
+}
+
+.investment-main-heading {
+    font-size: 20px;
+    font-weight: 800;
+    color: #ffffff;
+    letter-spacing: -0.01em;
+    margin: 4px 0 6px 0;
+    font-family: var(--font-heading);
+}
+
+.investment-subtitle {
+    font-size: 13px;
+    color: var(--text-muted);
+    line-height: 1.5;
+    margin: 0;
+    max-width: 720px;
+}
+
+.investment-badge-wrap {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 8px;
+}
+
+.investment-tier-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 6px 14px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    border-radius: 6px;
+}
+
+.investment-tier-badge.tier-high {
+    background: rgba(0, 255, 102, 0.15);
+    color: #00FF66;
+    border: 1px solid rgba(0, 255, 102, 0.4);
+    box-shadow: 0 0 14px rgba(0, 255, 102, 0.25);
+}
+
+.investment-tier-badge.tier-mod {
+    background: rgba(0, 229, 255, 0.15);
+    color: #00E5FF;
+    border: 1px solid rgba(0, 229, 255, 0.4);
+    box-shadow: 0 0 14px rgba(0, 229, 255, 0.25);
+}
+
+.investment-tier-badge.tier-watch {
+    background: rgba(255, 179, 0, 0.15);
+    color: #FFB300;
+    border: 1px solid rgba(255, 179, 0, 0.4);
+    box-shadow: 0 0 14px rgba(255, 179, 0, 0.25);
+}
+
+.investment-tier-badge.tier-risk {
+    background: rgba(255, 77, 79, 0.15);
+    color: #FF4D4F;
+    border: 1px solid rgba(255, 77, 79, 0.4);
+    box-shadow: 0 0 14px rgba(255, 77, 79, 0.25);
+}
+
+.investment-recommendation-pill {
+    display: inline-flex;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-secondary);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.investment-score-grid {
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    gap: 24px;
+    margin: 20px 0;
+}
+
+@media (max-width: 900px) {
+    .investment-score-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.investment-gauge-card {
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: var(--radius-md);
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+.radial-gauge-container {
+    position: relative;
+    width: 150px;
+    height: 150px;
+}
+
+.radial-gauge-svg {
+    width: 100%;
+    height: 100%;
+    transform: rotate(-90deg);
+}
+
+.gauge-bg-circle {
+    fill: none;
+    stroke: rgba(255, 255, 255, 0.08);
+    stroke-width: 10;
+}
+
+.gauge-fill-circle {
+    fill: none;
+    stroke-width: 10;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 1.4s cubic-bezier(0.16, 1, 0.3, 1), stroke 0.4s ease;
+}
+
+.radial-gauge-content {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+}
+
+.gauge-score-value {
+    font-size: 38px;
+    font-weight: 900;
+    font-family: var(--font-heading);
+    line-height: 1;
+}
+
+.gauge-score-max {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-weight: 600;
+    margin-top: 2px;
+}
+
+.gauge-score-label {
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    color: var(--text-secondary);
+    margin-top: 4px;
+}
+
+.gauge-submetrics-row {
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    width: 100%;
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+.submetric-box {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+}
+
+.submetric-label {
+    font-size: 10px;
+    color: var(--text-muted);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.submetric-val {
+    font-size: 13px;
+    font-weight: 800;
+    font-family: var(--font-heading);
+}
+
+.submetric-divider {
+    width: 1px;
+    height: 24px;
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.investment-breakdown-card {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.executive-verdict-box {
+    background: rgba(0, 229, 255, 0.04);
+    border: 1px solid rgba(0, 229, 255, 0.2);
+    border-left: 4px solid #00E5FF;
+    border-radius: var(--radius-sm);
+    padding: 14px 16px;
+}
+
+.executive-verdict-box.verdict-tier-high {
+    background: rgba(0, 255, 102, 0.05);
+    border-color: rgba(0, 255, 102, 0.25);
+    border-left: 4px solid #00FF66;
+}
+
+.executive-verdict-box.verdict-tier-mod {
+    background: rgba(0, 229, 255, 0.05);
+    border-color: rgba(0, 229, 255, 0.25);
+    border-left: 4px solid #00E5FF;
+}
+
+.executive-verdict-box.verdict-tier-watch {
+    background: rgba(255, 179, 0, 0.05);
+    border-color: rgba(255, 179, 0, 0.25);
+    border-left: 4px solid #FFB300;
+}
+
+.executive-verdict-box.verdict-tier-risk {
+    background: rgba(255, 77, 79, 0.06);
+    border-color: rgba(255, 77, 79, 0.3);
+    border-left: 4px solid #FF4D4F;
+}
+
+.verdict-tag-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    color: #ffffff;
+    margin-bottom: 6px;
+}
+
+.verdict-narrative {
+    font-size: 13px;
+    color: var(--text-primary);
+    line-height: 1.55;
+    margin: 0;
+}
+
+.factor-meters-container {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+
+@media (max-width: 600px) {
+    .factor-meters-container {
+        grid-template-columns: 1fr;
+    }
+}
+
+.factor-meter-item {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: var(--radius-sm);
+    padding: 10px 12px;
+}
+
+.factor-meter-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 11px;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+}
+
+.factor-meter-header i {
+    color: #00E5FF;
+    margin-right: 4px;
+}
+
+.factor-status-pill {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.factor-bar-bg {
+    width: 100%;
+    height: 6px;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 999px;
+    overflow: hidden;
+}
+
+.factor-bar-fill {
+    height: 100%;
+    border-radius: 999px;
+    transition: width 1s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.investment-insights-dual-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    padding-top: 18px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+@media (max-width: 768px) {
+    .investment-insights-dual-row {
+        grid-template-columns: 1fr;
+    }
+}
+
+.insight-column {
+    background: rgba(0, 0, 0, 0.25);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: var(--radius-md);
+    padding: 14px 16px;
+}
+
+.catalyst-col {
+    border-top: 3px solid #00FF66;
+}
+
+.deterrent-col {
+    border-top: 3px solid #FFB300;
+}
+
+.insight-col-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: #ffffff;
+    margin-bottom: 10px;
+}
+
+.insight-bullet-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.insight-bullet-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    font-size: 12px;
+    line-height: 1.45;
+    color: var(--text-secondary);
+}
+
+.insight-bullet-item i {
+    margin-top: 3px;
+    flex-shrink: 0;
 }
 
 /* ===================================================================
