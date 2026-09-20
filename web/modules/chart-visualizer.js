@@ -1,6 +1,7 @@
 /**
  * Omniscope AI - Chart Visualizer Module
  * Handles HTML5 Canvas Radar Rendering for PESTLE (6-axis) & Porter's 5 Forces (5-axis).
+ * Designed with an institutional financial palette (Cobalt & Slate).
  */
 
 export class ChartVisualizer {
@@ -11,22 +12,23 @@ export class ChartVisualizer {
         const height = canvasObj.height;
         const centerX = width / 2;
         const centerY = height / 2;
-        const radius = Math.min(centerX, centerY) - 35;
+        const radius = Math.min(centerX, centerY) - 36;
         const labels = ['Political', 'Economic', 'Social', 'Tech', 'Legal', 'Enviro'];
         const numAxes = labels.length;
 
         ctx.clearRect(0, 0, width, height);
 
-        // Grid circles
+        // Concentric grid circles (subtle slate guidelines)
         for (let level = 1; level <= 4; level++) {
             const r = (radius / 4) * level;
             ctx.beginPath();
             ctx.arc(centerX, centerY, r, 0, Math.PI * 2);
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.07)';
+            ctx.lineWidth = 1;
             ctx.stroke();
         }
 
-        // Axes & Labels
+        // Axes & Axis Labels
         for (let i = 0; i < numAxes; i++) {
             const angle = (Math.PI * 2 / numAxes) * i - (Math.PI / 2);
             const x = centerX + Math.cos(angle) * radius;
@@ -36,18 +38,19 @@ export class ChartVisualizer {
             ctx.moveTo(centerX, centerY);
             ctx.lineTo(x, y);
             ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+            ctx.lineWidth = 1;
             ctx.stroke();
 
-            const lx = centerX + Math.cos(angle) * (radius + 18);
-            const ly = centerY + Math.sin(angle) * (radius + 18);
-            ctx.font = '10px Inter';
-            ctx.fillStyle = '#00FF66';
+            const lx = centerX + Math.cos(angle) * (radius + 20);
+            const ly = centerY + Math.sin(angle) * (radius + 20);
+            ctx.font = '500 11px Inter, sans-serif';
+            ctx.fillStyle = '#94A3B8';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.fillText(labels[i], lx, ly);
         }
 
-        // Peer Vector Polygon (cyan dashed line)
+        // Peer Vector Polygon (Slate dashed overlay)
         if (peerVector && peerVector.length >= numAxes) {
             ctx.beginPath();
             for (let i = 0; i < numAxes; i++) {
@@ -60,16 +63,16 @@ export class ChartVisualizer {
                 else ctx.lineTo(x, y);
             }
             ctx.closePath();
-            ctx.fillStyle = 'rgba(0, 229, 255, 0.18)';
+            ctx.fillStyle = 'rgba(148, 163, 184, 0.14)';
             ctx.fill();
-            ctx.strokeStyle = '#00E5FF';
+            ctx.strokeStyle = '#94A3B8';
             ctx.setLineDash([4, 4]);
-            ctx.lineWidth = 2;
+            ctx.lineWidth = 1.5;
             ctx.stroke();
             ctx.setLineDash([]);
         }
 
-        // User Vector Polygon (electric green)
+        // User Vector Polygon (Executive Cobalt Blue)
         ctx.beginPath();
         for (let i = 0; i < numAxes; i++) {
             const val = vector[i] || 0.3;
@@ -81,9 +84,9 @@ export class ChartVisualizer {
             else ctx.lineTo(x, y);
         }
         ctx.closePath();
-        ctx.fillStyle = 'rgba(0, 255, 102, 0.28)';
+        ctx.fillStyle = 'rgba(59, 130, 246, 0.22)';
         ctx.fill();
-        ctx.strokeStyle = '#00FF66';
+        ctx.strokeStyle = '#3B82F6';
         ctx.lineWidth = 2;
         ctx.stroke();
     }
@@ -95,22 +98,23 @@ export class ChartVisualizer {
         const height = canvasObj.height;
         const centerX = width / 2;
         const centerY = height / 2;
-        const radius = Math.min(centerX, centerY) - 35;
+        const radius = Math.min(centerX, centerY) - 36;
         const labels = ['New Entrants', 'Buyer Power', 'Supplier Power', 'Substitutes', 'Rivalry'];
         const numAxes = labels.length;
 
         ctx.clearRect(0, 0, width, height);
 
-        // Grid circles
+        // Concentric grid circles (subtle slate guidelines)
         for (let level = 1; level <= 4; level++) {
             const r = (radius / 4) * level;
             ctx.beginPath();
             ctx.arc(centerX, centerY, r, 0, Math.PI * 2);
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.07)';
+            ctx.lineWidth = 1;
             ctx.stroke();
         }
 
-        // Axes & Labels
+        // Axes & Axis Labels
         for (let i = 0; i < numAxes; i++) {
             const angle = (Math.PI * 2 / numAxes) * i - (Math.PI / 2);
             const x = centerX + Math.cos(angle) * radius;
@@ -120,18 +124,19 @@ export class ChartVisualizer {
             ctx.moveTo(centerX, centerY);
             ctx.lineTo(x, y);
             ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+            ctx.lineWidth = 1;
             ctx.stroke();
 
-            const lx = centerX + Math.cos(angle) * (radius + 18);
-            const ly = centerY + Math.sin(angle) * (radius + 18);
-            ctx.font = '10px Inter';
-            ctx.fillStyle = '#00E5FF';
+            const lx = centerX + Math.cos(angle) * (radius + 20);
+            const ly = centerY + Math.sin(angle) * (radius + 20);
+            ctx.font = '500 11px Inter, sans-serif';
+            ctx.fillStyle = '#94A3B8';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.fillText(labels[i], lx, ly);
         }
 
-        // Peer Vector Polygon (green dashed line)
+        // Peer Vector Polygon (Slate dashed overlay)
         if (peerVector && peerVector.length >= numAxes) {
             ctx.beginPath();
             for (let i = 0; i < numAxes; i++) {
@@ -144,16 +149,16 @@ export class ChartVisualizer {
                 else ctx.lineTo(x, y);
             }
             ctx.closePath();
-            ctx.fillStyle = 'rgba(0, 255, 102, 0.18)';
+            ctx.fillStyle = 'rgba(148, 163, 184, 0.14)';
             ctx.fill();
-            ctx.strokeStyle = '#00FF66';
+            ctx.strokeStyle = '#94A3B8';
             ctx.setLineDash([4, 4]);
-            ctx.lineWidth = 2;
+            ctx.lineWidth = 1.5;
             ctx.stroke();
             ctx.setLineDash([]);
         }
 
-        // User Vector Polygon (cyan)
+        // User Vector Polygon (Executive Cobalt Blue)
         ctx.beginPath();
         for (let i = 0; i < numAxes; i++) {
             const val = vector[i] || 0.3;
@@ -165,9 +170,9 @@ export class ChartVisualizer {
             else ctx.lineTo(x, y);
         }
         ctx.closePath();
-        ctx.fillStyle = 'rgba(0, 229, 255, 0.28)';
+        ctx.fillStyle = 'rgba(59, 130, 246, 0.22)';
         ctx.fill();
-        ctx.strokeStyle = '#00E5FF';
+        ctx.strokeStyle = '#3B82F6';
         ctx.lineWidth = 2;
         ctx.stroke();
     }
@@ -203,4 +208,3 @@ export class ChartVisualizer {
         }
     }
 }
-

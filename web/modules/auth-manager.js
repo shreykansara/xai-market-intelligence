@@ -3,13 +3,13 @@
  * Coordinates end-user registration, login, session persistence, guest migration, and UI state.
  */
 
-import { ApiClient, UserAuthApi, UserHistoryApi } from './api-client.js';
+import { ApiClient, UserAuthApi, UserHistoryApi, AdminApi } from './api-client.js';
 
 export class AuthManager {
     constructor(callbacks = {}) {
         this.callbacks = callbacks;
         this.currentUser = null;
-        this.activeTab = 'login'; // 'login' | 'register'
+        this.activeTab = 'login'; // 'login' | 'register' | 'admin'
         this.initDom();
         this.bindEvents();
     }
@@ -20,8 +20,10 @@ export class AuthManager {
         this.btnCloseAuth = document.getElementById('btn-close-auth');
         this.tabLogin = document.getElementById('tab-auth-login');
         this.tabRegister = document.getElementById('tab-auth-register');
+        this.tabAdmin = document.getElementById('tab-auth-admin');
         this.formLogin = document.getElementById('form-auth-login');
         this.formRegister = document.getElementById('form-auth-register');
+        this.formAdmin = document.getElementById('form-auth-admin');
         this.authAlert = document.getElementById('auth-alert');
 
         // Inputs - Login
@@ -35,6 +37,11 @@ export class AuthManager {
         this.inputRegPassword = document.getElementById('auth-reg-password');
         this.inputRegCompany = document.getElementById('auth-reg-company');
         this.btnRegSubmit = document.getElementById('btn-auth-reg-submit');
+
+        // Inputs - Admin Portal
+        this.inputAdminEmail = document.getElementById('auth-admin-email');
+        this.inputAdminPassword = document.getElementById('auth-admin-password');
+        this.btnAdminSubmit = document.getElementById('btn-auth-admin-submit');
 
         // Demo Quick Actions
         this.btnDemoFounder = document.getElementById('btn-demo-founder');
@@ -54,6 +61,7 @@ export class AuthManager {
         // Tab Switching
         this.tabLogin?.addEventListener('click', () => this.switchTab('login'));
         this.tabRegister?.addEventListener('click', () => this.switchTab('register'));
+        this.tabAdmin?.addEventListener('click', () => this.switchTab('admin'));
 
         // Form Submit - Login
         this.formLogin?.addEventListener('submit', async (e) => {
@@ -65,6 +73,12 @@ export class AuthManager {
         this.formRegister?.addEventListener('submit', async (e) => {
             e.preventDefault();
             await this.handleRegister();
+        });
+
+        // Form Submit - Admin Portal
+        this.formAdmin?.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            await this.handleAdminLogin();
         });
 
         // Demo shortcuts
@@ -96,6 +110,13 @@ export class AuthManager {
                 e.preventDefault();
                 document.querySelectorAll('.user-profile-badge.open').forEach(b => b.classList.remove('open'));
                 window.navigationManager?.switchScreen(document.getElementById('view-user-dashboard'));
+            }
+
+            const btnLanding = e.target.closest('.btn-menu-landing');
+            if (btnLanding) {
+                e.preventDefault();
+                document.querySelectorAll('.user-profile-badge.open').forEach(b => b.classList.remove('open'));
+                window.navigationManager?.switchScreen(document.getElementById('view-landing-page'));
             }
 
             const btnLogout = e.target.closest('.btn-trigger-logout');
@@ -134,6 +155,16 @@ export class AuthManager {
         this.currentUser = null;
         this.renderAuthState();
         this.callbacks.onAuthStateChanged?.(null);
+
+        // Check if landing page was opened with an auth query parameter (e.g. from /admin redirect)
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('auth') === 'admin') {
+            this.openModal('admin');
+        } else if (params.get('auth') === 'login') {
+            this.openModal('login');
+        } else if (params.get('auth') === 'register') {
+            this.openModal('register');
+        }
     }
 
     openModal(tab = 'login') {
@@ -142,8 +173,10 @@ export class AuthManager {
         this.modalAuth?.classList.add('active');
         if (tab === 'login') {
             this.inputLoginEmail?.focus();
-        } else {
+        } else if (tab === 'register') {
             this.inputRegName?.focus();
+        } else if (tab === 'admin') {
+            this.inputAdminEmail?.focus();
         }
     }
 
@@ -154,16 +187,21 @@ export class AuthManager {
 
     switchTab(tab) {
         this.activeTab = tab;
+        [this.tabLogin, this.tabRegister, this.tabAdmin].forEach(t => t?.classList.remove('active'));
+        [this.formLogin, this.formRegister, this.formAdmin].forEach(f => f?.classList.add('hidden'));
+
         if (tab === 'login') {
             this.tabLogin?.classList.add('active');
-            this.tabRegister?.classList.remove('active');
             this.formLogin?.classList.remove('hidden');
-            this.formRegister?.classList.add('hidden');
-        } else {
+            this.inputLoginEmail?.focus();
+        } else if (tab === 'register') {
             this.tabRegister?.classList.add('active');
-            this.tabLogin?.classList.remove('active');
             this.formRegister?.classList.remove('hidden');
-            this.formLogin?.classList.add('hidden');
+            this.inputRegName?.focus();
+        } else if (tab === 'admin') {
+            this.tabAdmin?.classList.add('active');
+            this.formAdmin?.classList.remove('hidden');
+            this.inputAdminEmail?.focus();
         }
         this.hideAlert();
     }
@@ -272,6 +310,42 @@ export class AuthManager {
         }
     }
 
+    async handleAdminLogin() {
+        const email = this.inputAdminEmail?.value.trim();
+        const password = this.inputAdminPassword?.value;
+
+        if (!email || !password) {
+            this.showAlert('Please enter both administrator email and master secret password.');
+            return;
+        }
+
+        if (this.btnAdminSubmit) {
+            this.btnAdminSubmit.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Authenticating Admin Session...';
+            this.btnAdminSubmit.disabled = true;
+        }
+
+        try {
+            const res = await AdminApi.login(email, password);
+            if (res.success && res.token) {
+                ApiClient.setAuthToken(res.token, true);
+                this.closeModal();
+                this.showToast('Administrator authenticated. Launching Ingestion Console...', 'success');
+                setTimeout(() => {
+                    window.location.href = '/admin.html';
+                }, 350);
+            } else {
+                this.showAlert(res.error || 'Access Denied: Invalid administrator credentials. Regular user accounts cannot access the admin console.');
+            }
+        } catch (err) {
+            this.showAlert('Access Denied: Invalid administrator credentials. Regular user accounts cannot access the Ingestion Admin Console.');
+        } finally {
+            if (this.btnAdminSubmit) {
+                this.btnAdminSubmit.innerHTML = '<i class="fa-solid fa-shield-halved"></i> Sign In to Ingestion Admin';
+                this.btnAdminSubmit.disabled = false;
+            }
+        }
+    }
+
     async handleLogout() {
         try {
             await UserAuthApi.logout();
@@ -359,6 +433,13 @@ export class AuthManager {
     renderAuthState() {
         const slots = document.querySelectorAll('.auth-nav-slot');
         slots.forEach(slot => {
+            const isLanding = slot.closest('.landing-navbar');
+            if (isLanding) {
+                // Landing navbar must remain uncluttered without guest buttons
+                slot.innerHTML = '';
+                return;
+            }
+
             if (!this.currentUser) {
                 // Guest mode
                 slot.innerHTML = `
@@ -400,6 +481,10 @@ export class AuthManager {
                             <button type="button" class="menu-item btn-open-history">
                                 <i class="fa-solid fa-clock-rotate-left"></i>
                                 <span>Saved Intelligence Workspace</span>
+                            </button>
+                            <button type="button" class="menu-item btn-menu-landing">
+                                <i class="fa-solid fa-earth-americas"></i>
+                                <span>Public Showcase Page</span>
                             </button>
                             <button type="button" class="menu-item btn-trigger-logout">
                                 <i class="fa-solid fa-arrow-right-from-bracket"></i>

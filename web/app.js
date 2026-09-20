@@ -15,6 +15,15 @@ import { HistoryManager } from './modules/history-manager.js';
 import { DashboardManager } from './modules/dashboard-manager.js';
 
 document.addEventListener('DOMContentLoaded', () => {
+    // Top-level subsystem references (declared at scope top to eliminate TDZ issues)
+    let chatAssistant;
+    let cvpWorkflow;
+    let salesWorkflow;
+    let authManager;
+    let historyManager;
+    let dashboardManager;
+    let nav;
+
     // Centralized Application State
     const state = {
         activeIntelligenceMode: 'cvp',
@@ -27,12 +36,22 @@ document.addEventListener('DOMContentLoaded', () => {
         groqApiKey: localStorage.getItem('groq_api_key') || ''
     };
 
-    // Initialize Assistant Subsystem
-    const chatAssistant = new ChatAssistant(state);
+    // 1. Initialize Assistant Subsystem
+    chatAssistant = new ChatAssistant(state);
     window.chatAssistant = chatAssistant;
 
+    // 2. Initialize User Authentication Subsystem
+    authManager = new AuthManager({
+        onAuthStateChanged: (user) => {
+            historyManager?.updateCountBadges();
+            dashboardManager?.refresh();
+        },
+        onLoginSuccess: (user) => {
+            dashboardManager?.refresh();
+        }
+    });
+    window.authManager = authManager;
 
-    // Initialize CVP Subsystem
     // Helper to keep sidebar radars, active context, and benchmark peers in perfect sync
     function syncSidebarRadars() {
         const sideCanvasPestle = document.getElementById('sidebar-canvas-pestle');
@@ -92,9 +111,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // 4. Update Sidebar Benchmark Peers if present
         if (sidebarNeighborsList && state.activeNearestCvps && state.activeNearestCvps.length > 0) {
-            const borderColors = ['#00FF66', '#00E5FF', '#10B981', '#A855F7', '#FFB300'];
+            const borderColors = ['var(--brand-primary)', 'var(--color-growth)', 'var(--border-medium)', 'var(--color-metric)', 'var(--color-neutral)'];
             sidebarNeighborsList.innerHTML = state.activeNearestCvps.map((m, idx) => `
-                <div class="cvp-match-card" style="border-left: 4px solid ${borderColors[idx % borderColors.length]};">
+                <div class="cvp-match-card" style="border-left: 3px solid ${borderColors[idx % borderColors.length]};">
                     <div class="cvp-match-header">
                         <div class="cvp-match-identity">
                             <div class="cvp-match-company-row">
@@ -145,30 +164,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // Initialize CVP Subsystem
-    const cvpWorkflow = new CvpWorkflow(state, {
-        onCvpEvaluated: (data) => {
-            syncSidebarRadars();
-            const topPeer = data.nearest_cvps?.[0]?.company || 'Industry Benchmark';
-            const topSimilarity = data.nearest_cvps?.[0]?.similarity_pct || 85;
-
-            chatAssistant.appendSystemMessage(`REAL-TIME EMBEDDINGS EVALUATED & 500-COMPANY PEERS ALIGNED
-
-Your Customer Value Proposition: "${CompanyIntelligence.escapeHtml(data.cvp_text)}"
-- Nearest Benchmark Company: **${CompanyIntelligence.escapeHtml(topPeer)}** (${topSimilarity}% Cosine Similarity)
-- Real-time TF-IDF & Distance comparison executed across all 500 benchmark companies.
-- Dual PESTLE and Porter radar charts updated. Click any company card to inspect their on-DB profile.`);
-        },
-        onPeerRadarOverlay: (companyName) => {
-            overlayPeerRadar(companyName);
-        }
-    });
-
     // Helper for overlaying peer on radars WITHOUT flashing modal
     async function overlayPeerRadar(companyName) {
         if (!companyName) return;
 
-        // 1. Look up peer vectors from activeNearestCvps or API without showing any modal
         const isFlatOrInvalid = (vec) => !vec || !Array.isArray(vec) || vec.length < 5 || vec.every(v => Math.abs(Number(v) - 0.3) < 0.001);
 
         let comp = state.activeNearestCvps?.find(c => c.company?.toLowerCase() === companyName.toLowerCase());
@@ -214,8 +213,90 @@ Overlaying **${CompanyIntelligence.escapeHtml(comp.company)}** (${CompanyIntelli
 Compare your internal CVP risks directly against ${CompanyIntelligence.escapeHtml(comp.company)}'s verified profile.`);
     }
 
-    // Initialize Sales Subsystem
-    const salesWorkflow = new SalesWorkflow(state, {
+    // 3. Initialize Workspace History Subsystem
+    historyManager = new HistoryManager(authManager, {
+        onRestoreCvp: (analysis) => {
+            const data = analysis.results_data || analysis;
+            state.activeIntelligenceMode = 'cvp';
+            state.activeCvpText = data.cvp_text || analysis.input_data?.cvp_text || '';
+            state.activePestleVector = data.pestle_vector || [0.3, 0.3, 0.3, 0.3, 0.3, 0.3];
+            state.activePorterVector = data.porter_vector || [0.3, 0.3, 0.3, 0.3, 0.3];
+            state.activeUser11DVector = data.user_11d_vector || [...state.activePestleVector, ...state.activePorterVector];
+            state.activeNearestCvps = data.nearest_cvps || [];
+            state.activeCvpPrognosis = data.investment_prognosis || null;
+
+            cvpWorkflow?.syncStateToUi();
+            syncSidebarRadars();
+            nav?.switchScreen(document.getElementById('view-step1-cvp'));
+        },
+        onRestoreRevenue: (analysis) => {
+            const data = analysis.results_data || analysis;
+            state.activeIntelligenceMode = 'revenue';
+            state.activePestleVector = data.pestle_vector || [0.3, 0.3, 0.3, 0.3, 0.3, 0.3];
+            state.activePorterVector = data.porter_vector || [0.3, 0.3, 0.3, 0.3, 0.3];
+            state.activeUser11DVector = data.user_11d_vector || [...state.activePestleVector, ...state.activePorterVector];
+            state.activeNearestCvps = data.nearest_cvps || [];
+            state.activeClusters = data.active_clusters || [];
+
+            const inputSeries = analysis.input_data?.revenue_series || [];
+            if (inputSeries.length > 0 && salesWorkflow) {
+                salesWorkflow.parsedSeries = inputSeries;
+            }
+
+            salesWorkflow?.renderInvestmentScore(data.investment_prognosis || null);
+            salesWorkflow?.renderLaggingNewsMatrix(data.matched_news || []);
+            salesWorkflow?.renderStrategicEvidence(data.audit_categories || null, data.evidence_records || []);
+            salesWorkflow?.renderRevenuePeers(state.activeNearestCvps);
+
+            const canvasPestle = document.getElementById('canvas-revenue-pestle');
+            const canvasPorter = document.getElementById('canvas-revenue-porter');
+            ChartVisualizer.drawPestleCanvas(canvasPestle, state.activePestleVector);
+            ChartVisualizer.drawPorterCanvas(canvasPorter, state.activePorterVector);
+            ChartVisualizer.updateSalesLegendValues(state.activePestleVector, state.activePorterVector);
+
+            const resultsPanel = document.getElementById('revenue-results-panel');
+            if (resultsPanel) resultsPanel.classList.remove('hidden');
+
+            syncSidebarRadars();
+            nav?.switchScreen(document.getElementById('view-step1-revenue'));
+        },
+        onRestoreConversation: (conv) => {
+            nav?.switchScreen(document.getElementById('view-step2-chatbot'));
+            chatAssistant?.restoreConversation(conv);
+            syncSidebarRadars();
+        }
+    });
+    window.historyManager = historyManager;
+
+    // 4. Initialize Executive Dashboard Subsystem
+    dashboardManager = new DashboardManager(authManager, {
+        onRestoreCvp: (analysis) => historyManager.callbacks.onRestoreCvp(analysis),
+        onRestoreRevenue: (analysis) => historyManager.callbacks.onRestoreRevenue(analysis),
+        onRestoreConversation: (conv) => historyManager.callbacks.onRestoreConversation(conv)
+    });
+    window.dashboardManager = dashboardManager;
+
+    // 5. Initialize CVP Subsystem
+    cvpWorkflow = new CvpWorkflow(state, {
+        onCvpEvaluated: (data) => {
+            syncSidebarRadars();
+            const topPeer = data.nearest_cvps?.[0]?.company || 'Industry Benchmark';
+            const topSimilarity = data.nearest_cvps?.[0]?.similarity_pct || 85;
+
+            chatAssistant.appendSystemMessage(`REAL-TIME EMBEDDINGS EVALUATED & 500-COMPANY PEERS ALIGNED
+
+Your Customer Value Proposition: "${CompanyIntelligence.escapeHtml(data.cvp_text)}"
+- Nearest Benchmark Company: **${CompanyIntelligence.escapeHtml(topPeer)}** (${topSimilarity}% Cosine Similarity)
+- Real-time TF-IDF & Distance comparison executed across all 500 benchmark companies.
+- Dual PESTLE and Porter radar charts updated. Click any company card to inspect their on-DB profile.`);
+        },
+        onPeerRadarOverlay: (companyName) => {
+            overlayPeerRadar(companyName);
+        }
+    });
+
+    // 6. Initialize Sales Subsystem
+    salesWorkflow = new SalesWorkflow(state, {
         onSalesAnalyzed: (data) => {
             syncSidebarRadars();
             chatAssistant.appendSystemMessage(`REVENUE FLUCTUATIONS & 11-CATEGORY AUDIT TRAIL COMPUTED
@@ -239,8 +320,8 @@ Compare your internal CVP risks directly against ${CompanyIntelligence.escapeHtm
         salesWorkflow.loadPreset('tech');
     }
 
-    // Initialize Navigation Manager
-    const nav = new NavigationManager(state, {
+    // 7. Initialize Navigation Manager
+    nav = new NavigationManager(state, {
         onRevenueModeActivated: () => {
             if (!salesWorkflow.parsedSeries || salesWorkflow.parsedSeries.length === 0) {
                 salesWorkflow.loadPreset('retail');
@@ -252,7 +333,7 @@ Compare your internal CVP risks directly against ${CompanyIntelligence.escapeHtm
             requestAnimationFrame(() => syncSidebarRadars());
             setTimeout(() => syncSidebarRadars(), 80);
 
-            if (state.activeIntelligenceMode === 'revenue') {
+            if (state.activeIntelligenceMode === 'revenue' && salesWorkflow?.parsedSeries?.length > 0) {
                 const count = salesWorkflow?.parsedSeries?.length || 4;
                 const topPeer = state.activeNearestCvps?.[0]?.company || 'Inditex / Zara';
                 const sim = state.activeNearestCvps?.[0]?.similarity_pct || 91.2;
@@ -269,6 +350,10 @@ Current Context: "${CompanyIntelligence.escapeHtml(state.activeCvpText)}"
 Nearest 500-Company Vector Peer: ${CompanyIntelligence.escapeHtml(state.activeNearestCvps[0]?.company || 'Benchmark Peer')}
 
 You can ask about strategic risk differentiations, competitive positioning, or request actionable mitigation strategies.`);
+            } else {
+                if (!chatAssistant.conversationHistory || chatAssistant.conversationHistory.length === 0) {
+                    chatAssistant.startNewConversation();
+                }
             }
         },
         onLoadRetailPreset: () => loadRetailPreset(),
@@ -277,7 +362,7 @@ You can ask about strategic risk differentiations, competitive positioning, or r
     });
     window.navigationManager = nav;
 
-    // Settings Modal
+    // 8. Settings Modal Handlers
     const modalSettings = document.getElementById('modal-settings');
     const btnOpenSettings = document.getElementById('btn-open-settings');
     const btnCloseSettings = document.getElementById('btn-close-settings');
@@ -294,7 +379,7 @@ You can ask about strategic risk differentiations, competitive positioning, or r
         chatAssistant.appendSystemMessage('Settings saved! Groq API key active.');
     });
 
-    // Company Profile Modal Close Handler
+    // 9. Company Profile Modal Handlers
     const modalProfile = document.getElementById('modal-company-profile');
     const btnCloseProfile = document.getElementById('btn-close-comp-modal');
     btnCloseProfile?.addEventListener('click', () => modalProfile?.classList.remove('active'));
@@ -318,88 +403,12 @@ You can ask about strategic risk differentiations, competitive positioning, or r
         }
     });
 
-    // Initialize User Authentication Subsystem
-    const authManager = new AuthManager({
-        onAuthStateChanged: (user) => {
-            historyManager?.updateCountBadges();
-            dashboardManager?.refresh();
-        },
-        onLoginSuccess: (user) => {
-            dashboardManager?.refresh();
-        }
-    });
-    window.authManager = authManager;
-
-    // Initialize Workspace History Subsystem
-    const historyManager = new HistoryManager(authManager, {
-        onRestoreCvp: (analysis) => {
-            const data = analysis.results_data || analysis;
-            state.activeIntelligenceMode = 'cvp';
-            state.activeCvpText = data.cvp_text || analysis.input_data?.cvp_text || '';
-            state.activePestleVector = data.pestle_vector || [0.3, 0.3, 0.3, 0.3, 0.3, 0.3];
-            state.activePorterVector = data.porter_vector || [0.3, 0.3, 0.3, 0.3, 0.3];
-            state.activeUser11DVector = data.user_11d_vector || [...state.activePestleVector, ...state.activePorterVector];
-            state.activeNearestCvps = data.nearest_cvps || [];
-            state.activeCvpPrognosis = data.investment_prognosis || null;
-
-            cvpWorkflow.syncStateToUi();
-            syncSidebarRadars();
-            nav.switchScreen(document.getElementById('view-step1-cvp'));
-        },
-        onRestoreRevenue: (analysis) => {
-            const data = analysis.results_data || analysis;
-            state.activeIntelligenceMode = 'revenue';
-            state.activePestleVector = data.pestle_vector || [0.3, 0.3, 0.3, 0.3, 0.3, 0.3];
-            state.activePorterVector = data.porter_vector || [0.3, 0.3, 0.3, 0.3, 0.3];
-            state.activeUser11DVector = data.user_11d_vector || [...state.activePestleVector, ...state.activePorterVector];
-            state.activeNearestCvps = data.nearest_cvps || [];
-            state.activeClusters = data.active_clusters || [];
-
-            const inputSeries = analysis.input_data?.revenue_series || [];
-            if (inputSeries.length > 0) {
-                salesWorkflow.parsedSeries = inputSeries;
-            }
-
-            salesWorkflow.renderInvestmentScore(data.investment_prognosis || null);
-            salesWorkflow.renderLaggingNewsMatrix(data.matched_news || []);
-            salesWorkflow.renderStrategicEvidence(data.audit_categories || null, data.evidence_records || []);
-            salesWorkflow.renderRevenuePeers(state.activeNearestCvps);
-
-            const canvasPestle = document.getElementById('canvas-revenue-pestle');
-            const canvasPorter = document.getElementById('canvas-revenue-porter');
-            ChartVisualizer.drawPestleCanvas(canvasPestle, state.activePestleVector);
-            ChartVisualizer.drawPorterCanvas(canvasPorter, state.activePorterVector);
-            ChartVisualizer.updateSalesLegendValues(state.activePestleVector, state.activePorterVector);
-
-            const resultsPanel = document.getElementById('revenue-results-panel');
-            if (resultsPanel) resultsPanel.classList.remove('hidden');
-
-            syncSidebarRadars();
-            nav.switchScreen(document.getElementById('view-step1-revenue'));
-        },
-        onRestoreConversation: (conv) => {
-            nav.switchScreen(document.getElementById('view-step2-chatbot'));
-            chatAssistant.restoreConversation(conv);
-            syncSidebarRadars();
-        }
-    });
-    window.historyManager = historyManager;
-
-    // Initialize Executive Dashboard Subsystem
-    const dashboardManager = new DashboardManager(authManager, {
-        onRestoreCvp: (analysis) => historyManager.callbacks.onRestoreCvp(analysis),
-        onRestoreRevenue: (analysis) => historyManager.callbacks.onRestoreRevenue(analysis),
-        onRestoreConversation: (conv) => historyManager.callbacks.onRestoreConversation(conv)
-    });
-    window.dashboardManager = dashboardManager;
-
-    // Boot User Session and sync guest data if available
+    // 10. Boot User Session and sync guest data if available
     authManager.init();
 
-    // Initial sync of sidebar radar canvases and dashboard data
+    // 11. Initial sync of sidebar radar canvases and dashboard data
     syncSidebarRadars();
     dashboardManager.refresh();
 
     console.log('[Omniscope AI] Modular frontend architecture initialized successfully with user authentication & persistence.');
 });
-

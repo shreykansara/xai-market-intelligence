@@ -188,10 +188,10 @@ export class CvpWorkflow {
     renderMatches(matches) {
         if (!matches || matches.length === 0) return;
 
-        const borderColors = ['#00FF66', '#00E5FF', '#10B981', '#A855F7', '#FFB300'];
+        const borderColors = ['var(--brand-primary)', 'var(--color-growth)', 'var(--border-medium)', 'var(--color-metric)', 'var(--color-neutral)'];
 
         const html = matches.map((m, idx) => `
-            <div class="cvp-match-card" style="border-left: 4px solid ${borderColors[idx % borderColors.length]};">
+            <div class="cvp-match-card" style="border-left: 3px solid ${borderColors[idx % borderColors.length]};">
                 <div class="cvp-match-header">
                     <div class="cvp-match-identity">
                         <div class="cvp-match-company-row">
@@ -259,7 +259,9 @@ export class CvpWorkflow {
 
         // Animated Radial Gauge
         const targetScore = prognosis.score || 0;
-        const color = prognosis.color || '#00FF66';
+        let color = prognosis.color || '#10B981';
+        if (color === '#00FF66') color = '#10B981';
+        if (color === '#00E5FF') color = '#3B82F6';
         const circumference = 427.26; // 2 * pi * 68
 
         if (gaugeCircle) {
@@ -321,28 +323,28 @@ export class CvpWorkflow {
             if (statusMoat) statusMoat.textContent = `${f.moat.status} (${f.moat.score}/100)`;
             if (barMoat) {
                 barMoat.style.width = `${Math.min(100, Math.max(0, f.moat.score))}%`;
-                barMoat.style.background = f.moat.score >= 60 ? 'linear-gradient(90deg, #00FF66, #00E5FF)' : (f.moat.score < 45 ? 'linear-gradient(90deg, #f87171, #ef4444)' : 'linear-gradient(90deg, #f59e0b, #eab308)');
+                barMoat.style.background = f.moat.score >= 60 ? 'linear-gradient(90deg, #10B981, #059669)' : (f.moat.score < 45 ? 'linear-gradient(90deg, #F43F5E, #E11D48)' : 'linear-gradient(90deg, #F59E0B, #D97706)');
             }
         }
         if (f.tech) {
             if (statusTech) statusTech.textContent = `${f.tech.status} (${f.tech.score}/100)`;
             if (barTech) {
                 barTech.style.width = `${Math.min(100, Math.max(0, f.tech.score))}%`;
-                barTech.style.background = f.tech.score >= 60 ? 'linear-gradient(90deg, #00FF66, #00E5FF)' : (f.tech.score < 45 ? 'linear-gradient(90deg, #f87171, #ef4444)' : 'linear-gradient(90deg, #f59e0b, #eab308)');
+                barTech.style.background = f.tech.score >= 60 ? 'linear-gradient(90deg, #10B981, #059669)' : (f.tech.score < 45 ? 'linear-gradient(90deg, #F43F5E, #E11D48)' : 'linear-gradient(90deg, #F59E0B, #D97706)');
             }
         }
         if (f.pricing) {
             if (statusPricing) statusPricing.textContent = `${f.pricing.status} (${f.pricing.score}/100)`;
             if (barPricing) {
                 barPricing.style.width = `${Math.min(100, Math.max(0, f.pricing.score))}%`;
-                barPricing.style.background = f.pricing.score >= 60 ? 'linear-gradient(90deg, #00FF66, #00E5FF)' : (f.pricing.score < 45 ? 'linear-gradient(90deg, #f87171, #ef4444)' : 'linear-gradient(90deg, #f59e0b, #eab308)');
+                barPricing.style.background = f.pricing.score >= 60 ? 'linear-gradient(90deg, #10B981, #059669)' : (f.pricing.score < 45 ? 'linear-gradient(90deg, #F43F5E, #E11D48)' : 'linear-gradient(90deg, #F59E0B, #D97706)');
             }
         }
         if (f.benchmark) {
             if (statusBenchmark) statusBenchmark.textContent = `${f.benchmark.status} (${f.benchmark.score}/100)`;
             if (barBenchmark) {
                 barBenchmark.style.width = `${Math.min(100, Math.max(0, f.benchmark.score))}%`;
-                barBenchmark.style.background = f.benchmark.score >= 60 ? 'linear-gradient(90deg, #00FF66, #00E5FF)' : (f.benchmark.score < 50 ? 'linear-gradient(90deg, #f87171, #ef4444)' : 'linear-gradient(90deg, #f59e0b, #eab308)');
+                barBenchmark.style.background = f.benchmark.score >= 60 ? 'linear-gradient(90deg, #10B981, #059669)' : (f.benchmark.score < 50 ? 'linear-gradient(90deg, #F43F5E, #E11D48)' : 'linear-gradient(90deg, #F59E0B, #D97706)');
             }
         }
 
@@ -354,7 +356,7 @@ export class CvpWorkflow {
             } else {
                 listCatalysts.innerHTML = cats.map(c => `
                     <li class="insight-bullet-item catalyst-item">
-                        <i class="fa-solid fa-circle-check" style="color: #00FF66;"></i>
+                        <i class="fa-solid fa-circle-check" style="color: var(--color-growth);"></i>
                         <span>${CompanyIntelligence.escapeHtml(c)}</span>
                     </li>
                 `).join('');

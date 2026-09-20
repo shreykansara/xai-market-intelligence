@@ -30,7 +30,7 @@ import hmac
 import hashlib
 import time
 import secrets
-from flask import Flask, jsonify, request, send_from_directory, render_template_string
+from flask import Flask, jsonify, request, send_from_directory, render_template_string, redirect
 import numpy as np
 
 # Import Hugging Face Cloud Embedding API
@@ -325,7 +325,10 @@ def api_health():
 @app.route("/admin/stage3")
 @app.route("/admin/orchestrator")
 def admin_console():
-    """Dedicated Platform Administrator Stage Console UI."""
+    """Dedicated Platform Administrator Stage Console UI. Requires valid admin session."""
+    is_valid, _ = check_admin_auth()
+    if not is_valid:
+        return redirect("/?auth=admin")
     return send_from_directory(str(WEB_DIR), "admin.html")
 
 
@@ -2568,7 +2571,7 @@ def compute_investment_confidence_score(revenue_series, user_11d_vector, matched
         tier = "HIGH_CONFIDENCE"
         tier_label = "High Confidence — Strong Growth Potential"
         tier_badge = "tier-high"
-        color = "#00FF66"
+        color = "#10B981"
         recommendation = "FAVORABLE TO INVEST / OVERWEIGHT"
         growth_outlook = "Accelerating Expansion"
         verdict = (
@@ -2579,7 +2582,7 @@ def compute_investment_confidence_score(revenue_series, user_11d_vector, matched
         tier = "MODERATE_CONFIDENCE"
         tier_label = "Moderate Confidence — Favorable Trajectory"
         tier_badge = "tier-mod"
-        color = "#00E5FF"
+        color = "#3B82F6"
         recommendation = "SELECTIVE ENTRY / ACCUMULATE"
         growth_outlook = "Steady Expansion"
         verdict = (
@@ -2590,7 +2593,7 @@ def compute_investment_confidence_score(revenue_series, user_11d_vector, matched
         tier = "WATCHLIST"
         tier_label = "Watchlist — Equilibrium / Mixed Signals"
         tier_badge = "tier-watch"
-        color = "#FFB300"
+        color = "#F59E0B"
         recommendation = "HOLD / MONITOR ON WATCHLIST"
         growth_outlook = "Neutral / Range-Bound"
         verdict = (
@@ -2601,7 +2604,7 @@ def compute_investment_confidence_score(revenue_series, user_11d_vector, matched
         tier = "HIGH_RISK"
         tier_label = "High Risk — Contractionary Headwinds"
         tier_badge = "tier-risk"
-        color = "#FF4D4F"
+        color = "#F43F5E"
         recommendation = "DEFER INVESTMENT / CAPITAL PRESERVATION"
         growth_outlook = "Contraction Risk"
         verdict = (
@@ -2725,7 +2728,7 @@ def compute_cvp_investment_score(cvp_text, pestle_vector, porter_vector, nearest
         tier = "HIGH_CONFIDENCE"
         tier_label = "High Confidence — Strong Strategic Viability"
         tier_badge = "tier-high"
-        color = "#00FF66"
+        color = "#10B981"
         recommendation = "FAVORABLE TO INVEST / OVERWEIGHT"
         growth_outlook = "High Defensibility"
         verdict = (
@@ -2737,7 +2740,7 @@ def compute_cvp_investment_score(cvp_text, pestle_vector, porter_vector, nearest
         tier = "MODERATE_CONFIDENCE"
         tier_label = "Moderate Confidence — Favorable Positioning"
         tier_badge = "tier-mod"
-        color = "#00E5FF"
+        color = "#3B82F6"
         recommendation = "SELECTIVE ENTRY / ACCUMULATE"
         growth_outlook = "Viable Differentiation"
         verdict = (
@@ -2749,7 +2752,7 @@ def compute_cvp_investment_score(cvp_text, pestle_vector, porter_vector, nearest
         tier = "WATCHLIST"
         tier_label = "Watchlist — Moderate Barriers / Crowded Niche"
         tier_badge = "tier-watch"
-        color = "#FFB300"
+        color = "#F59E0B"
         recommendation = "HOLD / REFINE VALUE PROPOSITION"
         growth_outlook = "Competitive Friction"
         verdict = (
@@ -2761,7 +2764,7 @@ def compute_cvp_investment_score(cvp_text, pestle_vector, porter_vector, nearest
         tier = "HIGH_RISK"
         tier_label = "High Risk — Severe Headwinds"
         tier_badge = "tier-risk"
-        color = "#FF4D4F"
+        color = "#F43F5E"
         recommendation = "DEFER INVESTMENT / PIVOT CVP"
         growth_outlook = "High Vulnerability"
         verdict = (

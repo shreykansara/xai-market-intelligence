@@ -319,7 +319,7 @@ export class SalesWorkflow {
         if (previewTbody) {
             previewTbody.innerHTML = series.map((item, idx) => {
                 const isBaseline = idx === 0;
-                const chgColor = isBaseline ? '#8892b0' : (item.change_pct < 0 ? '#ff4d4f' : (item.change_pct > 0 ? '#00FF66' : '#8892b0'));
+                const chgColor = isBaseline ? 'var(--text-muted)' : (item.change_pct < 0 ? 'var(--color-risk)' : (item.change_pct > 0 ? 'var(--color-growth)' : 'var(--text-muted)'));
                 const chgSign = item.change_pct > 0 ? '+' : '';
                 const chgDisplay = isBaseline ? '0.0% (Baseline)' : `${chgSign}${item.change_pct.toFixed(1)}%`;
                 return `
@@ -328,7 +328,7 @@ export class SalesWorkflow {
                             <i class="fa-regular fa-calendar-check" style="color: var(--accent-cyan); font-size: 11px; margin-right: 6px;"></i>
                             ${CompanyIntelligence.escapeHtml(item.period)}
                         </td>
-                        <td style="color: #00E5FF; font-weight: 600; font-family: monospace; padding: 7px 10px;">
+                        <td style="color: var(--text-primary); font-weight: 600; font-family: var(--font-mono); padding: 7px 10px;">
                             $${Number(item.revenue).toLocaleString()}
                         </td>
                         <td style="font-weight: 700; color: ${chgColor}; font-family: monospace; padding: 7px 10px;">
@@ -410,7 +410,7 @@ export class SalesWorkflow {
         } catch (err) {
             alert(`Sales Analysis Error: ${err.message}`);
         } finally {
-            this.btnAnalyze.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles"></i> Match Revenue Fluctuation & Filter Relevant Market Clusters`;
+            this.btnAnalyze.innerHTML = `<i class="fa-solid fa-wand-magic-sparkles"></i> Analyze Fluctuation Causal News & Generate Strategic Prognosis`;
             this.btnAnalyze.disabled = false;
         }
     }
@@ -452,7 +452,9 @@ export class SalesWorkflow {
 
         // Animated Radial Gauge
         const targetScore = prognosis.score || 0;
-        const color = prognosis.color || '#00E5FF';
+        let color = prognosis.color || '#3B82F6';
+        if (color === '#00FF66') color = '#10B981';
+        if (color === '#00E5FF') color = '#3B82F6';
         const circumference = 427.26; // 2 * pi * 68
 
         if (gaugeCircle) {
@@ -514,28 +516,28 @@ export class SalesWorkflow {
             if (statusMomentum) statusMomentum.textContent = `${f.recent_momentum.status} (${f.recent_momentum.score}/100)`;
             if (barMomentum) {
                 barMomentum.style.width = `${Math.min(100, Math.max(0, f.recent_momentum.score))}%`;
-                barMomentum.style.background = f.recent_momentum.score >= 60 ? 'linear-gradient(90deg, #00FF66, #00E5FF)' : (f.recent_momentum.score < 45 ? 'linear-gradient(90deg, #f87171, #ef4444)' : 'linear-gradient(90deg, #f59e0b, #eab308)');
+                barMomentum.style.background = f.recent_momentum.score >= 60 ? 'linear-gradient(90deg, #10B981, #059669)' : (f.recent_momentum.score < 45 ? 'linear-gradient(90deg, #F43F5E, #E11D48)' : 'linear-gradient(90deg, #F59E0B, #D97706)');
             }
         }
         if (f.growth_velocity) {
             if (statusGrowth) statusGrowth.textContent = `${f.growth_velocity.status} (${f.growth_velocity.score}/100)`;
             if (barGrowth) {
                 barGrowth.style.width = `${Math.min(100, Math.max(0, f.growth_velocity.score))}%`;
-                barGrowth.style.background = f.growth_velocity.score >= 60 ? 'linear-gradient(90deg, #00FF66, #00E5FF)' : (f.growth_velocity.score < 45 ? 'linear-gradient(90deg, #f87171, #ef4444)' : 'linear-gradient(90deg, #f59e0b, #eab308)');
+                barGrowth.style.background = f.growth_velocity.score >= 60 ? 'linear-gradient(90deg, #10B981, #059669)' : (f.growth_velocity.score < 45 ? 'linear-gradient(90deg, #F43F5E, #E11D48)' : 'linear-gradient(90deg, #F59E0B, #D97706)');
             }
         }
         if (f.macro_resilience) {
             if (statusResilience) statusResilience.textContent = `${f.macro_resilience.status} (${f.macro_resilience.score}/100)`;
             if (barResilience) {
                 barResilience.style.width = `${Math.min(100, Math.max(0, f.macro_resilience.score))}%`;
-                barResilience.style.background = f.macro_resilience.score >= 60 ? 'linear-gradient(90deg, #00FF66, #00E5FF)' : (f.macro_resilience.score < 45 ? 'linear-gradient(90deg, #f87171, #ef4444)' : 'linear-gradient(90deg, #f59e0b, #eab308)');
+                barResilience.style.background = f.macro_resilience.score >= 60 ? 'linear-gradient(90deg, #10B981, #059669)' : (f.macro_resilience.score < 45 ? 'linear-gradient(90deg, #F43F5E, #E11D48)' : 'linear-gradient(90deg, #F59E0B, #D97706)');
             }
         }
         if (f.shock_recovery) {
             if (statusRecovery) statusRecovery.textContent = `${f.shock_recovery.status} (${f.shock_recovery.score}/100)`;
             if (barRecovery) {
                 barRecovery.style.width = `${Math.min(100, Math.max(0, f.shock_recovery.score))}%`;
-                barRecovery.style.background = f.shock_recovery.score >= 60 ? 'linear-gradient(90deg, #00FF66, #00E5FF)' : (f.shock_recovery.score < 50 ? 'linear-gradient(90deg, #f87171, #ef4444)' : 'linear-gradient(90deg, #f59e0b, #eab308)');
+                barRecovery.style.background = f.shock_recovery.score >= 60 ? 'linear-gradient(90deg, #10B981, #059669)' : (f.shock_recovery.score < 50 ? 'linear-gradient(90deg, #F43F5E, #E11D48)' : 'linear-gradient(90deg, #F59E0B, #D97706)');
             }
         }
 
@@ -616,10 +618,10 @@ export class SalesWorkflow {
             const cardClass = isDip ? 'dip' : (isSurge ? 'surge' : 'flat');
 
             let likelihoodClass = 'likelihood-mod';
-            let fillColor = '#00E5FF';
+            let fillColor = 'var(--brand-primary)';
             if (it.likelihood_score >= 85) {
                 likelihoodClass = 'likelihood-high';
-                fillColor = '#00FF66';
+                fillColor = 'var(--color-growth)';
             } else if (it.likelihood_score < 50) {
                 likelihoodClass = 'likelihood-low';
                 fillColor = '#6b7280';
@@ -687,7 +689,7 @@ export class SalesWorkflow {
                         const isPrimary = idx === 0 && hasShocks;
                         const fluctuationText = n.associated_fluctuation || '';
                         const isNegativeFluc = fluctuationText.startsWith('-');
-                        const flucColor = isNegativeFluc ? '#ff4d4f' : (fluctuationText.startsWith('+') ? '#00FF66' : 'var(--accent-cyan)');
+                        const flucColor = isNegativeFluc ? 'var(--color-risk)' : (fluctuationText.startsWith('+') ? 'var(--color-growth)' : 'var(--brand-primary)');
 
                         return `
                             <div class="audit-news-card ${isPrimary ? 'primary-shock' : ''}">
@@ -726,7 +728,7 @@ export class SalesWorkflow {
                                     </div>
                                     <div style="font-size:11.5px; color:var(--text-muted); margin-top:3px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
                                         <span><i class="fa-solid fa-newspaper color-cyan"></i> ${items.length} News Evidence Item${items.length === 1 ? '' : 's'} Linked</span>
-                                        ${cat.dominant_fluctuation && cat.dominant_fluctuation !== 'Empirical Baseline (0.0%)' ? `<span>&bull; Associated Fluctuation: <strong style="color:${cat.dominant_fluctuation.startsWith('-') ? '#ff4d4f' : '#00FF66'};">${CompanyIntelligence.escapeHtml(cat.dominant_fluctuation)}</strong></span>` : ''}
+                                        ${cat.dominant_fluctuation && cat.dominant_fluctuation !== 'Empirical Baseline (0.0%)' ? `<span>&bull; Associated Fluctuation: <strong style="color:${cat.dominant_fluctuation.startsWith('-') ? 'var(--color-risk)' : 'var(--color-growth)'};">${CompanyIntelligence.escapeHtml(cat.dominant_fluctuation)}</strong></span>` : ''}
                                     </div>
                                 </div>
                             </div>
@@ -766,9 +768,9 @@ export class SalesWorkflow {
             return;
         }
 
-        const borderColors = ['#00E5FF', '#00FF66', '#10B981'];
+        const borderColors = ['var(--brand-primary)', 'var(--color-growth)', 'var(--border-medium)'];
         this.revenuePeersList.innerHTML = matches.map((m, idx) => `
-            <div class="cvp-match-card" style="border-left: 4px solid ${borderColors[idx % 3]};">
+            <div class="cvp-match-card" style="border-left: 3px solid ${borderColors[idx % 3]};">
                 <div class="cvp-match-header">
                     <div class="cvp-match-identity">
                         <div class="cvp-match-company-row">
@@ -781,7 +783,7 @@ export class SalesWorkflow {
                             <span class="cvp-match-sector-tag"><i class="fa-solid fa-building"></i> ${CompanyIntelligence.escapeHtml(m.sector || 'Enterprise')}</span>
                         </div>
                     </div>
-                    <span class="cvp-match-badge" style="background: rgba(0, 229, 255, 0.12); color: #00E5FF; border: 1px solid rgba(0, 229, 255, 0.3);">${m.similarity_pct}% Vector Similarity</span>
+                    <span class="cvp-match-badge" style="background: rgba(37, 99, 235, 0.12); color: var(--brand-primary); border: 1px solid var(--border-medium);">${m.similarity_pct}% Vector Similarity</span>
                 </div>
                 <p class="cvp-match-cvp">"${CompanyIntelligence.escapeHtml(m.cvp)}"</p>
                 <div class="neighbor-card-actions">

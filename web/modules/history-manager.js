@@ -229,7 +229,7 @@ export class HistoryManager {
             icon = '<i class="fa-solid fa-chart-line" style="color: var(--accent-cyan);"></i>';
             badgeTag = '<span class="history-type-tag rev-tag">Revenue Sensitivity</span>';
         } else {
-            icon = '<i class="fa-solid fa-brain" style="color: #A855F7;"></i>';
+            icon = '<i class="fa-solid fa-brain" style="color: var(--color-metric);"></i>';
             badgeTag = '<span class="history-type-tag chat-tag">AI Strategy Session</span>';
         }
 

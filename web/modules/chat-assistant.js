@@ -60,7 +60,11 @@ export class ChatAssistant {
         }
 
         this.btnNewChat?.addEventListener('click', () => {
-            this.startNewConversation();
+            if (window.navigationManager && window.navigationManager.viewModeSelection) {
+                window.navigationManager.switchScreen(window.navigationManager.viewModeSelection);
+            } else {
+                this.startNewConversation();
+            }
         });
     }
 

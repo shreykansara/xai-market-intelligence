@@ -49,7 +49,6 @@ export class NavigationManager {
         this.btnDashNewChat = document.getElementById('btn-dash-new-chat');
         this.btnLaunchCvpAct = document.getElementById('btn-launch-cvp-act');
         this.btnLaunchRevAct = document.getElementById('btn-launch-rev-act');
-        this.btnLaunchChatAct = document.getElementById('btn-launch-chat-act');
 
         // Presets
         this.btnPresetCvpTesla = document.getElementById('btn-preset-cvp-tesla');
@@ -64,6 +63,16 @@ export class NavigationManager {
         this.btnSidebarHome = document.getElementById('btn-sidebar-home');
         this.btnProceedToChatbot = document.getElementById('btn-proceed-to-chatbot');
         this.btnProceedRevenueChatbot = document.getElementById('btn-proceed-revenue-chatbot');
+
+        // Platform Navigation (Step 1 CVP, Step 1 Revenue, Chatbot)
+        this.btnSwitchToRevenue = document.getElementById('btn-switch-to-revenue');
+        this.btnSwitchToCvp = document.getElementById('btn-switch-to-cvp');
+        this.btnCvpToDashboard = document.getElementById('btn-cvp-to-dashboard');
+        this.btnRevToDashboard = document.getElementById('btn-rev-to-dashboard');
+        this.btnChatToDashboard = document.getElementById('btn-chat-to-dashboard');
+        this.brandLogoCvp = document.getElementById('brand-logo-cvp');
+        this.brandLogoRevenue = document.getElementById('brand-logo-revenue');
+        this.brandLogoHub = document.getElementById('brand-logo-hub');
 
         this.bindEvents();
 
@@ -112,7 +121,7 @@ export class NavigationManager {
 
         targetView.classList.remove('hidden');
         targetView.classList.add('active');
-        window.scrollTo({ top: 0, behavior: 'smooth' });
+        window.scrollTo(0, 0);
 
         const path = this.getPathForView(targetView);
         if (updateUrl && window.location.pathname !== path) {
@@ -160,11 +169,27 @@ export class NavigationManager {
         this.brandLogoHome?.addEventListener('click', (e) => {
             e.preventDefault();
             this.switchScreen(this.viewLandingPage);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
         });
 
-        this.brandLogoDash?.addEventListener('click', (e) => {
-            e.preventDefault();
-            this.switchScreen(this.viewLandingPage);
+        // Platform Brand Logos & Dashboard Back Buttons -> Return to Executive Dashboard as Homepage
+        const returnToDashboard = (e) => {
+            if (e) e.preventDefault();
+            this.switchScreen(this.viewUserDashboard);
+        };
+
+        [
+            this.brandLogoDash,
+            this.brandLogoCvp,
+            this.brandLogoRevenue,
+            this.brandLogoHub,
+            this.btnCvpToDashboard,
+            this.btnRevToDashboard,
+            this.btnChatToDashboard,
+            this.btnBackLandingHub,
+            this.btnSidebarHome
+        ].forEach(btn => {
+            btn?.addEventListener('click', returnToDashboard);
         });
 
         // Dashboard Links
@@ -175,49 +200,95 @@ export class NavigationManager {
             });
         });
 
-        // Hub Launches
-        [this.btnNavLaunchApp, this.btnBannerLaunchHub, this.btnDashToHub].forEach(btn => {
+        // Launch Platform & Hub
+        this.btnNavLaunchApp?.addEventListener('click', (e) => {
+            e.preventDefault();
+            const isAuth = !!window.authManager?.currentUser || !!localStorage.getItem('omniscope_user_token');
+            if (isAuth) {
+                this.switchScreen(this.viewUserDashboard);
+            } else {
+                window.authManager?.openModal('login');
+            }
+        });
+
+        [this.btnBannerLaunchHub, this.btnDashToHub].forEach(btn => {
             btn?.addEventListener('click', (e) => {
                 e.preventDefault();
                 this.switchScreen(this.viewModeSelection);
             });
         });
 
-        this.btnBackLandingHub?.addEventListener('click', () => this.switchScreen(this.viewLandingPage));
+        // Quick Mode Switches (Step 1 CVP <-> Step 1 Revenue)
+        this.btnSwitchToRevenue?.addEventListener('click', (e) => {
+            e.preventDefault();
+            this.state.activeIntelligenceMode = 'revenue';
+            this.switchScreen(this.viewStep1Revenue);
+        });
 
-        // CVP Mode Select
-        [this.btnHeroLaunchCvp, this.btnFounderLaunch, this.btnSelectCvpMode, this.btnDashNewCvp, this.btnLaunchCvpAct].forEach(btn => {
+        this.btnSwitchToCvp?.addEventListener('click', (e) => {
+            e.preventDefault();
+            this.state.activeIntelligenceMode = 'cvp';
+            this.switchScreen(this.viewStep1Cvp);
+        });
+
+        // Landing Hero CVP & Revenue launches
+        [this.btnHeroLaunchCvp, this.btnFounderLaunch].forEach(btn => {
+            btn?.addEventListener('click', () => {
+                this.state.activeIntelligenceMode = 'cvp';
+                const isAuth = !!window.authManager?.currentUser || !!localStorage.getItem('omniscope_user_token');
+                if (isAuth) {
+                    this.switchScreen(this.viewStep1Cvp);
+                } else {
+                    window.authManager?.openModal('login');
+                }
+            });
+        });
+
+        [this.btnHeroLaunchRevenue, this.btnInvestorLaunch].forEach(btn => {
+            btn?.addEventListener('click', () => {
+                this.state.activeIntelligenceMode = 'revenue';
+                const isAuth = !!window.authManager?.currentUser || !!localStorage.getItem('omniscope_user_token');
+                if (isAuth) {
+                    this.switchScreen(this.viewStep1Revenue);
+                } else {
+                    window.authManager?.openModal('login');
+                }
+            });
+        });
+
+        // In-Platform CVP Mode Select
+        [this.btnSelectCvpMode, this.btnDashNewCvp, this.btnLaunchCvpAct].forEach(btn => {
             btn?.addEventListener('click', () => {
                 this.state.activeIntelligenceMode = 'cvp';
                 this.switchScreen(this.viewStep1Cvp);
             });
         });
 
-        // Revenue Mode Select
-        [this.btnHeroLaunchRevenue, this.btnInvestorLaunch, this.btnSelectRevenueMode, this.btnDashNewRevenue, this.btnLaunchRevAct].forEach(btn => {
+        // In-Platform Revenue Mode Select
+        [this.btnSelectRevenueMode, this.btnDashNewRevenue, this.btnLaunchRevAct].forEach(btn => {
             btn?.addEventListener('click', () => {
                 this.state.activeIntelligenceMode = 'revenue';
                 this.switchScreen(this.viewStep1Revenue);
             });
         });
 
-        // Chatbot Launches from Dashboard
-        [this.btnDashNewChat, this.btnLaunchChatAct].forEach(btn => {
-            btn?.addEventListener('click', () => {
-                this.switchScreen(this.viewStep2);
-            });
+        // New Thread Button from Dashboard: routes directly to Hub for CVP / Sales selection
+        this.btnDashNewChat?.addEventListener('click', () => {
+            this.switchScreen(this.viewModeSelection);
         });
 
         this.btnBackHubCvp?.addEventListener('click', () => this.switchScreen(this.viewModeSelection));
         this.btnBackHubRevenue?.addEventListener('click', () => this.switchScreen(this.viewModeSelection));
 
-        // Step 2 Proceed Handlers
+        // Step 2 Proceed Handlers (strictly accessed as part of analysis)
         this.btnProceedToChatbot?.addEventListener('click', () => {
             this.switchScreen(this.viewStep2);
+            this.callbacks.onProceedToChatbot?.();
         });
 
         this.btnProceedRevenueChatbot?.addEventListener('click', () => {
             this.switchScreen(this.viewStep2);
+            this.callbacks.onProceedToChatbot?.();
         });
 
         // Left Panel Back & Edit in Step 1 Handler
@@ -240,7 +311,6 @@ export class NavigationManager {
         this.btnChangeCvp?.addEventListener('click', returnToStep1);
 
         this.btnSidebarHub?.addEventListener('click', () => this.switchScreen(this.viewModeSelection));
-        this.btnSidebarHome?.addEventListener('click', () => this.switchScreen(this.viewLandingPage));
 
         // Presets
         const tataMotorsText = "For safety-conscious middle-class Indian families and modern urban commuters who demand certified 5-star crash safety and reliable indigenous electric personal mobility, the Nexon EV & Bharat NCAP 5-Star SUV Range is a Electric & ICE Compact SUVs that delivers certified 5-star structural crash safety, indigenous Ziptron EV powertrains, and extensive public charging ecosystem support.";
