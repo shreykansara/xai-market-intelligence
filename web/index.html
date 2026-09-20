@@ -42,6 +42,9 @@
                         <span>Omniscope <span class="accent-text">AI</span></span>
                     </a>
                     <div class="nav-links">
+                        <a href="/dashboard" class="nav-link nav-link-dashboard" id="nav-link-dashboard">
+                            <i class="fa-solid fa-chart-pie"></i> Executive Dashboard
+                        </a>
                         <a href="#landing-audience" class="nav-link">Founders & Investors</a>
                         <a href="#landing-pipeline" class="nav-link">Methodology</a>
                         <a href="#landing-comparison" class="nav-link">Comparison</a>
@@ -50,11 +53,18 @@
                         </a>
                     </div>
                     <div class="nav-actions">
+                        <button type="button" class="btn-outline-sm btn-open-history" title="Saved Intelligence Workspace">
+                            <i class="fa-solid fa-clock-rotate-left"></i>
+                            <span>Saved Intelligence</span>
+                            <span class="history-count-badge" id="history-count-all" style="display: none;">0</span>
+                        </button>
+                        <div class="auth-nav-slot"></div>
                         <button type="button" class="btn-primary-md" id="btn-nav-launch-app">
                             <span>Launch Platform</span>
                             <i class="fa-solid fa-rocket"></i>
                         </button>
                     </div>
+
                 </div>
             </nav>
 
@@ -381,6 +391,7 @@
                         <div class="footer-col">
                             <h4>Platform</h4>
                             <a href="#view-landing-page" id="foot-link-landing">Landing Page</a>
+                            <a href="/dashboard" id="foot-link-dashboard">Executive Dashboard</a>
                             <a href="#" id="foot-link-hub">Analysis Hub</a>
                             <a href="#" id="foot-link-cvp">CVP Analysis Mode</a>
                             <a href="#" id="foot-link-revenue">Sales Analysis Mode</a>
@@ -400,6 +411,282 @@
         </div>
 
         <!-- =============================================================== -->
+        <!-- EXECUTIVE USER DASHBOARD SCREEN                                 -->
+        <!-- =============================================================== -->
+        <div class="screen-view hidden" id="view-user-dashboard">
+            <div class="dashboard-page-container">
+
+                <!-- Dashboard Header / Top Nav Bar -->
+                <nav class="dashboard-navbar">
+                    <div class="dashboard-navbar-container">
+                        <div class="dash-brand-block">
+                            <a href="/" class="nav-brand" id="brand-logo-dash">
+                                <svg class="omniscope-logo-svg nav-logo-svg" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <circle cx="50" cy="50" r="44" stroke="#00FF66" stroke-width="3" stroke-dasharray="6 4" opacity="0.4"/>
+                                    <circle cx="50" cy="50" r="34" stroke="#00FF66" stroke-width="4"/>
+                                    <circle cx="50" cy="22" stroke="#00E5FF" stroke-width="3"/>
+                                    <circle cx="50" cy="50" r="6" fill="#00FF66"/>
+                                </svg>
+                                <span>Omniscope <span class="accent-text">AI</span></span>
+                            </a>
+                            <span class="dash-nav-badge"><i class="fa-solid fa-chart-pie"></i> Executive Suite</span>
+                        </div>
+
+                        <div class="dash-nav-actions">
+                            <button type="button" class="btn-outline-sm" id="btn-dash-to-hub" title="Launch Analysis Methodology Hub">
+                                <i class="fa-solid fa-compass"></i>
+                                <span>Analysis Hub</span>
+                            </button>
+                            <button type="button" class="btn-outline-sm" id="btn-dash-new-cvp">
+                                <i class="fa-solid fa-bullseye"></i>
+                                <span>New CVP Run</span>
+                            </button>
+                            <button type="button" class="btn-outline-sm" id="btn-dash-new-revenue">
+                                <i class="fa-solid fa-chart-line"></i>
+                                <span>New Revenue Run</span>
+                            </button>
+                            <button type="button" class="btn-outline-sm btn-open-history" title="Saved Intelligence Workspace">
+                                <i class="fa-solid fa-clock-rotate-left"></i>
+                                <span>Saved Intelligence</span>
+                                <span class="history-count-badge" style="display: none;">0</span>
+                            </button>
+                            <div class="auth-nav-slot"></div>
+                        </div>
+                    </div>
+                </nav>
+
+                <!-- Dashboard Main Body Content -->
+                <div class="dashboard-content-wrapper">
+
+                    <!-- Executive Greeting Banner -->
+                    <div class="dashboard-hero-banner glass-panel">
+                        <div class="banner-user-info">
+                            <div class="banner-avatar-wrap">
+                                <div class="banner-avatar" id="dash-banner-avatar">EO</div>
+                                <span class="avatar-status-dot"></span>
+                            </div>
+                            <div class="banner-text">
+                                <div class="banner-sub-tag">
+                                    <span class="pulse-indicator"></span>
+                                    <span>EXECUTIVE MARKET INTELLIGENCE WORKSPACE</span>
+                                </div>
+                                <h1 class="banner-greeting">
+                                    Welcome back, <span class="gradient-text" id="dash-banner-name">Executive Strategist</span>
+                                </h1>
+                                <p class="banner-desc" id="dash-banner-sub">
+                                    Enterprise Portfolio • 384-D Vector Projections • GDELT Macro Event Stream Active
+                                </p>
+                            </div>
+                        </div>
+
+                        <div class="banner-quick-stats">
+                            <div class="banner-telemetry-chip">
+                                <i class="fa-solid fa-signal" style="color: #00FF66;"></i>
+                                <div>
+                                    <span class="tele-val">80,240</span>
+                                    <span class="tele-label">GDELT Signals</span>
+                                </div>
+                            </div>
+                            <div class="banner-telemetry-chip">
+                                <i class="fa-solid fa-microchip" style="color: #00E5FF;"></i>
+                                <div>
+                                    <span class="tele-val">500+</span>
+                                    <span class="tele-label">Vector Peers</span>
+                                </div>
+                            </div>
+                            <div class="banner-telemetry-chip">
+                                <i class="fa-solid fa-shield-check" style="color: #10B981;"></i>
+                                <div>
+                                    <span class="tele-val">99.8%</span>
+                                    <span class="tele-label">RAG Fidelity</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 4 Strategic KPI Cards -->
+                    <div class="dashboard-kpis-grid">
+                        <div class="dash-kpi-card glass-panel" id="card-kpi-cvp">
+                            <div class="kpi-top-row">
+                                <div class="kpi-icon-wrap green">
+                                    <i class="fa-solid fa-bullseye"></i>
+                                </div>
+                                <span class="kpi-chip green">384-D Projections</span>
+                            </div>
+                            <div class="kpi-num" id="dash-kpi-cvp-count">0</div>
+                            <div class="kpi-label">Saved CVP Analyses</div>
+                            <p class="kpi-caption">Value propositions mapped against 500+ competitor vectors</p>
+                        </div>
+
+                        <div class="dash-kpi-card glass-panel" id="card-kpi-revenue">
+                            <div class="kpi-top-row">
+                                <div class="kpi-icon-wrap cyan">
+                                    <i class="fa-solid fa-chart-line"></i>
+                                </div>
+                                <span class="kpi-chip cyan">Causal Indicators</span>
+                            </div>
+                            <div class="kpi-num" id="dash-kpi-rev-count">0</div>
+                            <div class="kpi-label">Revenue Fluctuation Models</div>
+                            <p class="kpi-caption">Financial series audited across 11 PESTLE & Porter forces</p>
+                        </div>
+
+                        <div class="dash-kpi-card glass-panel" id="card-kpi-chat">
+                            <div class="kpi-top-row">
+                                <div class="kpi-icon-wrap purple">
+                                    <i class="fa-solid fa-comments"></i>
+                                </div>
+                                <span class="kpi-chip purple">RAG Contexts</span>
+                            </div>
+                            <div class="kpi-num" id="dash-kpi-chat-count">0</div>
+                            <div class="kpi-label">AI Strategy Threads</div>
+                            <p class="kpi-caption">Scenario deliberations preserved with vector proof trails</p>
+                        </div>
+
+                        <div class="dash-kpi-card glass-panel" id="card-kpi-risk">
+                            <div class="kpi-top-row">
+                                <div class="kpi-icon-wrap amber">
+                                    <i class="fa-solid fa-shield-halved"></i>
+                                </div>
+                                <span class="kpi-chip amber" id="dash-kpi-risk-label">RESILIENT</span>
+                            </div>
+                            <div class="kpi-num" id="dash-kpi-risk-val">0.26</div>
+                            <div class="kpi-label">Macro Vulnerability Index</div>
+                            <p class="kpi-caption">Mean portfolio risk exposure across global event clusters</p>
+                        </div>
+                    </div>
+
+                    <!-- Main Split Section: Intelligence Feed & Quick Actions -->
+                    <div class="dashboard-main-grid">
+
+                        <!-- Left Column: Saved Intelligence Workspace Feed -->
+                        <div class="dash-workspace-col">
+                            <div class="dash-card glass-panel">
+                                <div class="dash-card-header">
+                                    <div class="dash-card-title-group">
+                                        <i class="fa-solid fa-folder-open" style="color: #00FF66;"></i>
+                                        <div>
+                                            <h3>Saved Market Intelligence Workspace</h3>
+                                            <p>Instant workspace restoration with full radar and evidence recreation</p>
+                                        </div>
+                                    </div>
+                                    <div class="dash-tabs-bar">
+                                        <button type="button" class="dash-filter-tab active" data-filter="all">
+                                            <span>All (<span id="dash-tab-count-all">0</span>)</span>
+                                        </button>
+                                        <button type="button" class="dash-filter-tab" data-filter="cvp">
+                                            <span>CVP (<span id="dash-tab-count-cvp">0</span>)</span>
+                                        </button>
+                                        <button type="button" class="dash-filter-tab" data-filter="revenue">
+                                            <span>Revenue (<span id="dash-tab-count-revenue">0</span>)</span>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div class="dash-search-row">
+                                    <div class="dash-search-box">
+                                        <i class="fa-solid fa-magnifying-glass"></i>
+                                        <input type="text" id="dash-search-input" placeholder="Search saved analyses by company name, market hypothesis, or keyword...">
+                                    </div>
+                                </div>
+
+                                <!-- Dynamic Analyses Feed Container -->
+                                <div class="dash-analyses-feed" id="dash-analyses-feed">
+                                    <!-- Dynamic Items injected here -->
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Right Column: Quick Launchpad & Strategic Threads -->
+                        <div class="dash-side-col">
+
+                            <!-- Strategy Threads Card -->
+                            <div class="dash-card glass-panel">
+                                <div class="dash-card-header">
+                                    <div class="dash-card-title-group">
+                                        <i class="fa-solid fa-brain" style="color: #A855F7;"></i>
+                                        <div>
+                                            <h3>AI Strategy Consultations</h3>
+                                            <p>Resume active deliberations</p>
+                                        </div>
+                                    </div>
+                                    <button type="button" class="btn-primary-sm" id="btn-dash-new-chat">
+                                        <i class="fa-solid fa-plus"></i>
+                                        <span>New Thread</span>
+                                    </button>
+                                </div>
+
+                                <div class="dash-threads-list" id="dash-threads-list">
+                                    <!-- Dynamic threads injected here -->
+                                </div>
+                            </div>
+
+                            <!-- Omniscope Intelligence Launchpad -->
+                            <div class="dash-card glass-panel">
+                                <div class="dash-card-header">
+                                    <div class="dash-card-title-group">
+                                        <i class="fa-solid fa-rocket" style="color: #00E5FF;"></i>
+                                        <div>
+                                            <h3>Omniscope Engine Launchpad</h3>
+                                            <p>Execute analysis pipeline methodologies</p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="dash-launchpad-items">
+                                    <div class="launch-item" id="dash-launch-cvp-item">
+                                        <div class="launch-icon green">
+                                            <i class="fa-solid fa-bullseye"></i>
+                                        </div>
+                                        <div class="launch-info">
+                                            <h4>Validate Value Proposition</h4>
+                                            <p>Project CVP into 384-D vector space, compute PESTLE/Porter dual radars, benchmark against 500 enterprises.</p>
+                                        </div>
+                                        <button type="button" class="btn-outline-sm" id="btn-launch-cvp-act">
+                                            <span>Launch</span>
+                                            <i class="fa-solid fa-arrow-right"></i>
+                                        </button>
+                                    </div>
+
+                                    <div class="launch-item" id="dash-launch-rev-item">
+                                        <div class="launch-icon cyan">
+                                            <i class="fa-solid fa-chart-line"></i>
+                                        </div>
+                                        <div class="launch-info">
+                                            <h4>Analyze Revenue Sensitivity</h4>
+                                            <p>Upload sales CSV to correlate fluctuations against 80K GDELT macroeconomic events and inspect audit trail.</p>
+                                        </div>
+                                        <button type="button" class="btn-outline-sm" id="btn-launch-rev-act">
+                                            <span>Launch</span>
+                                            <i class="fa-solid fa-arrow-right"></i>
+                                        </button>
+                                    </div>
+
+                                    <div class="launch-item" id="dash-launch-chat-item">
+                                        <div class="launch-icon purple">
+                                            <i class="fa-solid fa-comments"></i>
+                                        </div>
+                                        <div class="launch-info">
+                                            <h4>Consult AI Market Strategist</h4>
+                                            <p>Interactive cognitive reasoning with direct vector context and peer overlay radar comparisons.</p>
+                                        </div>
+                                        <button type="button" class="btn-outline-sm" id="btn-launch-chat-act">
+                                            <span>Launch</span>
+                                            <i class="fa-solid fa-arrow-right"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </div>
+        </div>
+
+        <!-- =============================================================== -->
         <!-- MODE SELECTION HUB SCREEN                                       -->
         <!-- =============================================================== -->
         <div class="screen-view hidden" id="view-mode-selection">
@@ -408,7 +695,16 @@
                     <button type="button" class="btn-back-hub" id="btn-back-landing-hub">
                         <i class="fa-solid fa-house"></i> Home Landing Page
                     </button>
+                    <div class="step-nav-right">
+                        <button type="button" class="btn-outline-sm btn-open-history" title="Saved Intelligence Workspace">
+                            <i class="fa-solid fa-clock-rotate-left"></i>
+                            <span>Saved Intelligence</span>
+                            <span class="history-count-badge" style="display: none;">0</span>
+                        </button>
+                        <div class="auth-nav-slot"></div>
+                    </div>
                 </div>
+
 
                 <!-- Hero Branding -->
                 <header class="hero-header">
@@ -481,7 +777,16 @@
                     <button type="button" class="btn-back-hub" id="btn-back-hub-cvp">
                         <i class="fa-solid fa-arrow-left"></i> Switch Analysis Mode (CVP vs Sales)
                     </button>
+                    <div class="step-nav-right">
+                        <button type="button" class="btn-outline-sm btn-open-history" title="Saved Intelligence Workspace">
+                            <i class="fa-solid fa-clock-rotate-left"></i>
+                            <span>Saved Intelligence</span>
+                            <span class="history-count-badge" style="display: none;">0</span>
+                        </button>
+                        <div class="auth-nav-slot"></div>
+                    </div>
                 </div>
+
 
                 <!-- Hero Branding -->
                 <header class="hero-header">
@@ -748,7 +1053,16 @@
                     <button type="button" class="btn-back-hub" id="btn-back-hub-revenue">
                         <i class="fa-solid fa-arrow-left"></i> Switch Analysis Mode (CVP vs Sales)
                     </button>
+                    <div class="step-nav-right">
+                        <button type="button" class="btn-outline-sm btn-open-history" title="Saved Intelligence Workspace">
+                            <i class="fa-solid fa-clock-rotate-left"></i>
+                            <span>Saved Intelligence</span>
+                            <span class="history-count-badge" style="display: none;">0</span>
+                        </button>
+                        <div class="auth-nav-slot"></div>
+                    </div>
                 </div>
+
 
                 <div class="section-title-box">
                     <h2><i class="fa-solid fa-chart-line color-cyan"></i> Sales & Financial Revenue Sensitivity Analysis</h2>
@@ -1199,7 +1513,20 @@
                             <h1>Omniscope Market Intelligence Assistant</h1>
                             <p>Answering queries strictly tailored to your Customer Value Proposition & Strategic Factors.</p>
                         </div>
+                        <div class="top-bar-actions">
+                            <button type="button" class="btn-outline-sm" id="btn-new-chat" title="Start a fresh strategy conversation thread">
+                                <i class="fa-solid fa-plus"></i>
+                                <span>New Thread</span>
+                            </button>
+                            <button type="button" class="btn-outline-sm btn-open-history" title="Saved Intelligence Workspace">
+                                <i class="fa-solid fa-clock-rotate-left"></i>
+                                <span>Saved Intelligence</span>
+                                <span class="history-count-badge" style="display: none;">0</span>
+                            </button>
+                            <div class="auth-nav-slot"></div>
+                        </div>
                     </header>
+
 
                     <!-- Quick Suggestions -->
                     <div class="quick-prompts-bar">
@@ -1356,7 +1683,136 @@
         </div>
     </div>
 
+    <!-- ========================================== -->
+    <!-- USER AUTHENTICATION MODAL                  -->
+    <!-- ========================================== -->
+    <div class="modal-overlay" id="modal-auth">
+        <div class="modal-box auth-modal-box">
+            <div class="auth-modal-header">
+                <div class="auth-brand-logo">
+                    <svg class="omniscope-logo-svg" style="width: 32px; height: 32px;" viewBox="0 0 100 100" fill="none">
+                        <circle cx="50" cy="50" r="44" stroke="#00FF66" stroke-width="3" stroke-dasharray="6 4" opacity="0.4"/>
+                        <circle cx="50" cy="50" r="34" stroke="#00FF66" stroke-width="4"/>
+                        <circle cx="50" cy="22" r="3" fill="#00E5FF"/>
+                        <circle cx="50" cy="50" r="6" fill="#00FF66"/>
+                    </svg>
+                    <span>Omniscope <span class="accent-text">AI</span> Workspace</span>
+                </div>
+                <button class="btn-close" id="btn-close-auth" type="button">&times;</button>
+            </div>
+
+            <!-- Tab Switcher -->
+            <div class="auth-tabs-nav">
+                <button type="button" class="auth-tab active" id="tab-auth-login">
+                    <i class="fa-regular fa-user"></i> Sign In
+                </button>
+                <button type="button" class="auth-tab" id="tab-auth-register">
+                    <i class="fa-solid fa-sparkles"></i> Create Account
+                </button>
+            </div>
+
+            <div class="modal-body auth-modal-body">
+                <!-- Feedback Alert Container -->
+                <div class="auth-alert hidden" id="auth-alert"></div>
+
+                <!-- Sign In Form -->
+                <form id="form-auth-login" class="auth-form">
+                    <div class="form-group">
+                        <label for="auth-login-email"><i class="fa-regular fa-envelope"></i> Email Address</label>
+                        <input type="email" id="auth-login-email" placeholder="name@company.com" required autocomplete="email">
+                    </div>
+                    <div class="form-group">
+                        <label for="auth-login-password"><i class="fa-solid fa-lock"></i> Password</label>
+                        <input type="password" id="auth-login-password" placeholder="••••••••" required autocomplete="current-password">
+                    </div>
+                    <button type="submit" class="btn-primary-md btn-auth-submit" id="btn-auth-login-submit">
+                        Sign In to Omniscope <i class="fa-solid fa-arrow-right"></i>
+                    </button>
+                </form>
+
+                <!-- Create Account Form -->
+                <form id="form-auth-register" class="auth-form hidden">
+                    <div class="form-group">
+                        <label for="auth-reg-name"><i class="fa-regular fa-id-badge"></i> Full Name</label>
+                        <input type="text" id="auth-reg-name" placeholder="e.g. Maya Chen" required autocomplete="name">
+                    </div>
+                    <div class="form-group">
+                        <label for="auth-reg-email"><i class="fa-regular fa-envelope"></i> Work Email Address</label>
+                        <input type="email" id="auth-reg-email" placeholder="maya@venture.ai" required autocomplete="email">
+                    </div>
+                    <div class="form-group">
+                        <label for="auth-reg-company"><i class="fa-regular fa-building"></i> Brand / Startup / Firm Name</label>
+                        <input type="text" id="auth-reg-company" placeholder="e.g. Apex Health Systems">
+                    </div>
+                    <div class="form-group">
+                        <label for="auth-reg-password"><i class="fa-solid fa-lock"></i> Create Password</label>
+                        <input type="password" id="auth-reg-password" placeholder="At least 6 characters" required autocomplete="new-password">
+                    </div>
+                    <button type="submit" class="btn-primary-md btn-auth-submit" id="btn-auth-reg-submit">
+                        Create Free Account <i class="fa-solid fa-sparkles"></i>
+                    </button>
+                </form>
+
+                <!-- Demo Credentials Quick Bar -->
+                <div class="auth-demo-shortcuts">
+                    <span class="demo-label"><i class="fa-solid fa-bolt"></i> Instant 1-Click Demo Profiles:</span>
+                    <div class="demo-buttons-row">
+                        <button type="button" class="btn-demo-chip" id="btn-demo-founder">
+                            <i class="fa-solid fa-rocket"></i> Founder Demo
+                        </button>
+                        <button type="button" class="btn-demo-chip" id="btn-demo-investor">
+                            <i class="fa-solid fa-briefcase"></i> Investor Demo
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- SAVED INTELLIGENCE DRAWER                  -->
+    <!-- ========================================== -->
+    <div class="drawer-backdrop" id="drawer-history-backdrop"></div>
+    <aside class="drawer-panel" id="drawer-history">
+        <div class="drawer-header">
+            <div class="drawer-title-group">
+                <i class="fa-solid fa-clock-rotate-left"></i>
+                <div>
+                    <h3>Saved Intelligence Workspace</h3>
+                    <p>Archived CVP analyses, revenue sensitivity models, and strategic chat threads</p>
+                </div>
+            </div>
+            <button class="btn-close-drawer" id="btn-close-drawer-history" type="button">&times;</button>
+        </div>
+
+        <div class="drawer-filter-bar">
+            <!-- Search -->
+            <div class="drawer-search-box">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <input type="text" id="history-search-input" placeholder="Search by title, keyword, or peer company...">
+            </div>
+
+            <!-- Filter Tabs -->
+            <div class="drawer-tabs-row" id="history-filter-tabs">
+                <button type="button" class="history-tab-btn active" data-filter="all">All Saved</button>
+                <button type="button" class="history-tab-btn" data-filter="cvp">CVP Value Props</button>
+                <button type="button" class="history-tab-btn" data-filter="revenue">Revenue Models</button>
+                <button type="button" class="history-tab-btn" data-filter="chat">AI Strategy Chats</button>
+            </div>
+        </div>
+
+        <div class="drawer-body modal-scroll">
+            <div class="history-items-list" id="history-items-list">
+                <!-- Dynamically populated by history-manager.js -->
+            </div>
+        </div>
+    </aside>
+
+    <!-- Global Toast Notifications Container -->
+    <div class="toast-container" id="toast-container"></div>
+
     <script type="module" src="app.js"></script>
 </body>
 </html>
+
 

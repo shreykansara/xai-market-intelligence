@@ -6,6 +6,7 @@
 import { CvpApi } from './api-client.js';
 import { ChartVisualizer } from './chart-visualizer.js';
 import { CompanyIntelligence } from './company-intelligence.js';
+import { AuthManager } from './auth-manager.js';
 
 export class CvpWorkflow {
     constructor(state, callbacks = {}) {
@@ -13,6 +14,7 @@ export class CvpWorkflow {
         this.callbacks = callbacks;
         this.initDom();
     }
+
 
     initDom() {
         this.formCvp = document.getElementById('form-cvp-input');
@@ -127,9 +129,25 @@ export class CvpWorkflow {
 
             this.syncStateToUi();
 
+            // Cache in guest store if unauthenticated
+            if (!window.authManager?.currentUser) {
+                AuthManager.saveGuestAnalysis({
+                    id: data.analysis_id || `guest_cvp_${Date.now()}`,
+                    analysis_type: 'cvp',
+                    title: `CVP: ${data.cvp_text.slice(0, 45)}...`,
+                    summary: `Dual radar analysis against 500 benchmark companies. Top Peer: ${data.nearest_cvps?.[0]?.company || 'Benchmark'}`,
+                    input_data: { cvp_text: data.cvp_text },
+                    results_data: data,
+                    created_at: new Date().toISOString()
+                });
+            }
+            window.authManager?.showToast('CVP evaluation saved to your Intelligence Workspace', 'success');
+            window.historyManager?.updateCountBadges();
+
             if (this.callbacks.onCvpEvaluated) {
                 this.callbacks.onCvpEvaluated(data);
             }
+
         } catch (err) {
             alert(`CVP Evaluation Error: ${err.message}`);
         } finally {

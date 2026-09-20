@@ -1,15 +1,18 @@
 /**
  * Omniscope AI - Chat Assistant Module
- * Manages Step 2 interactive explainability chat, quick prompts, and system messages.
+ * Manages Step 2 interactive explainability chat, quick prompts, session persistence, and system messages.
  */
 
 import { ChatApi } from './api-client.js';
 import { CompanyIntelligence } from './company-intelligence.js';
+import { AuthManager } from './auth-manager.js';
 
 export class ChatAssistant {
     constructor(state) {
         this.state = state;
         this.conversationHistory = [];
+        this.currentConversationId = null;
+        this.conversationTitle = '';
         this.initDom();
     }
 
@@ -18,6 +21,7 @@ export class ChatAssistant {
         this.userInput = document.getElementById('user-input');
         this.chatMessages = document.getElementById('chat-messages');
         this.promptsContainer = document.getElementById('prompts-container');
+        this.btnNewChat = document.getElementById('btn-new-chat');
 
         this.bindEvents();
     }
@@ -54,11 +58,57 @@ export class ChatAssistant {
                 }
             });
         }
+
+        this.btnNewChat?.addEventListener('click', () => {
+            this.startNewConversation();
+        });
+    }
+
+    startNewConversation() {
+        this.conversationHistory = [];
+        this.currentConversationId = null;
+        this.conversationTitle = '';
+        if (this.chatMessages) {
+            this.chatMessages.innerHTML = '';
+        }
+        this.appendSystemMessage(`NEW STRATEGIC THREAD INITIALIZED
+
+Workspace context aligned. You can query specific PESTLE vulnerabilities, competitive forces, or strategic mitigation recommendations.`);
+        window.authManager?.showToast('Started a new strategic conversation thread.', 'info');
+    }
+
+    restoreConversation(conv) {
+        if (!conv) return;
+        this.conversationHistory = [];
+        this.currentConversationId = conv.id;
+        this.conversationTitle = conv.title || 'Market Intelligence Chat';
+        
+        if (this.chatMessages) {
+            this.chatMessages.innerHTML = '';
+        }
+
+        const msgs = conv.messages || [];
+        msgs.forEach(m => {
+            this.appendMessage(m.role, m.content, m.timestamp);
+            this.conversationHistory.push({ role: m.role, content: m.content });
+        });
+
+        // If context has active cvp, align state
+        if (conv.context?.cvp_text && !this.state.activeCvpText) {
+            this.state.activeCvpText = conv.context.cvp_text;
+        }
+
+        this.appendSystemMessage(`CONTINUING ARCHIVED STRATEGY THREAD: "${this.conversationTitle}"
+Restored ${msgs.length} messages from your saved intelligence workspace.`);
     }
 
     async handleUserSubmit() {
         const text = this.userInput?.value.trim();
         if (!text) return;
+
+        if (!this.conversationTitle) {
+            this.conversationTitle = text.slice(0, 45);
+        }
 
         this.appendMessage('user', text);
         this.userInput.value = '';
@@ -69,6 +119,9 @@ export class ChatAssistant {
         try {
             const payload = {
                 message: text,
+                title: this.conversationTitle,
+                mode: this.state.activeIntelligenceMode || 'cvp',
+                conversation_id: this.currentConversationId || undefined,
                 cvp_text: this.state.activeCvpText || '',
                 business_context: this.state.activeCvpText || '',
                 pestle_vector: this.state.activePestleVector,
@@ -94,6 +147,24 @@ export class ChatAssistant {
                 this.appendMessage('assistant', replyText);
                 this.conversationHistory.push({ role: 'user', content: text });
                 this.conversationHistory.push({ role: 'assistant', content: replyText });
+
+                if (data.conversation_id) {
+                    this.currentConversationId = data.conversation_id;
+                }
+
+                // If in guest mode, persist to local guest storage
+                if (!window.authManager?.currentUser) {
+                    if (!this.currentConversationId) {
+                        this.currentConversationId = `guest_cnv_${Date.now()}`;
+                    }
+                    AuthManager.saveGuestConversation({
+                        id: this.currentConversationId,
+                        title: this.conversationTitle,
+                        mode: this.state.activeIntelligenceMode || 'cvp',
+                        messages: this.conversationHistory,
+                        context: { cvp_text: this.state.activeCvpText }
+                    });
+                }
             }
         } catch (err) {
             this.removeMessage(loadingId);
@@ -101,7 +172,7 @@ export class ChatAssistant {
         }
     }
 
-    appendMessage(role, text) {
+    appendMessage(role, text, customTimestamp = null) {
         if (!this.chatMessages) return null;
         const msgDiv = document.createElement('div');
         msgDiv.className = `chat-message ${role}`;
@@ -112,7 +183,16 @@ export class ChatAssistant {
             ? '<span class="msg-sender-badge user-badge"><i class="fa-solid fa-circle-user"></i> You</span>'
             : '<span class="msg-sender-badge ai-badge"><i class="fa-solid fa-brain"></i> Omniscope AI Strategist</span>';
         
-        const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        let timestamp = customTimestamp;
+        if (!timestamp) {
+            timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        } else if (timestamp.includes('T')) {
+            try {
+                timestamp = new Date(timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            } catch {
+                // keep as is
+            }
+        }
         const formatted = this.formatMarkdown(text);
 
         msgDiv.innerHTML = `

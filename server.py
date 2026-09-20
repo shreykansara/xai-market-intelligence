@@ -22,7 +22,7 @@ import subprocess
 import threading
 import urllib.request
 import urllib.parse
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from collections import Counter
 from pathlib import Path
 import functools
@@ -35,6 +35,9 @@ import numpy as np
 
 # Import Hugging Face Cloud Embedding API
 from cloud_embeddings import get_cloud_text_embedding
+
+# Import User Authentication & Intelligence Persistence Layer
+import user_auth
 
 BASE_DIR = Path(__file__).parent.resolve()
 
@@ -291,14 +294,36 @@ chatbot_engine = ChatbotEngine()
 
 
 @app.route("/")
+@app.route("/dashboard")
+@app.route("/hub")
+@app.route("/cvp")
+@app.route("/revenue")
+@app.route("/chat")
 def index():
     """End-User Facing Omniscope Market Intelligence Chatbot UI."""
     return send_from_directory(str(WEB_DIR), "index.html")
 
 
+@app.route("/api/health")
+def api_health():
+    """Health status check endpoint for monitoring and footer checks."""
+    return jsonify({
+        "status": "healthy",
+        "service": "Omniscope AI Market Intelligence",
+        "timestamp": time.time(),
+        "vector_dim": 384,
+        "strategic_dim": 11,
+        "database": "connected"
+    })
+
+
 @app.route("/admin")
 @app.route("/admin/console")
 @app.route("/admin.html")
+@app.route("/admin/stage1")
+@app.route("/admin/stage2")
+@app.route("/admin/stage3")
+@app.route("/admin/orchestrator")
 def admin_console():
     """Dedicated Platform Administrator Stage Console UI."""
     return send_from_directory(str(WEB_DIR), "admin.html")
@@ -380,6 +405,246 @@ def admin_verify():
     }), 401
 
 
+# ==========================================
+# END-USER AUTHENTICATION & INTELLIGENCE PERSISTENCE
+# ==========================================
+
+def get_authenticated_user_id():
+    """Extracts and verifies user token from Bearer header or cookie or query param."""
+    auth_header = request.headers.get("Authorization", "")
+    token = None
+    if auth_header.startswith("Bearer "):
+        token = auth_header.split(" ", 1)[1].strip()
+    if not token:
+        token = request.cookies.get("omniscope_user_session")
+    if not token:
+        token = request.args.get("user_token")
+    if not token:
+        return None
+    is_valid, user_id, _ = user_auth.verify_user_token(token)
+    return user_id if is_valid else None
+
+
+def require_user(f):
+    @functools.wraps(f)
+    def decorated(*args, **kwargs):
+        user_id = get_authenticated_user_id()
+        if not user_id:
+            return jsonify({
+                "success": False,
+                "error": "Authentication required. Please sign in to access saved intelligence.",
+                "auth_required": True
+            }), 401
+        return f(user_id, *args, **kwargs)
+    return decorated
+
+
+@app.route("/api/auth/register", methods=["POST"])
+def auth_register():
+    """Registers a new user account and returns signed session token."""
+    data = request.json or {}
+    email = data.get("email", "")
+    password = data.get("password", "")
+    full_name = data.get("full_name") or data.get("name", "")
+    company_name = data.get("company_name") or data.get("company", "")
+    role = data.get("role", "user")
+
+    success, user_data, error = user_auth.register_user(
+        email=email,
+        password=password,
+        full_name=full_name,
+        company_name=company_name,
+        role=role
+    )
+    if not success:
+        return jsonify({"success": False, "error": error}), 400
+
+    token = user_auth.generate_user_token(user_data["id"], user_data["email"])
+    resp = jsonify({
+        "success": True,
+        "message": f"Welcome to Omniscope AI, {user_data['full_name']}!",
+        "token": token,
+        "user": user_data
+    })
+    resp.set_cookie(
+        "omniscope_user_session",
+        token,
+        max_age=86400 * 30,
+        httponly=False,
+        samesite="Lax",
+        path="/"
+    )
+    return resp
+
+
+@app.route("/api/auth/login", methods=["POST"])
+def auth_login():
+    """Authenticates user with email and password."""
+    data = request.json or {}
+    email = data.get("email", "")
+    password = data.get("password", "")
+
+    success, user_data, error = user_auth.authenticate_user(email=email, password=password)
+    if not success:
+        return jsonify({"success": False, "error": error}), 401
+
+    token = user_auth.generate_user_token(user_data["id"], user_data["email"])
+    resp = jsonify({
+        "success": True,
+        "message": f"Welcome back, {user_data['full_name']}!",
+        "token": token,
+        "user": user_data
+    })
+    resp.set_cookie(
+        "omniscope_user_session",
+        token,
+        max_age=86400 * 30,
+        httponly=False,
+        samesite="Lax",
+        path="/"
+    )
+    return resp
+
+
+@app.route("/api/auth/logout", methods=["POST"])
+def auth_logout():
+    """Logs out user and clears session cookie."""
+    resp = jsonify({"success": True, "message": "Successfully signed out."})
+    resp.delete_cookie("omniscope_user_session", path="/")
+    return resp
+
+
+@app.route("/api/auth/me", methods=["GET"])
+def auth_me():
+    """Returns profile of currently authenticated user."""
+    user_id = get_authenticated_user_id()
+    if not user_id:
+        return jsonify({"success": False, "authenticated": False, "error": "Not authenticated"}), 401
+    user = user_auth.get_user_by_id(user_id)
+    if not user:
+        return jsonify({"success": False, "authenticated": False, "error": "User not found"}), 404
+    return jsonify({
+        "success": True,
+        "authenticated": True,
+        "user": user
+    })
+
+
+@app.route("/api/user/analyses", methods=["GET", "POST"])
+def user_analyses_route():
+    """GET: lists saved analyses; POST: saves a new or updated analysis."""
+    user_id = get_authenticated_user_id()
+    if not user_id:
+        return jsonify({"success": False, "error": "Sign in required", "auth_required": True}), 401
+
+    if request.method == "GET":
+        analysis_type = request.args.get("type")
+        limit = int(request.args.get("limit", 50))
+        items = user_auth.list_analyses(user_id=user_id, analysis_type=analysis_type, limit=limit)
+        return jsonify({"success": True, "analyses": items, "count": len(items)})
+
+    # POST
+    data = request.json or {}
+    analysis_type = data.get("analysis_type", "cvp")
+    title = data.get("title", "")
+    summary = data.get("summary", "")
+    input_data = data.get("input_data", {})
+    results_data = data.get("results_data", {})
+    analysis_id = data.get("id")
+
+    saved = user_auth.save_analysis(
+        user_id=user_id,
+        analysis_type=analysis_type,
+        title=title,
+        summary=summary,
+        input_data=input_data,
+        results_data=results_data,
+        analysis_id=analysis_id
+    )
+    return jsonify({"success": True, "analysis": saved})
+
+
+@app.route("/api/user/analyses/<analysis_id>", methods=["GET", "DELETE"])
+def user_analysis_detail(analysis_id):
+    """GET: fetch specific analysis; DELETE: delete analysis."""
+    user_id = get_authenticated_user_id()
+    if not user_id:
+        return jsonify({"success": False, "error": "Sign in required", "auth_required": True}), 401
+
+    if request.method == "DELETE":
+        user_auth.delete_analysis(user_id, analysis_id)
+        return jsonify({"success": True, "message": "Analysis deleted."})
+
+    item = user_auth.get_analysis(user_id, analysis_id)
+    if not item:
+        return jsonify({"success": False, "error": "Analysis not found."}), 404
+    return jsonify({"success": True, "analysis": item})
+
+
+@app.route("/api/user/conversations", methods=["GET", "POST"])
+def user_conversations_route():
+    """GET: lists conversation sessions; POST: saves/updates conversation."""
+    user_id = get_authenticated_user_id()
+    if not user_id:
+        return jsonify({"success": False, "error": "Sign in required", "auth_required": True}), 401
+
+    if request.method == "GET":
+        limit = int(request.args.get("limit", 50))
+        items = user_auth.list_conversations(user_id=user_id, limit=limit)
+        return jsonify({"success": True, "conversations": items, "count": len(items)})
+
+    # POST
+    data = request.json or {}
+    title = data.get("title", "")
+    mode = data.get("mode", "cvp")
+    messages = data.get("messages", [])
+    context = data.get("context", {})
+    analysis_id = data.get("analysis_id")
+    conversation_id = data.get("id")
+
+    saved = user_auth.save_conversation(
+        user_id=user_id,
+        title=title,
+        mode=mode,
+        messages=messages,
+        context=context,
+        analysis_id=analysis_id,
+        conversation_id=conversation_id
+    )
+    return jsonify({"success": True, "conversation": saved})
+
+
+@app.route("/api/user/conversations/<conversation_id>", methods=["GET", "DELETE"])
+def user_conversation_detail(conversation_id):
+    """GET: fetch full conversation turn history; DELETE: remove conversation."""
+    user_id = get_authenticated_user_id()
+    if not user_id:
+        return jsonify({"success": False, "error": "Sign in required", "auth_required": True}), 401
+
+    if request.method == "DELETE":
+        user_auth.delete_conversation(user_id, conversation_id)
+        return jsonify({"success": True, "message": "Conversation deleted."})
+
+    item = user_auth.get_conversation(user_id, conversation_id)
+    if not item:
+        return jsonify({"success": False, "error": "Conversation not found."}), 404
+    return jsonify({"success": True, "conversation": item})
+
+
+@app.route("/api/user/sync_guest_data", methods=["POST"])
+def user_sync_guest_data():
+    """Migrates guest analyses and conversations into user's account upon login/register."""
+    user_id = get_authenticated_user_id()
+    if not user_id:
+        return jsonify({"success": False, "error": "Sign in required", "auth_required": True}), 401
+
+    data = request.json or {}
+    analyses = data.get("analyses", [])
+    conversations = data.get("conversations", [])
+
+    res = user_auth.sync_guest_data(user_id=user_id, analyses=analyses, conversations=conversations)
+    return jsonify(res)
+
 
 # ==========================================
 # END-USER CHATBOT & CVP API ENDPOINTS
@@ -413,18 +678,44 @@ def chat():
             groq_key_override=groq_key,
             chat_history=chat_history
         )
+        reply_text = ""
         if isinstance(response, dict):
             reply_text = response.get("text") or response.get("response") or ""
             response["text"] = reply_text
             response["response"] = reply_text
             response["success"] = True
-            return jsonify(response)
-        reply_str = str(response)
-        return jsonify({"success": True, "text": reply_str, "response": reply_str})
+        else:
+            reply_text = str(response)
+            response = {"success": True, "text": reply_text, "response": reply_text}
+
+        # Auto-persist conversation if authenticated user
+        user_id = get_authenticated_user_id()
+        if user_id and reply_text:
+            try:
+                updated_history = list(chat_history)
+                now_str = datetime.now(timezone.utc).isoformat()
+                updated_history.append({"role": "user", "content": message, "timestamp": now_str})
+                updated_history.append({"role": "assistant", "content": reply_text, "timestamp": now_str})
+                conv = user_auth.save_conversation(
+                    user_id=user_id,
+                    title=data.get("title", ""),
+                    mode=data.get("mode", "cvp"),
+                    messages=updated_history,
+                    context=business_context if isinstance(business_context, dict) else {"cvp_text": str(business_context)},
+                    analysis_id=data.get("analysis_id"),
+                    conversation_id=data.get("conversation_id")
+                )
+                response["conversation_id"] = conv["id"]
+                response["saved"] = True
+            except Exception as e_save:
+                print(f"[Server] Note: Auto-save chat turn failed: {e_save}")
+
+        return jsonify(response)
     except Exception as e:
         print(f"[Server /api/chat Error] {e}")
         err_msg = str(e)
         return jsonify({"error": err_msg, "response": f"Strategic Analysis Engine Notice: {err_msg}", "text": f"Strategic Analysis Engine Notice: {err_msg}"}), 500
+
 
 
 # Global Pipeline Progress States
@@ -2979,7 +3270,7 @@ def match_revenue_clusters():
     # 5. Compute Executive Investment Confidence Score & Forward Growth Prognosis
     investment_prognosis = compute_investment_confidence_score(revenue_series, user_11d_vector, matched_news)
 
-    return jsonify({
+    result_payload = {
         "success": True,
         "pestle_vector": pestle_accum,
         "porter_vector": porter_accum,
@@ -2991,7 +3282,27 @@ def match_revenue_clusters():
         "audit_categories": audit_categories,
         "stored_clusters": stored_clusters,
         "investment_prognosis": investment_prognosis
-    })
+    }
+
+    user_id = get_authenticated_user_id()
+    if user_id:
+        try:
+            top_cluster = active_clusters[0]["cluster_name"] if active_clusters else "Revenue Fluctuation"
+            saved_analysis = user_auth.save_analysis(
+                user_id=user_id,
+                analysis_type="revenue",
+                title=f"Revenue Fluctuation Model ({len(revenue_series)} periods)",
+                summary=f"Clustered into {len(active_clusters)} fluctuation segments. Primary driver: {top_cluster}",
+                input_data={"revenue_series": revenue_series, "periods_count": len(revenue_series)},
+                results_data=result_payload
+            )
+            result_payload["analysis_id"] = saved_analysis["id"]
+            result_payload["saved"] = True
+        except Exception as e_anl:
+            print(f"[Server] Note: Auto-saving Revenue analysis failed: {e_anl}")
+
+    return jsonify(result_payload)
+
 
 
 @app.route("/api/evaluate_cvp", methods=["POST"])
@@ -3180,7 +3491,7 @@ def evaluate_cvp():
 
     investment_prognosis = compute_cvp_investment_score(cvp_text, pestle_vector, porter_vector, nearest_cvps)
 
-    return jsonify({
+    result_payload = {
         "success": True,
         "cvp_text": cvp_text,
         "pestle_vector": pestle_vector,
@@ -3188,7 +3499,27 @@ def evaluate_cvp():
         "user_11d_vector": user_11d_vector,
         "nearest_cvps": nearest_cvps,
         "investment_prognosis": investment_prognosis
-    })
+    }
+
+    user_id = get_authenticated_user_id()
+    if user_id:
+        try:
+            top_peer = nearest_cvps[0]["company"] if nearest_cvps else "Industry Benchmark"
+            saved_analysis = user_auth.save_analysis(
+                user_id=user_id,
+                analysis_type="cvp",
+                title=f"CVP: {cvp_text[:45]}..." if len(cvp_text) > 45 else f"CVP: {cvp_text}",
+                summary=f"PESTLE & Porter risk evaluated against 500 benchmark companies. Top Peer: {top_peer}",
+                input_data={"cvp_text": cvp_text},
+                results_data=result_payload
+            )
+            result_payload["analysis_id"] = saved_analysis["id"]
+            result_payload["saved"] = True
+        except Exception as e_anl:
+            print(f"[Server] Note: Auto-saving CVP analysis failed: {e_anl}")
+
+    return jsonify(result_payload)
+
 
 
 @app.route("/api/company_profile", methods=["GET"])

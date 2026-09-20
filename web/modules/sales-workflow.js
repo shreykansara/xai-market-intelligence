@@ -6,6 +6,7 @@
 import { SalesApi } from './api-client.js';
 import { ChartVisualizer } from './chart-visualizer.js';
 import { CompanyIntelligence } from './company-intelligence.js';
+import { AuthManager } from './auth-manager.js';
 
 export class SalesWorkflow {
     constructor(state, callbacks = {}) {
@@ -13,6 +14,7 @@ export class SalesWorkflow {
         this.callbacks = callbacks;
         this.parsedSeries = [];
         this.initDom();
+
     }
 
     initDom() {
@@ -385,9 +387,26 @@ export class SalesWorkflow {
                 this.resultsPanel.scrollIntoView({ behavior: 'smooth' });
             }
 
+            // Cache in guest store if unauthenticated
+            if (!window.authManager?.currentUser) {
+                const count = this.parsedSeries?.length || 0;
+                AuthManager.saveGuestAnalysis({
+                    id: data.analysis_id || `guest_rev_${Date.now()}`,
+                    analysis_type: 'revenue',
+                    title: `Revenue Fluctuation Model (${count} periods)`,
+                    summary: `Clustered into ${data.active_clusters?.length || 0} fluctuation severity segments.`,
+                    input_data: { revenue_series: this.parsedSeries, periods_count: count },
+                    results_data: data,
+                    created_at: new Date().toISOString()
+                });
+            }
+            window.authManager?.showToast('Revenue sensitivity model saved to your Intelligence Workspace', 'success');
+            window.historyManager?.updateCountBadges();
+
             if (this.callbacks.onSalesAnalyzed) {
                 this.callbacks.onSalesAnalyzed(data);
             }
+
         } catch (err) {
             alert(`Sales Analysis Error: ${err.message}`);
         } finally {

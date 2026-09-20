@@ -14,6 +14,8 @@ export class AdminController {
         this.s2PollInterval = null;
         this.s3PollInterval = null;
         this.initDom();
+        const initialTab = this.getTabFromUrl() || 'stage1';
+        this.switchTab(initialTab, false);
     }
 
     initDom() {
@@ -69,7 +71,11 @@ export class AdminController {
 
     bindEvents() {
         // Tab switching
-        window.switchAdminTab = (tabId) => this.switchTab(tabId);
+        window.switchAdminTab = (tabId) => this.switchTab(tabId, true);
+        window.addEventListener('popstate', (e) => {
+            const tabId = e.state?.tabId || this.getTabFromUrl() || 'stage1';
+            this.switchTab(tabId, false);
+        });
 
         // Selection and Bulk Actions
         window.toggleSelectAll = (cbClass, masterEl) => this.toggleSelectAll(cbClass, masterEl);
@@ -331,7 +337,16 @@ export class AdminController {
         if (countEl) countEl.textContent = '0';
     }
 
-    switchTab(tabId) {
+    getTabFromUrl() {
+        const pathname = window.location.pathname.toLowerCase().replace(/\/$/, '');
+        const match = pathname.match(/\/admin\/(stage1|stage2|stage3|orchestrator)/);
+        if (match) return match[1];
+        const hash = (window.location.hash || '').replace('#', '').toLowerCase();
+        if (['stage1', 'stage2', 'stage3', 'orchestrator'].includes(hash)) return hash;
+        return null;
+    }
+
+    switchTab(tabId, updateUrl = true) {
         document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
         document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
 
@@ -340,6 +355,13 @@ export class AdminController {
 
         const panel = document.getElementById(`panel-${tabId}`);
         if (panel) panel.classList.add('active');
+
+        if (updateUrl) {
+            const targetUrl = `/admin/${tabId}`;
+            if (window.location.pathname !== targetUrl) {
+                window.history.pushState({ tabId }, '', targetUrl);
+            }
+        }
 
         if (tabId === 'stage1') {
             this.syncNextIngestionDates();

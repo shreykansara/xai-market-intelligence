@@ -10,6 +10,9 @@ import { NavigationManager } from './modules/navigation-manager.js';
 import { ChartVisualizer } from './modules/chart-visualizer.js';
 import { CompanyIntelligence } from './modules/company-intelligence.js';
 import { CompanyApi } from './modules/api-client.js';
+import { AuthManager } from './modules/auth-manager.js';
+import { HistoryManager } from './modules/history-manager.js';
+import { DashboardManager } from './modules/dashboard-manager.js';
 
 document.addEventListener('DOMContentLoaded', () => {
     // Centralized Application State
@@ -26,6 +29,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Initialize Assistant Subsystem
     const chatAssistant = new ChatAssistant(state);
+    window.chatAssistant = chatAssistant;
+
 
     // Initialize CVP Subsystem
     // Helper to keep sidebar radars, active context, and benchmark peers in perfect sync
@@ -267,8 +272,10 @@ You can ask about strategic risk differentiations, competitive positioning, or r
             }
         },
         onLoadRetailPreset: () => loadRetailPreset(),
-        onLoadTechPreset: () => loadTechPreset()
+        onLoadTechPreset: () => loadTechPreset(),
+        onDashboardActivated: () => dashboardManager?.refresh()
     });
+    window.navigationManager = nav;
 
     // Settings Modal
     const modalSettings = document.getElementById('modal-settings');
@@ -311,8 +318,88 @@ You can ask about strategic risk differentiations, competitive positioning, or r
         }
     });
 
-    // Initial sync of sidebar radar canvases
-    syncSidebarRadars();
+    // Initialize User Authentication Subsystem
+    const authManager = new AuthManager({
+        onAuthStateChanged: (user) => {
+            historyManager?.updateCountBadges();
+            dashboardManager?.refresh();
+        },
+        onLoginSuccess: (user) => {
+            dashboardManager?.refresh();
+        }
+    });
+    window.authManager = authManager;
 
-    console.log('[Omniscope AI] Modular frontend architecture initialized successfully.');
+    // Initialize Workspace History Subsystem
+    const historyManager = new HistoryManager(authManager, {
+        onRestoreCvp: (analysis) => {
+            const data = analysis.results_data || analysis;
+            state.activeIntelligenceMode = 'cvp';
+            state.activeCvpText = data.cvp_text || analysis.input_data?.cvp_text || '';
+            state.activePestleVector = data.pestle_vector || [0.3, 0.3, 0.3, 0.3, 0.3, 0.3];
+            state.activePorterVector = data.porter_vector || [0.3, 0.3, 0.3, 0.3, 0.3];
+            state.activeUser11DVector = data.user_11d_vector || [...state.activePestleVector, ...state.activePorterVector];
+            state.activeNearestCvps = data.nearest_cvps || [];
+            state.activeCvpPrognosis = data.investment_prognosis || null;
+
+            cvpWorkflow.syncStateToUi();
+            syncSidebarRadars();
+            nav.switchScreen(document.getElementById('view-step1-cvp'));
+        },
+        onRestoreRevenue: (analysis) => {
+            const data = analysis.results_data || analysis;
+            state.activeIntelligenceMode = 'revenue';
+            state.activePestleVector = data.pestle_vector || [0.3, 0.3, 0.3, 0.3, 0.3, 0.3];
+            state.activePorterVector = data.porter_vector || [0.3, 0.3, 0.3, 0.3, 0.3];
+            state.activeUser11DVector = data.user_11d_vector || [...state.activePestleVector, ...state.activePorterVector];
+            state.activeNearestCvps = data.nearest_cvps || [];
+            state.activeClusters = data.active_clusters || [];
+
+            const inputSeries = analysis.input_data?.revenue_series || [];
+            if (inputSeries.length > 0) {
+                salesWorkflow.parsedSeries = inputSeries;
+            }
+
+            salesWorkflow.renderInvestmentScore(data.investment_prognosis || null);
+            salesWorkflow.renderLaggingNewsMatrix(data.matched_news || []);
+            salesWorkflow.renderStrategicEvidence(data.audit_categories || null, data.evidence_records || []);
+            salesWorkflow.renderRevenuePeers(state.activeNearestCvps);
+
+            const canvasPestle = document.getElementById('canvas-revenue-pestle');
+            const canvasPorter = document.getElementById('canvas-revenue-porter');
+            ChartVisualizer.drawPestleCanvas(canvasPestle, state.activePestleVector);
+            ChartVisualizer.drawPorterCanvas(canvasPorter, state.activePorterVector);
+            ChartVisualizer.updateSalesLegendValues(state.activePestleVector, state.activePorterVector);
+
+            const resultsPanel = document.getElementById('revenue-results-panel');
+            if (resultsPanel) resultsPanel.classList.remove('hidden');
+
+            syncSidebarRadars();
+            nav.switchScreen(document.getElementById('view-step1-revenue'));
+        },
+        onRestoreConversation: (conv) => {
+            nav.switchScreen(document.getElementById('view-step2-chatbot'));
+            chatAssistant.restoreConversation(conv);
+            syncSidebarRadars();
+        }
+    });
+    window.historyManager = historyManager;
+
+    // Initialize Executive Dashboard Subsystem
+    const dashboardManager = new DashboardManager(authManager, {
+        onRestoreCvp: (analysis) => historyManager.callbacks.onRestoreCvp(analysis),
+        onRestoreRevenue: (analysis) => historyManager.callbacks.onRestoreRevenue(analysis),
+        onRestoreConversation: (conv) => historyManager.callbacks.onRestoreConversation(conv)
+    });
+    window.dashboardManager = dashboardManager;
+
+    // Boot User Session and sync guest data if available
+    authManager.init();
+
+    // Initial sync of sidebar radar canvases and dashboard data
+    syncSidebarRadars();
+    dashboardManager.refresh();
+
+    console.log('[Omniscope AI] Modular frontend architecture initialized successfully with user authentication & persistence.');
 });
+
